@@ -66,7 +66,8 @@
     /*position: absolute;
     bottom: 25;
     right: 25;*/
-    transition: opacity 0.5s;
+    opacity: 1 !important;
+    display: block !important;
 }
 
 .content_scoreboard_ad {
@@ -132,18 +133,18 @@ table.scoreboard_table th {
 }
 
 .scoreboard_name_col {
-    width: 400px;
-    max-width: 400px;
+    width: 400px !important;
+    max-width: 400px !important;
 }
 
 .scoreboard_place_col {
-    width: 80px;
-    max-width: 80px;
+    width: 80px !important;
+    max-width: 80px !important;
 }
 
 .scoreboard_time_col {
-    width: 150px;
-    max-width: 150px;
+    width: 150px !important;
+    max-width: 150px !important;
 }
 
 .background {
