@@ -1,6 +1,7 @@
 {
     "ad_url": "",
     "meet_title": "Test HW Dolphins Meet",
+    "num_lanes": 4,
     "password": "password",
     "serial_port": "/dev/ttyAMA10",
     "username": "admin"
