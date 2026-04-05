@@ -311,7 +311,7 @@ def route_settings():
             file = flask.request.files['meet_schedule']
             # if user does not select file, browser also
             # submit a empty part without filename
-            if file and file.filename and file.filename.endswith('.csv'):
+            if file and file.filename and file.filename.endswith('.hy3'):
                 try:
                     event_info.load_from_bytestream(file.stream)
                 except:
