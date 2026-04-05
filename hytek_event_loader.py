@@ -6,6 +6,34 @@ import os
 from hytek_parser.hy3_parser import parse_hy3
 from hytek_parser.hy3.enums import Stroke, Gender, GenderAge, Course
 
+# Monkey-patch e2_parser to handle empty/invalid date fields in .hy3 files
+import hytek_parser.hy3.line_parsers.e_event_parsers as _e_parsers
+from datetime import datetime as _datetime
+
+_original_e2_parser = _e_parsers.e2_parser
+
+def _patched_e2_parser(line, file, opts):
+    try:
+        return _original_e2_parser(line, file, opts)
+    except (ValueError, IndexError):
+        # Handle lines with missing/invalid date fields by injecting a valid placeholder
+        # extract() uses 1-based indexing: extract(line, 88, 8) reads line[87:95]
+        padded = line.ljust(96)
+        patched = padded[:87] + "01011900" + padded[95:]
+        result = _original_e2_parser(patched, file, opts)
+        # Clear the placeholder date on the entry
+        event_num, event = result.meet.last_event
+        entry = event.last_entry
+        placeholder = _datetime(1900, 1, 1).date()
+        for prefix in ("prelim", "swimoff", "finals"):
+            if getattr(entry, f"{prefix}_date", None) == placeholder:
+                setattr(entry, f"{prefix}_date", None)
+        return result
+
+_e_parsers.e2_parser = _patched_e2_parser
+from hytek_parser.hy3 import HY3_LINE_PARSERS
+HY3_LINE_PARSERS["E2"] = _patched_e2_parser
+
 
 STROKE_NAMES = {
     Stroke.FREESTYLE: "Freestyle",
