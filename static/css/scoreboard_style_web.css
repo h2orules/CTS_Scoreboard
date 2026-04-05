@@ -1,15 +1,15 @@
 .content_outer {
-    width: auto;
-    height: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 25px;
     z-index: 100;
 }
 
 .content_title_block {
-    width: 640px;
-    /* position: relative;*/
-    position: absolute;
-    left: 25;
-    bottom: 25;
+    min-width: 710px;
+    margin-bottom: 25px;
+    text-align: center;
 }
 
 .content_meet_title {
@@ -17,8 +17,7 @@
     font-size: 30px;
     color: #000000;
     background-color: #87bdd8;
-    padding-top: 5px;
-    padding-left: 30px;
+    padding: 5px 30px 0 30px;
 }
 
 .content_event_name {
@@ -26,7 +25,7 @@
     color: #cfe0e8;
     font-size: 24px;
     background-color: #505050;
-    padding-left: 30px;
+    padding: 0 30px;
 }
 
 .content_meet_date {
@@ -34,7 +33,7 @@
     font-size: 26px;
     color: #000000;
     background-color: #daebe8;
-    padding-left: 30px;
+    padding: 0 30px;
 }
 
 .content_event_number {
