@@ -1,9 +1,6 @@
 .content_outer {
-    /*width: 1920;
-    height: 1080;*/
     width: auto;
     height: auto;
-    /*position: relative;*/
     z-index: 100;
 }
 
@@ -146,13 +143,15 @@ table.scoreboard_table th {
 }
 
 .background {
-    background-color: #999999;
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
-    width: 1920;
-    height: 1080;
-    z-index: -100;
+    width: 100%;
+    height: 100%;
+    background-color: #999999;
+    background-size: cover;
+    background-position: center;
+    z-index: -1;
 }
 
 .controls {
