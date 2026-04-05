@@ -40,16 +40,16 @@
                         <tr class="scoreboard_header">
                             <th align="center" id="scoreboard_lane_col" style="width:  80px;max-width:  80px;">Lane</th>
                             <th align="center" id="scoreboard_place_col" class="scoreboard_place_col anim">Place</th>
-                            <th align="center" id="scoreboard_time_col" class="scoreboard_time_col anim">Time</th>
                             <th align="center" id="scoreboard_name_col" class="scoreboard_name_col anim">Name</th>
+                            <th align="center" id="scoreboard_time_col" class="scoreboard_time_col anim">Time</th>
                         </tr>
                     </thead>
                     {% for i in range(1, num_lanes + 1) %}
                     <tr class="{{ 'scoreboard_row_odd' if i % 2 == 1 else 'scoreboard_row_eve' }}">
                         <td align="center">{{ i }}</td>
                         <td id="lane_place{{ i }}" align="center"></td>
-                        <td align="right"><span id="lane_time{{ i }}"></span>&nbsp;</td>
                         <td id="lane_name{{ i }}" class="lane_name">&nbsp;</td>
+                        <td align="right"><span id="lane_time{{ i }}"></span>&nbsp;</td>
                     </tr>
                     {% endfor %}
                 </table>
@@ -116,6 +116,19 @@
                 }
             }
         }
+
+        // Show/hide name column based on whether any lane has a name
+        var has_names = false;
+        for (var i = 1; i <= {{ num_lanes }}; i++) {
+            var nameText = document.getElementById("lane_name" + i).textContent.replace(/\s/g, '');
+            if (nameText !== "") {
+                has_names = true;
+                break;
+            }
+        }
+        document.querySelectorAll('.scoreboard_name_col, .lane_name').forEach(function(el) {
+            el.style.display = has_names ? 'table-cell' : 'none';
+        });
 
         s = {};
     });

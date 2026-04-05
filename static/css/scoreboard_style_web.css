@@ -126,9 +126,10 @@ table.scoreboard_table th {
     transition: width 0.5s, max-width 0.5s;
 }
 
-.scoreboard_name_col {
+.scoreboard_name_col, .lane_name {
     width: 400px !important;
     max-width: 400px !important;
+    display: none;
 }
 
 .scoreboard_place_col {
