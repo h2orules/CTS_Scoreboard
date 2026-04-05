@@ -35,7 +35,6 @@
         hoursAmPm = (hoursAmPm != 0) ? hoursAmPm : 12;
         document.getElementById("meet_datetime").innerHTML = months[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear() + " " + hoursAmPm + ":" + ("0" + d.getMinutes()).slice(-2);
 
-        if (!scoreboard_updated) mode_to_hidden();
         scoreboard_updated = false;
     }
 
@@ -47,71 +46,23 @@
 
     function mode_to_hidden() {
         document.getElementById("event_name").style.display = "none";
-        document.getElementById("scoreboard").style.opacity = 0;
     }
 
     function mode_to_intro() {
-        // Need to hide event place and time column, show name
         document.getElementById("event_name").style.display = "block";
-        document.getElementById("scoreboard_place_col").style.width = '0px';
-        document.getElementById("scoreboard_place_col").style.maxWidth = '0px';
-        document.getElementById("scoreboard_time_col").style.width = '0px';
-        document.getElementById("scoreboard_time_col").style.maxWidth = '0px';
-        document.getElementById("scoreboard_name_col").style.width = '400px';
-        document.getElementById("scoreboard_name_col").style.maxWidth = '400px';
         document.getElementById("content_scoreboard_ad").style.opacity = 1;
-        if (document.getElementById("scoreboard").style.opacity != 1) {
-            setTimeout(function () {
-                document.getElementById("scoreboard").style.opacity = 1;
-            }, 500);
-        }
-        setTimeout(function () {
-            if (current_state == 1) document.getElementById("scoreboard_time_col").innerHTML = '';
-        }, 500);
-
-        // Pause updates to scoreboard for 10 seconds
-        scoreboard_paused = true;
-        setTimeout(function () { scoreboard_paused = false; }, 10000);
     }
 
     function mode_to_running() {
-        // Need to hide event title and name column
         document.getElementById("event_name").style.display = "block";
-        document.getElementById("scoreboard_place_col").style.width = '80px';
-        document.getElementById("scoreboard_place_col").style.maxWidth = '80px';
-        document.getElementById("scoreboard_time_col").style.width = '150px';
-        document.getElementById("scoreboard_time_col").style.maxWidth = '150px';
         document.getElementById("scoreboard_time_col").innerHTML = 'Time';
-        document.getElementById("scoreboard_name_col").style.width = '0px';
-        document.getElementById("scoreboard_name_col").style.maxWidth = '0px';
         document.getElementById("content_scoreboard_ad").style.opacity = 0;
-        if (document.getElementById("scoreboard").style.opacity != 1) {
-            setTimeout(function () {
-                document.getElementById("scoreboard").style.opacity = 1;
-            }, 500);
-        }
     }
 
     function mode_to_results() {
-        // Need to hide event title and name column
         document.getElementById("event_name").style.display = "block";
-        document.getElementById("scoreboard_place_col").style.width = '80px';
-        document.getElementById("scoreboard_place_col").style.maxWidth = '80px';
-        document.getElementById("scoreboard_time_col").style.width = '150px';
-        document.getElementById("scoreboard_time_col").style.maxWidth = '150px';
         document.getElementById("scoreboard_time_col").innerHTML = 'Time';
-        document.getElementById("scoreboard_name_col").style.width = '400px';
-        document.getElementById("scoreboard_name_col").style.maxWidth = '400px';
         document.getElementById("content_scoreboard_ad").style.opacity = 1;
-        if (document.getElementById("scoreboard").style.opacity != 1) {
-            setTimeout(function () {
-                document.getElementById("scoreboard").style.opacity = 1;
-            }, 500);
-        }
-
-        // Pause updates to scoreboard for 10 seconds
-        scoreboard_paused = true;
-        setTimeout(function () { scoreboard_paused = false; }, 10000);
     }
 
 
@@ -119,7 +70,7 @@
 
 <body style="margin:0px" onload="init();">
     <div class="content_outer">
-        <div class="content_scoreboard" id="scoreboard" style="display:none;">
+        <div class="content_scoreboard" id="scoreboard">
             <div class="content_scoreboard_ad" id="content_scoreboard_ad">
                 {% if ad_url and (ad_url != '') %}
                 <img src="{{url_for('static', filename='ad/'+ad_url)}}" width="100%" />
@@ -213,9 +164,7 @@
         {% endif %}
     </div>
     <div class="background">
-        {% if test_background %}
         <img src="{{url_for('static', filename='IMG_2481.PNG')}}" width="100%" />
-        {% endif %}
     </div>
 
 </body>
@@ -364,11 +313,6 @@
                     } else {
                         mode_to_intro();
                     }
-                    setTimeout(function () {
-                        if (current_state == 1) {
-                            mode_to_hidden();
-                        }
-                    }, 60000);
                     break;
                 case 2: // Running
                     mode_to_running();
@@ -376,17 +320,9 @@
                 case 3: // Results
                     if (no_names) {
                         mode_to_running();
-                        // Pause updates to scoreboard for 10 seconds
-                        scoreboard_paused = true;
-                        setTimeout(function () { scoreboard_paused = false; }, 10000);
                     } else {
                         mode_to_results();
                     }
-                    setTimeout(function () {
-                        if (current_state == 3) {
-                            mode_to_hidden();
-                        }
-                    }, 20000);
                     break;
             }
             last_state = current_state;
