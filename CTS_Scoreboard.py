@@ -293,6 +293,11 @@ def route_overlay(name):
     overlay_name = "overlay/" + name + '.html'
     return flask.render_template(overlay_name, meet_title=settings['meet_title'], test_background='test' in flask.request.args.keys())
     
+@app.route('/web/<name>')
+def route_web(name):
+    web_name = "web/" + name + '.html'
+    return flask.render_template(web_name, meet_title=settings['meet_title'], test_background='test' in flask.request.args.keys())
+
 @app.route('/settings', methods=['POST', 'GET'])
 @flask_login.login_required
 def route_settings():
@@ -435,6 +440,9 @@ def route_site_map():
                 
     for file in glob.glob(os.path.join("templates", "overlay", "*.html")):
         links.append( (file[file.startswith("templates") and len("templates"):].rsplit('.',1)[0], "Overlay " + os.path.basename(file).rsplit('.',1)[0]) )
+    for file in glob.glob(os.path.join("templates", "web", "*.html")):
+        links.append( (file[file.startswith("templates") and len("templates"):].rsplit('.',1)[0], "Web " + os.path.basename(file).rsplit('.',1)[0]) )
+
     # links is now a list of url, endpoint tuple
     links.sort(key=lambda a: '_' if (a[1] == 'Site List') else a[1])
     return flask.render_template('site_map.html', links=links)
