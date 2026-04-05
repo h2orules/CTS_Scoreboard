@@ -85,12 +85,12 @@
             <div class="col-lg-8">
                 <form action="/settings" method="POST" enctype="multipart/form-data">
                     <div class="input-group">
-                        <label for="meet_schedule">Hytek Schedule</label>
+                        <label for="meet_schedule">Hytek Schedule (.hy3)</label>
                         <div class="input-group">
                             <input id="meet_schedule" name="meet_schedule" value="{{ meet_schedule }}"
                                 class="form-control" aria-label="..."
                                 oninput="document.getElementById('meet_schedule_submit').disabled=false;"
-                                type="file"></input>
+                                type="file" accept=".hy3"></input>
                             <span class="input-group-btn">
                                 <button class="btn btn-default" type="submit" id="meet_schedule_submit">Upload</button>
                                 <button class="btn btn-default" type="button"
