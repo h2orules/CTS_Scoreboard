@@ -24,7 +24,8 @@ settings = {
     'serial_port': 'COM1',
     'username': 'admin',
     'password': 'password',
-    'ad_url': ''
+    'ad_url': '',
+    'num_lanes': 6
     }
 in_file = None
 out_file = None
@@ -291,12 +292,12 @@ def ws_next_heat(d):
 @app.route('/overlay/<name>')
 def route_overlay(name):
     overlay_name = "overlay/" + name + '.html'
-    return flask.render_template(overlay_name, meet_title=settings['meet_title'], test_background='test' in flask.request.args.keys())
+    return flask.render_template(overlay_name, meet_title=settings['meet_title'], test_background='test' in flask.request.args.keys(), num_lanes=settings['num_lanes'])
     
 @app.route('/web/<name>')
 def route_web(name):
     web_name = "web/" + name + '.html'
-    return flask.render_template(web_name, meet_title=settings['meet_title'], test_background='test' in flask.request.args.keys())
+    return flask.render_template(web_name, meet_title=settings['meet_title'], test_background='test' in flask.request.args.keys(), num_lanes=settings['num_lanes'])
 
 @app.route('/settings', methods=['POST', 'GET'])
 @flask_login.login_required
@@ -322,8 +323,14 @@ def route_settings():
         
         for k in settings.keys(): 
             if k in flask.request.form and settings[k]!=flask.request.form.get(k):
-                settings[k]=flask.request.form.get(k)
-                modified = True
+                if k == 'num_lanes':
+                    val = int(flask.request.form.get(k))
+                    if val != settings[k]:
+                        settings[k] = val
+                        modified = True
+                else:
+                    settings[k]=flask.request.form.get(k)
+                    modified = True
         
         if modified:
             with open(settings_file, "wt") as f:
@@ -343,7 +350,8 @@ def route_settings():
                 serial_port_list=comm_port_list,
                 user_name=settings['username'],
                 ad_url_list = ad_url_list,
-                ad_url=settings['ad_url'])
+                ad_url=settings['ad_url'],
+                num_lanes=settings['num_lanes'])
                 
 @app.route('/schedule_clear')
 @flask_login.login_required
