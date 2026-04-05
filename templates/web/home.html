@@ -1,16 +1,6 @@
 <html>
 <link href="https://fonts.googleapis.com/css?family=Overpass+Mono" rel="stylesheet">
 <link rel="stylesheet" type="text/css" href="{{url_for('static', filename='css/scoreboard_style_web.css')}}">
-<style>
-    .content_title_block {
-        width: 800px;
-    }
-
-    .content_scoreboard {
-        top: 25;
-    }
-</style>
-
 
 <script>
     var lane_running = {};
@@ -33,6 +23,11 @@
 
 <body style="margin:0px" onload="init();">
     <div class="content_outer">
+        <div class="content_title_block">
+            <div class="content_meet_title">{{ meet_title }}</div>
+            <div class="content_event_name"><span id="event_name" class="anim"></span></div>
+            <div class="content_meet_date"><span id="meet_datetime"></span></div>
+        </div>
         <div class="content_scoreboard" id="scoreboard">
             <div class="content_scoreboard_table">
                 <table class="scoreboard_table">
@@ -104,11 +99,6 @@
                 <img src="{{url_for('static', filename='ad/'+ad_url)}}" width="100%" />
                 {% endif %}
             </div>
-        </div>
-        <div class="content_title_block">
-            <div class="content_meet_title">{{ meet_title }}</div>
-            <div class="content_event_name"><span id="event_name" class="anim"></span></div>
-            <div class="content_meet_date"><span id="meet_datetime"></span></div>
         </div>
         {% if test_background %}
         <div class="controls">
