@@ -13,18 +13,7 @@
 
 
 <script>
-    var scoreboard_updated = true;
-
     var lane_running = {};
-    var lane_place_blank = {};
-    var lane_time_blank = {};
-    var lane_name_blank = {};
-    var last_event = 0;
-    var last_heat = 0;
-    var last_state = 0; // hidden
-    var current_state = 0; // hidden
-    var scoreboard_paused = false;
-
 
     function on_timer() {
         var months = { 0: "January", 1: "February", 2: "March", 3: "April", 4: "May", 5: "June", 6: "July", 7: "August", 8: "September", 9: "October", 10: "November", 11: "December" };
@@ -34,48 +23,17 @@
         var hoursAmPm = (d.getHours() % 12);
         hoursAmPm = (hoursAmPm != 0) ? hoursAmPm : 12;
         document.getElementById("meet_datetime").innerHTML = months[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear() + " " + hoursAmPm + ":" + ("0" + d.getMinutes()).slice(-2);
-
-        scoreboard_updated = false;
     }
 
     function init() {
         on_timer();
-        // Start timer every second
         window.setInterval(on_timer, 30000);
     }
-
-    function mode_to_hidden() {
-        document.getElementById("event_name").style.display = "none";
-    }
-
-    function mode_to_intro() {
-        document.getElementById("event_name").style.display = "block";
-        document.getElementById("content_scoreboard_ad").style.opacity = 1;
-    }
-
-    function mode_to_running() {
-        document.getElementById("event_name").style.display = "block";
-        document.getElementById("scoreboard_time_col").innerHTML = 'Time';
-        document.getElementById("content_scoreboard_ad").style.opacity = 0;
-    }
-
-    function mode_to_results() {
-        document.getElementById("event_name").style.display = "block";
-        document.getElementById("scoreboard_time_col").innerHTML = 'Time';
-        document.getElementById("content_scoreboard_ad").style.opacity = 1;
-    }
-
-
 </script>
 
 <body style="margin:0px" onload="init();">
     <div class="content_outer">
         <div class="content_scoreboard" id="scoreboard">
-            <div class="content_scoreboard_ad" id="content_scoreboard_ad">
-                {% if ad_url and (ad_url != '') %}
-                <img src="{{url_for('static', filename='ad/'+ad_url)}}" width="100%" />
-                {% endif %}
-            </div>
             <div class="content_scoreboard_table">
                 <table class="scoreboard_table">
                     <thead>
@@ -141,6 +99,11 @@
                     </tr>
                 </table>
             </div>
+            <div class="content_scoreboard_ad" id="content_scoreboard_ad">
+                {% if ad_url and (ad_url != '') %}
+                <img src="{{url_for('static', filename='ad/'+ad_url)}}" width="100%" />
+                {% endif %}
+            </div>
         </div>
         <div class="content_title_block">
             <div class="content_meet_title">{{ meet_title }}</div>
@@ -149,17 +112,7 @@
         </div>
         {% if test_background %}
         <div class="controls">
-            <button type="button"
-                onclick="document.getElementById('scoreboard').style.display = 'block';mode_to_hidden();">Hide</button>
-            <button type="button"
-                onclick="document.getElementById('scoreboard').style.display = 'block';mode_to_intro();">Intro</button>
-            <button type="button"
-                onclick="document.getElementById('scoreboard').style.display = 'block';mode_to_running();">Running</button>
-            <button type="button"
-                onclick="document.getElementById('scoreboard').style.display = 'block';mode_to_results();">Results</button>
-            <br />
             <button type="button" onclick="socket.emit('next_heat', {});">Next Heat</button>
-
         </div>
         {% endif %}
     </div>
@@ -177,13 +130,9 @@
     socket.on('connect', function () { });
 
     socket.on('update_scoreboard', (new_s) => {
-        scoreboard_updated = true;
-
         for (k in new_s) {
             s[k] = new_s[k];
         }
-
-        if (scoreboard_paused) return;
 
         var valid_fields = [
             "content_meet_title",
@@ -217,7 +166,6 @@
         ];
 
         var message_keys = Object.keys(s);
-        var no_names = false;
 
         message_keys.forEach((k) => {
             if (valid_fields.indexOf(k) > 0) {
@@ -227,20 +175,6 @@
             // Check and update lane running
             if (k.startsWith("lane_running")) {
                 lane_running[k.replace("lane_running", "")] = s[k];
-            }
-
-            // Check for lane time blank
-            if (k.startsWith("lane_time")) {
-                lane_time_blank[k.replace("lane_time", "")] = (s[k].trim() == "");
-            }
-
-            // Check for lane place blank
-            if (k.startsWith("lane_place")) {
-                lane_place_blank[k.replace("lane_place", "")] = (s[k].trim() == "");
-            }
-            // Check for lane name blank
-            if (k.startsWith("lane_name")) {
-                lane_name_blank[k.replace("lane_name", "")] = (s[k].trim() == "");
             }
 
         })
@@ -253,82 +187,6 @@
                 }
             }
         }
-
-        // Check for new heat or event
-        if ("current_event" in s) {
-            if (s["current_event"] != last_event) {
-                last_event = s["current_event"];
-                current_state = 1; // Intro
-            }
-        }
-        if ("current_heat" in s) {
-            if (s["current_heat"] != last_heat) {
-                last_heat = s["current_heat"];
-                current_state = 1; // Intro
-            }
-        }
-
-        // Check for all lanes done
-        // ToDo: (running == true) || ((place == "") && (time != ""))
-        if (current_state != 1) {
-            var all_done = true;
-            for (var i = 1; i <= 8; i++) {
-                if (((i in lane_running) && lane_running[i]) ||
-                    (((i in lane_place_blank) && lane_place_blank[i] &&
-                        ((i in lane_time_blank) && !lane_time_blank[i])))) {
-                    all_done = false;
-                    break;
-                }
-            }
-            if (all_done) current_state = 3; // Results
-        }
-
-        // If there are no names, don't do intro or results
-        no_names = true;
-        if ((current_state == 1) || (current_state == 3)) {
-            for (var i = 1; i <= 8; i++) {
-                if ((i in lane_name_blank) && !lane_name_blank[i]) {
-                    no_names = false;
-                    break;
-                }
-            }
-        }
-
-        // Check for any lanes running
-        for (var i = 1; i <= 8; i++) {
-            if (lane_running[i] || false) {
-                current_state = 2; // Running
-                break;
-            }
-        }
-
-        if (current_state != last_state) {
-            switch (current_state) {
-                case 0: // Hidden
-                    mode_to_hidden();
-                    break;
-                case 1: // Intro 
-                    if (no_names) {
-                        mode_to_running();
-                    } else {
-                        mode_to_intro();
-                    }
-                    break;
-                case 2: // Running
-                    mode_to_running();
-                    break;
-                case 3: // Results
-                    if (no_names) {
-                        mode_to_running();
-                    } else {
-                        mode_to_results();
-                    }
-                    break;
-            }
-            last_state = current_state;
-        }
-
-        document.getElementById("scoreboard").style.display = "block";
 
         s = {};
     });
