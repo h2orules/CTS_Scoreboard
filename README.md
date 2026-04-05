@@ -45,3 +45,7 @@ pip install flask_socketio
 pip install PySerial
 (eventlet or gevent and gevent-websocket)
 
+## Running
+```
+source ~/.env/bin/activate
+python3 CTS_Scoreboard.py
