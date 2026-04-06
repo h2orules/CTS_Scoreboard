@@ -132,6 +132,22 @@ table.scoreboard_table th {
     display: none;
 }
 
+.lane_name {
+    padding: 0 8px;
+}
+
+.lane_team_code {
+    float: right;
+    text-align: right;
+    font-weight: bold;
+    margin-left: 12px;
+}
+
+.lane_swimmer_name {
+    float: left;
+    text-align: left;
+}
+
 .scoreboard_place_col {
     width: 80px !important;
     max-width: 80px !important;

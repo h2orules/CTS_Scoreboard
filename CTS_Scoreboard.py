@@ -163,6 +163,7 @@ def parse_line(l, out = None):
                 
                 for i in range(1,11):
                     update["lane_name%i" % i] = event_info.get_display_string(event_tuple[0], event_tuple[1], i)
+                    update["lane_team%i" % i] = event_info.get_team_code(event_tuple[0], event_tuple[1], i)
 
         if out:
             if s:
@@ -259,6 +260,7 @@ def send_event_info():
     
     for i in range(1,11):
         update["lane_name%i" % i] = event_info.get_display_string(last_event_sent[0], last_event_sent[1], i)
+        update["lane_team%i" % i] = event_info.get_team_code(last_event_sent[0], last_event_sent[1], i)
 
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
             

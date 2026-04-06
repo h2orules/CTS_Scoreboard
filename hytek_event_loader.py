@@ -82,12 +82,16 @@ def _build_event_name(event):
 
 def _build_display_string(entry):
     if entry.relay:
-        swimmer = entry.swimmers[0] if entry.swimmers else None
-        return swimmer.team_code if swimmer else ""
+        return ""
     elif entry.swimmers:
         swimmer = entry.swimmers[0]
-        name = "%s %s" % (swimmer.first_name, swimmer.last_name)
-        return (swimmer.team_code + "    ")[:4] + " " + name
+        return "%s %s" % (swimmer.first_name, swimmer.last_name)
+    return ""
+
+
+def _get_team_code(entry):
+    if entry.swimmers:
+        return entry.swimmers[0].team_code
     return ""
 
 
@@ -97,7 +101,9 @@ class HytekEventLoader():
     def __init__(self, file_name=None):
         self.event_names = {}
         self.events = {}
+        self.teams = {}
         self.events_uncombined = {}
+        self.teams_uncombined = {}
         self.combined = {}
         if file_name:
             self.load(file_name)
@@ -105,7 +111,9 @@ class HytekEventLoader():
     def clear(self):
         self.event_names.clear()
         self.events.clear()
+        self.teams.clear()
         self.events_uncombined = copy.deepcopy(self.events)
+        self.teams_uncombined = copy.deepcopy(self.teams)
         self.combined.clear()
         self.max_display_string_length = 0
 
@@ -143,27 +151,37 @@ class HytekEventLoader():
                     continue
 
                 display_string = _build_display_string(entry)
+                team_code = _get_team_code(entry)
                 self.max_display_string_length = max(
                     self.max_display_string_length, len(display_string))
 
                 if (event_number, heat) not in self.events:
                     self.events[(event_number, heat)] = {}
+                    self.teams[(event_number, heat)] = {}
 
                 self.events[(event_number, heat)][lane] = display_string
+                self.teams[(event_number, heat)][lane] = team_code
 
         self.events_uncombined = copy.deepcopy(self.events)
+        self.teams_uncombined = copy.deepcopy(self.teams)
 
     def combine_events(self, combined=None):
         if combined is not None:
             self.combined = combined
         self.events = copy.deepcopy(self.events_uncombined)
+        self.teams = copy.deepcopy(self.teams_uncombined)
 
         for combine_source, combine_destination in self.combined.items():
             if (combine_source != combine_destination):
                 for lane in self.events[combine_source]:
                     self.events[combine_destination][lane] = self.events[combine_source][lane] + '*'
+                    if combine_source in self.teams and lane in self.teams[combine_source]:
+                        self.teams[combine_destination][lane] = self.teams[combine_source][lane]
                 del self.events[combine_source]
                 self.events[combine_source] = self.events[combine_destination]
+                if combine_source in self.teams:
+                    del self.teams[combine_source]
+                    self.teams[combine_source] = self.teams[combine_destination]
 
     def get_event_name(self, event_number):
         try:
@@ -174,6 +192,13 @@ class HytekEventLoader():
     def get_display_string(self, event_number, heat_number, lane):
         try:
             return self.events[(event_number, heat_number)][lane]
+        except Exception:
+            pass
+        return ""
+
+    def get_team_code(self, event_number, heat_number, lane):
+        try:
+            return self.teams[(event_number, heat_number)][lane]
         except Exception:
             pass
         return ""
@@ -190,6 +215,8 @@ class HytekEventLoader():
             "event_names": self.event_names,
             "events": self.events,
             "events_uncombined": self.events_uncombined,
+            "teams": self.teams,
+            "teams_uncombined": self.teams_uncombined,
             "combined": self.combined,
         }, protocol=0).decode('utf8')
 
@@ -198,6 +225,8 @@ class HytekEventLoader():
         self.event_names = o['event_names']
         self.events = o['events']
         self.events_uncombined = o['events_uncombined']
+        self.teams = o.get('teams', {})
+        self.teams_uncombined = o.get('teams_uncombined', {})
         self.combined = o['combined']
 
 
