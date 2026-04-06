@@ -59,11 +59,9 @@
     font-family: 'Overpass Mono', monospace;
     font-size: 32px;
     color: #000000;
-    /*position: absolute;
-    bottom: 25;
-    right: 25;*/
     opacity: 1 !important;
     display: block !important;
+    text-align: center;
 }
 
 .content_scoreboard_ad {
