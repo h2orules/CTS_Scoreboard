@@ -86,7 +86,6 @@ next_update = datetime.datetime.now()
 last_event_sent = (0,0)
 
 def parse_line(l, out = None):
-    print("Parsing line: ", l)
     global event_heat_info, lane_info, time_info, running_time, update, next_update, last_event_sent
     
     s = ""
@@ -109,8 +108,6 @@ def parse_line(l, out = None):
             
             lane = hex_to_digit(lane_info[channel][0])
             place = hex_to_digit(lane_info[channel][1])
-            
-            print("Lane %i: lane=%s place=%s running=%s" % (channel, lane, place, running_finish))
 
             update["lane_place%i"%channel] = place
             update["lane_running%i"%channel] = running_finish
@@ -217,14 +214,11 @@ def main_thread_worker():
                 else:
                     delay += 1/9600.0
     else:
-        print ("Opening serial port...")
         with serial.Serial(settings['serial_port'], 9600, timeout=0) as f:
-            print("Serial port opened.")
             if out_file:
                 j = open(out_file, "at")
             l = []
             while True:
-                print ("Reading...")
                 c = f.read(1)
                 if c:
                     c=c[0]
