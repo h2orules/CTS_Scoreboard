@@ -86,6 +86,7 @@ next_update = datetime.datetime.now()
 last_event_sent = (0,0)
 
 def parse_line(l, out = None):
+    print("Parsing line: ", l)
     global event_heat_info, lane_info, time_info, running_time, update, next_update, last_event_sent
     
     s = ""
@@ -109,6 +110,8 @@ def parse_line(l, out = None):
             lane = hex_to_digit(lane_info[channel][0])
             place = hex_to_digit(lane_info[channel][1])
             
+            print("Lane %i: lane=%s place=%s running=%s" % (channel, lane, place, running_finish))
+
             update["lane_place%i"%channel] = place
             update["lane_running%i"%channel] = running_finish
             
@@ -214,11 +217,14 @@ def main_thread_worker():
                 else:
                     delay += 1/9600.0
     else:
+        print ("Opening serial port...")
         with serial.Serial(settings['serial_port'], 9600, timeout=0) as f:
+            print("Serial port opened.")
             if out_file:
                 j = open(out_file, "at")
             l = []
             while True:
+                print ("Reading...")
                 c = f.read(1)
                 if c:
                     c=c[0]
@@ -264,6 +270,7 @@ def send_event_info():
             
 @socketio.on('connect', namespace='/scoreboard')
 def ws_scoreboard():
+    print("Client connected to scoreboard namespace")
     global main_thread
     if(main_thread is None):
         main_thread = socketio.start_background_task(target=main_thread_worker)
@@ -287,6 +294,14 @@ def ws_next_heat(d):
     last_event_sent = event_tuple
     send_event_info()
 
+@socketio.on('set_event_heat', namespace='/scoreboard')
+def ws_set_event_heat(d):
+    global last_event_sent
+    event = int(d.get('event', last_event_sent[0]))
+    heat = int(d.get('heat', last_event_sent[1]))
+    last_event_sent = (event, heat)
+    send_event_info()
+
         
 # Scoreboard Templates
 @app.route('/overlay/<name>')
@@ -297,7 +312,9 @@ def route_overlay(name):
 @app.route('/web/<name>')
 def route_web(name):
     web_name = "web/" + name + '.html'
-    return flask.render_template(web_name, meet_title=settings['meet_title'], test_background='test' in flask.request.args.keys(), num_lanes=settings['num_lanes'])
+    test_event = flask.request.args.get('event', None)
+    test_heat = flask.request.args.get('heat', None)
+    return flask.render_template(web_name, meet_title=settings['meet_title'], test_background='test' in flask.request.args.keys(), num_lanes=settings['num_lanes'], test_event=test_event, test_heat=test_heat)
 
 @app.route('/settings', methods=['POST', 'GET'])
 @flask_login.login_required
