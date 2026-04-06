@@ -1,6 +1,9 @@
 <html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <link href="https://fonts.googleapis.com/css?family=Overpass+Mono" rel="stylesheet">
 <link rel="stylesheet" type="text/css" href="{{url_for('static', filename='css/scoreboard_style_web.css')}}">
+</head>
 
 <script>
     var lane_running = {};
@@ -41,8 +44,8 @@
                         </tr>
 
                         <tr class="scoreboard_header">
-                            <th align="center" id="scoreboard_lane_col" style="width:  80px;max-width:  80px;">Lane</th>
-                            <th align="center" id="scoreboard_place_col" class="scoreboard_place_col anim">Place</th>
+                            <th align="center" id="scoreboard_lane_col" style="width:  80px;max-width:  80px;"><span class="header-full">Lane</span><span class="header-short">Ln</span></th>
+                            <th align="center" id="scoreboard_place_col" class="scoreboard_place_col anim"><span class="header-full">Place</span><span class="header-short">Pl</span></th>
                             <th align="center" id="scoreboard_name_col" class="scoreboard_name_col anim">Name</th>
                             <th align="center" id="scoreboard_time_col" class="scoreboard_time_col anim">Time</th>
                         </tr>
@@ -51,7 +54,7 @@
                     <tr class="{{ 'scoreboard_row_odd' if i % 2 == 1 else 'scoreboard_row_eve' }}">
                         <td align="center">{{ i }}</td>
                         <td id="lane_place{{ i }}" align="center"></td>
-                        <td id="lane_name{{ i }}" class="lane_name"><span class="lane_team_code" id="lane_team{{ i }}"></span><span class="lane_swimmer_name" id="lane_swimmer_name{{ i }}">&nbsp;</span></td>
+                        <td id="lane_name{{ i }}" class="lane_name"><div class="lane_name-inner"><span class="lane_swimmer_name" id="lane_swimmer_name{{ i }}">&nbsp;</span><span class="lane_team_code" id="lane_team{{ i }}"></span></div></td>
                         <td align="right"><span id="lane_time{{ i }}"></span>&nbsp;</td>
                     </tr>
                     {% endfor %}
@@ -135,12 +138,12 @@
         var nameMatch = k.match(/^lane_name(\d+)$/);
         if (nameMatch) {
             var el = document.getElementById("lane_swimmer_name" + nameMatch[1]);
-            if (el) el.textContent = s[k] || '\u00A0';
+            if (el) el.textContent = (s[k] || '').trimEnd() || '\u00A0';
         }
         var teamMatch = k.match(/^lane_team(\d+)$/);
         if (teamMatch) {
             var el = document.getElementById("lane_team" + teamMatch[1]);
-            if (el) el.textContent = s[k] || '';
+            if (el) el.textContent = (s[k] || '').trimEnd();
         }
 
         // Check and update lane running

@@ -125,27 +125,43 @@ table.scoreboard_table th {
     transition: width 0.5s, max-width 0.5s;
 }
 
-.scoreboard_name_col,
-.lane_name {
+/* Header label toggle - full by default, short hidden */
+.header-short {
+    display: none;
+}
+
+.scoreboard_name_col {
     width: 400px !important;
     max-width: 400px !important;
     display: none;
 }
 
 .lane_name {
+    width: 400px !important;
+    max-width: 400px !important;
     padding: 0 8px;
+    display: none;
+}
+
+.lane_name-inner {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 12px;
 }
 
 .lane_team_code {
-    float: right;
     text-align: right;
     font-weight: bold;
-    margin-left: 12px;
+    flex-shrink: 0;
+    order: 2;
+    margin-left: auto;
 }
 
 .lane_swimmer_name {
-    float: left;
     text-align: left;
+    flex-shrink: 1;
+    order: 1;
 }
 
 .scoreboard_place_col {
@@ -174,4 +190,122 @@ table.scoreboard_table th {
     position: fixed;
     top: 10;
     left: 10;
+}
+
+/* Mobile devices */
+@media screen and (max-width: 768px) {
+
+    html,
+    body {
+        overflow: hidden;
+        height: 100%;
+        margin: 0;
+    }
+
+    .content_outer {
+        padding: 10px;
+        width: 95%;
+        overflow: hidden;
+    }
+
+    .content_title_block {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .content_scoreboard {
+        width: 100%;
+    }
+
+    .content_scoreboard_table {
+        width: 100%;
+    }
+
+    .scoreboard_table {
+        width: 100%;
+        table-layout: auto;
+    }
+
+    /* Swap header labels */
+    .header-full {
+        display: none;
+    }
+    .header-short {
+        display: inline;
+    }
+
+    /* Minimize Lane and Place columns */
+    #scoreboard_lane_col {
+        width: 1px !important;
+        max-width: none !important;
+        white-space: nowrap;
+        padding: 0 4px;
+    }
+
+    .scoreboard_place_col {
+        width: 1px !important;
+        max-width: none !important;
+        white-space: nowrap;
+        padding: 0 4px;
+    }
+
+    /* Ensure Time column fits m:ss.ms */
+    .scoreboard_time_col {
+        width: auto !important;
+        max-width: none !important;
+        min-width: 5.5em;
+        white-space: nowrap;
+    }
+
+    .scoreboard_name_col,
+    .lane_name {
+        width: auto !important;
+        max-width: none !important;
+        white-space: nowrap;
+    }
+
+    table.scoreboard_table td,
+    table.scoreboard_table th {
+        max-width: none;
+        width: auto;
+        white-space: nowrap;
+        font-size: min(24px, 3.5vw);
+    }
+
+    /* Lane/Place data cells: minimal width */
+    table.scoreboard_table td:first-child,
+    table.scoreboard_table td:nth-child(2) {
+        width: 1px;
+        padding: 0 4px;
+    }
+
+    /* Time data cells: minimum width for m:ss.ms */
+    table.scoreboard_table td:last-child {
+        min-width: 5.5em;
+    }
+
+    .scoreboard_title,
+    .content_event_name {
+        font-size: min(24px, 3.5vw);
+    }
+
+    .scoreboard_header th {
+        font-size: min(24px, 3.5vw);
+    }
+
+    .content_meet_title {
+        font-size: min(30px, 4.5vw);
+    }
+
+    .content_meet_date {
+        font-size: min(26px, 4vw);
+    }
+
+    .content_scoreboard_ad {
+        width: 95%;
+    }
+
+    .background {
+        overflow: hidden;
+    }
 }
