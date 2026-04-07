@@ -105,8 +105,22 @@ class HytekEventLoader():
         self.events_uncombined = {}
         self.teams_uncombined = {}
         self.combined = {}
+        self.has_names = False
         if file_name:
             self.load(file_name)
+
+    def _compute_has_names(self):
+        for heat_lanes in self.events.values():
+            for name in heat_lanes.values():
+                if name and name.strip():
+                    self.has_names = True
+                    return
+        for heat_lanes in self.teams.values():
+            for code in heat_lanes.values():
+                if code and code.strip():
+                    self.has_names = True
+                    return
+        self.has_names = False
 
     def clear(self):
         self.event_names.clear()
@@ -116,6 +130,7 @@ class HytekEventLoader():
         self.teams_uncombined = copy.deepcopy(self.teams)
         self.combined.clear()
         self.max_display_string_length = 0
+        self.has_names = False
 
     def load(self, file_name):
         self.clear()
@@ -164,6 +179,7 @@ class HytekEventLoader():
 
         self.events_uncombined = copy.deepcopy(self.events)
         self.teams_uncombined = copy.deepcopy(self.teams)
+        self._compute_has_names()
 
     def combine_events(self, combined=None):
         if combined is not None:
@@ -182,6 +198,7 @@ class HytekEventLoader():
                 if combine_source in self.teams:
                     del self.teams[combine_source]
                     self.teams[combine_source] = self.teams[combine_destination]
+        self._compute_has_names()
 
     def get_event_name(self, event_number):
         try:
@@ -228,6 +245,7 @@ class HytekEventLoader():
         self.teams = o.get('teams', {})
         self.teams_uncombined = o.get('teams_uncombined', {})
         self.combined = o['combined']
+        self._compute_has_names()
 
 
 if __name__ == "__main__":

@@ -230,6 +230,7 @@ table.scoreboard_table th {
     .header-full {
         display: none;
     }
+
     .header-short {
         display: inline;
     }
@@ -302,7 +303,7 @@ table.scoreboard_table th {
     }
 
     .content_scoreboard_ad {
-        width: 95%;
+        width: 60%;
     }
 
     .background {

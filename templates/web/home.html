@@ -91,6 +91,12 @@
     integrity="sha384-kzavj5fiMwLKzzD1f8S7TeoVIEi7uKHvbTA3ueZkrzYq75pNQUiUi6Dy98Q3fxb0"></script>
 <script type="text/javascript" charset="utf-8">
     var s = {}
+    var schedule_has_names = {{ 'true' if schedule_has_names else 'false' }};
+
+    // Apply initial name column visibility
+    document.querySelectorAll('.scoreboard_name_col, .lane_name').forEach(function (el) {
+        el.style.display = schedule_has_names ? 'table-cell' : 'none';
+    });
 
     var socket = io.connect('http://' + document.domain + ':' + location.port + '/scoreboard');
     socket.on('connect', function () {
@@ -168,19 +174,13 @@
     }
         }
 
-    // Show/hide name column based on whether any lane has a name or team
-    var has_names = false;
-    for (var i = 1; i <= {{ num_lanes }}; i++) {
-        var nameText = document.getElementById("lane_swimmer_name" + i).textContent.replace(/\s/g, '');
-        var teamText = document.getElementById("lane_team" + i).textContent.replace(/\s/g, '');
-        if (nameText !== "" || teamText !== "") {
-            has_names = true;
-            break;
-        }
+    // Show/hide name column based on server-cached schedule_has_names flag
+    if ("schedule_has_names" in s) {
+        schedule_has_names = s["schedule_has_names"];
+        document.querySelectorAll('.scoreboard_name_col, .lane_name').forEach(function (el) {
+            el.style.display = schedule_has_names ? 'table-cell' : 'none';
+        });
     }
-    document.querySelectorAll('.scoreboard_name_col, .lane_name').forEach(function (el) {
-        el.style.display = has_names ? 'table-cell' : 'none';
-    });
 
     s = {};
     });
