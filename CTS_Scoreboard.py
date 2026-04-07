@@ -350,6 +350,7 @@ def _get_qualifying_times(event_number):
                                 'tag': qt.standard.tag,
                                 'description': qt.standard.description,
                                 'time': qt.time_formatted,
+                                'time_seconds': qt.time_seconds,
                             })
     
     if not matches:
@@ -360,6 +361,7 @@ def _get_qualifying_times(event_number):
     unique_age = len(set((m['age_min'], m['age_max']) for m in matches)) > 1
     
     results = []
+    color_idx = 0
     for m in matches:
         qualifiers = []
         if unique_age:
@@ -378,10 +380,16 @@ def _get_qualifying_times(event_number):
         
         results.append({
             'time': m['time'],
+            'time_seconds': m['time_seconds'],
             'tag': m['tag'],
             'description': m['description'],
+            'color_class': 'qt-color-%d' % (color_idx % 12),
             'qualifiers': ' '.join(qualifiers),
+            'sex_code': m['sex_code'],
+            'age_min': m['age_min'],
+            'age_max': m['age_max'],
         })
+        color_idx += 1
     
     return results, (unique_sex or unique_age)
 

@@ -45,6 +45,20 @@
     margin-right: 2ch;
 }
 
+/* Time standard tag color palette (darker shades for contrast against blue lane rows) */
+.qt-color-0  { color: #B8860B; }  /* dark goldenrod */
+.qt-color-1  { color: #CC3300; }  /* dark red-orange */
+.qt-color-2  { color: #228B22; }  /* forest green */
+.qt-color-3  { color: #C71585; }  /* medium violet red */
+.qt-color-4  { color: #CC7000; }  /* dark orange */
+.qt-color-5  { color: #8B008B; }  /* dark magenta */
+.qt-color-6  { color: #2E8B57; }  /* sea green */
+.qt-color-7  { color: #9B870C; }  /* dark khaki */
+.qt-color-8  { color: #800080; }  /* purple */
+.qt-color-9  { color: #B22222; }  /* firebrick */
+.qt-color-10 { color: #556B2F; }  /* dark olive green */
+.qt-color-11 { color: #A0522D; }  /* sienna */
+
 .content_meet_date {
     font-family: 'Overpass Mono', monospace;
     font-size: 26px;
@@ -186,6 +200,13 @@ table.scoreboard_table th {
     text-align: left;
     flex-shrink: 1;
     order: 1;
+}
+
+.lane_qt_tag {
+    display: none;
+    font-size: 0.75em;
+    text-align: left;
+    margin-left: 0.5ch;
 }
 
 .scoreboard_place_col {
