@@ -60,8 +60,18 @@ GENDER_AGE_NAMES = {
 }
 
 
+MALE_GENDERS = {GenderAge.BOY_S, GenderAge.MEN_S}
+FEMALE_GENDERS = {GenderAge.GIRL_S, GenderAge.WOMEN_S}
+
+
 def _build_event_name(event):
     gender = GENDER_AGE_NAMES.get(event.gender_age, "")
+    if not gender and event.entries:
+        genders = {s.gender for e in event.entries for s in e.swimmers}
+        has_male = Gender.MALE in genders
+        has_female = Gender.FEMALE in genders
+        if has_male and has_female:
+            gender = "Mixed"
     if event.age_min and event.age_max:
         age = "%d-%d" % (event.age_min, event.age_max)
     elif event.age_min:
