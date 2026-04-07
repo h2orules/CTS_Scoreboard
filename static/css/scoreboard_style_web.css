@@ -172,6 +172,12 @@ table.scoreboard_table th {
     text-align: right;
     font-weight: bold;
     flex-shrink: 0;
+    order: 3;
+}
+
+.lane_age_code {
+    text-align: right;
+    flex-shrink: 0;
     order: 2;
     margin-left: auto;
 }

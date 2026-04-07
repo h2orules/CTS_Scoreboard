@@ -62,7 +62,7 @@
                     <tr class="{{ 'scoreboard_row_odd' if i % 2 == 1 else 'scoreboard_row_eve' }}">
                         <td align="center">{{ i }}</td>
                         <td id="lane_place{{ i }}" align="center"></td>
-                        <td id="lane_name{{ i }}" class="lane_name"><div class="lane_name-inner"><span class="lane_swimmer_name" id="lane_swimmer_name{{ i }}">&nbsp;</span><span class="lane_team_code" id="lane_team{{ i }}"></span></div></td>
+                        <td id="lane_name{{ i }}" class="lane_name"><div class="lane_name-inner"><span class="lane_swimmer_name" id="lane_swimmer_name{{ i }}">&nbsp;</span><span class="lane_age_code" id="lane_age_code{{ i }}"></span><span class="lane_team_code" id="lane_team{{ i }}"></span></div></td>
                         <td align="right"><span id="lane_time{{ i }}"></span>&nbsp;</td>
                     </tr>
                     {% endfor %}
@@ -156,6 +156,11 @@
         var teamMatch = k.match(/^lane_team(\d+)$/);
         if (teamMatch) {
             var el = document.getElementById("lane_team" + teamMatch[1]);
+            if (el) el.textContent = (s[k] || '').trimEnd();
+        }
+        var ageCodeMatch = k.match(/^lane_age_code(\d+)$/);
+        if (ageCodeMatch) {
+            var el = document.getElementById("lane_age_code" + ageCodeMatch[1]);
             if (el) el.textContent = (s[k] || '').trimEnd();
         }
 

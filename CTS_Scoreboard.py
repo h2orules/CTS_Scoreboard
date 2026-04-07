@@ -264,23 +264,23 @@ user = User(0)
 def _get_qualifying_times(event_number):
     """Look up qualifying times from time_standards for a given event.
     
-    Returns a list of dicts: [{time, tag, description, qualifiers}, ...]
-    where qualifiers is a string with distinguishing info (age, gender) only
-    when multiple standards match for reasons beyond just multiple tags.
+    Returns (list_of_dicts, show_age_codes) where list_of_dicts has
+    [{time, tag, description, qualifiers}, ...] and show_age_codes is True
+    when multiple standards match for age or gender reasons.
     """
     if time_standards is None:
-        return []
+        return [], False
     
     meta = event_info.event_meta.get(event_number)
     if not meta:
-        return []
+        return [], False
     
     pool_course = settings.get('pool_course', 'SCY')
     
     # Determine which st2 sex codes to search for
     sex_codes = meta.get('sex_codes', [])
     if not sex_codes:
-        return []
+        return [], False
     
     stroke_code = meta.get('stroke_code')
     distance = meta.get('distance')
@@ -353,7 +353,7 @@ def _get_qualifying_times(event_number):
                             })
     
     if not matches:
-        return []
+        return [], False
     
     # Determine which qualifiers need to be shown
     unique_sex = len(set(m['sex_code'] for m in matches)) > 1
@@ -383,7 +383,7 @@ def _get_qualifying_times(event_number):
             'qualifiers': ' '.join(qualifiers),
         })
     
-    return results
+    return results, (unique_sex or unique_age)
 
 def send_event_info():            
     update={}
@@ -391,11 +391,13 @@ def send_event_info():
     update["current_heat"] = str(last_event_sent[1])
     update["event_name"] = event_info.get_event_name(last_event_sent[0])
     update["schedule_has_names"] = event_info.has_names
-    update["qualifying_times"] = _get_qualifying_times(last_event_sent[0])
+    qt_results, show_age_codes = _get_qualifying_times(last_event_sent[0])
+    update["qualifying_times"] = qt_results
     
     for i in range(1,11):
         update["lane_name%i" % i] = event_info.get_display_string(last_event_sent[0], last_event_sent[1], i)
         update["lane_team%i" % i] = event_info.get_team_code(last_event_sent[0], last_event_sent[1], i)
+        update["lane_age_code%i" % i] = event_info.get_age_code(last_event_sent[0], last_event_sent[1], i) if show_age_codes else ""
 
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
             
