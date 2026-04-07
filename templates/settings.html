@@ -89,8 +89,8 @@
                         <div class="input-group">
                             <input id="meet_schedule" name="meet_schedule" value="{{ meet_schedule }}"
                                 class="form-control" aria-label="..."
-                                oninput="document.getElementById('meet_schedule_submit').disabled=false;"
-                                type="file" accept=".hy3"></input>
+                                oninput="document.getElementById('meet_schedule_submit').disabled=false;" type="file"
+                                accept=".hy3"></input>
                             <span class="input-group-btn">
                                 <button class="btn btn-default" type="submit" id="meet_schedule_submit">Upload</button>
                                 <button class="btn btn-default" type="button"
@@ -151,6 +151,31 @@
                             </select>
                             <span class="input-group-btn">
                                 <button class="btn btn-default" type="submit" id="num_lanes_submit"
+                                    disabled>Update</button>
+                            </span>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-lg-6">
+                <form action="/settings" method="POST">
+                    <div class="input-group">
+                        <label for="pool_course">Pool Course</label>
+                        <div class="input-group">
+                            <select id="pool_course" name="pool_course" class="form-control"
+                                oninput="document.getElementById('pool_course_submit').disabled=false;">
+                                {% for code, label in [('SCY', 'Short Course Yards (SCY)'), ('SCM', 'Short Course Meters (SCM)'), ('LCM', 'Long Course Meters (LCM)')] %}
+                                {% if code == pool_course %}
+                                <option value="{{code}}" selected>{{label}}</option>
+                                {% else %}
+                                <option value="{{code}}">{{label}}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                            <span class="input-group-btn">
+                                <button class="btn btn-default" type="submit" id="pool_course_submit"
                                     disabled>Update</button>
                             </span>
                         </div>
