@@ -83,7 +83,7 @@ def hex_to_digit(c):
 
 update={}
 next_update = datetime.datetime.now()
-last_event_sent = (0,0)
+last_event_sent = (1,1)
 
 def parse_line(l, out = None):
     global event_heat_info, lane_info, time_info, running_time, update, next_update, last_event_sent
