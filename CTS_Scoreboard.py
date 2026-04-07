@@ -259,13 +259,133 @@ class User(flask_login.UserMixin):
 
 # create the user       
 user = User(0)
-            
+
+def _get_qualifying_times(event_number):
+    """Look up qualifying times from time_standards for a given event.
+    
+    Returns a list of dicts: [{time, tag, description, qualifiers}, ...]
+    where qualifiers is a string with distinguishing info (age, gender) only
+    when multiple standards match for reasons beyond just multiple tags.
+    """
+    if time_standards is None:
+        return []
+    
+    meta = event_info.event_meta.get(event_number)
+    if not meta:
+        return []
+    
+    pool_course = settings.get('pool_course', 'SCY')
+    
+    # Determine which st2 sex codes to search for
+    sex_codes = meta.get('sex_codes', [])
+    if not sex_codes:
+        return []
+    
+    stroke_code = meta.get('stroke_code')
+    distance = meta.get('distance')
+    is_relay = meta.get('relay', False)
+    age_min = meta.get('age_min')
+    age_max = meta.get('age_max')
+    is_mixed = meta.get('is_mixed', False)
+    
+    # Determine expected event_type
+    event_type_match = "Relay" if is_relay else "Individual"
+    
+    # For combined events, collect all source event age ranges
+    age_ranges = []
+    combined = event_info.combined
+    source_events = set()
+    for src, dst in combined.items():
+        if dst == (event_number, 1) or src == (event_number, 1):
+            src_event_num = src[0]
+            src_meta = event_info.event_meta.get(src_event_num)
+            if src_meta:
+                source_events.add(src_event_num)
+                age_ranges.append((src_meta.get('age_min'), src_meta.get('age_max')))
+    
+    if not age_ranges:
+        age_ranges.append((age_min, age_max))
+    
+    # Find matching st2 events
+    sex_names = {1: 'Male', 2: 'Female'}
+    matches = []
+    
+    for sex_code in sex_codes:
+        for ar_min, ar_max in age_ranges:
+            for st2_event in time_standards.events:
+                if st2_event.stroke_code != stroke_code:
+                    continue
+                if st2_event.distance != distance:
+                    continue
+                if st2_event.event_type != event_type_match:
+                    continue
+                if st2_event.sex_code != sex_code:
+                    continue
+                
+                # Age range overlap check
+                st2_min = st2_event.age_group_min
+                st2_max = st2_event.age_group_max
+                ev_min = ar_min if ar_min else 0
+                ev_max = ar_max if ar_max else 999
+                s_min = st2_min if st2_min else 0
+                s_max = st2_max if st2_max else 999
+                
+                if ev_min > s_max or s_min > ev_max:
+                    continue
+                
+                # Found a match - get times for the pool course
+                for cs in st2_event.courses:
+                    if cs.course == pool_course:
+                        for qt in cs.times:
+                            matches.append({
+                                'sex_code': sex_code,
+                                'age_min': st2_min,
+                                'age_max': st2_max,
+                                'tag': qt.standard.tag,
+                                'description': qt.standard.description,
+                                'time': qt.time_formatted,
+                            })
+    
+    if not matches:
+        return []
+    
+    # Determine which qualifiers need to be shown
+    unique_sex = len(set(m['sex_code'] for m in matches)) > 1
+    unique_age = len(set((m['age_min'], m['age_max']) for m in matches)) > 1
+    
+    results = []
+    for m in matches:
+        qualifiers = []
+        if unique_age:
+            a_min = m['age_min']
+            a_max = m['age_max']
+            if a_min and a_max:
+                qualifiers.append("%d-%d" % (a_min, a_max))
+            elif a_max:
+                qualifiers.append("%d & Under" % a_max)
+            elif a_min:
+                qualifiers.append("%d & Over" % a_min)
+            else:
+                qualifiers.append("Open")
+        if unique_sex:
+            qualifiers.append(sex_names.get(m['sex_code'], ''))
+        
+        results.append({
+            'time': m['time'],
+            'tag': m['tag'],
+            'description': m['description'],
+            'qualifiers': ' '.join(qualifiers),
+        })
+    
+    return results
+
 def send_event_info():            
     update={}
     update["current_event"] = str(last_event_sent[0])
     update["current_heat"] = str(last_event_sent[1])
     update["event_name"] = event_info.get_event_name(last_event_sent[0])
     update["schedule_has_names"] = event_info.has_names
+    update["qualifying_times"] = _get_qualifying_times(last_event_sent[0])
     
     for i in range(1,11):
         update["lane_name%i" % i] = event_info.get_display_string(last_event_sent[0], last_event_sent[1], i)

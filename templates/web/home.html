@@ -44,6 +44,11 @@
                             <th colspan="4" class="content_event_name"><span id="event_name" class="anim"></span></th>
                         </tr>
 
+                    </thead>
+                    <tbody id="qualifying_times_body">
+                    </tbody>
+                    <thead>
+
                         <tr class="scoreboard_header">
                             <th align="center" id="scoreboard_lane_col" style="width:  80px;max-width:  80px;"><span
                                     class="header-full">Lane</span><span class="header-short">Ln</span></th>
@@ -176,6 +181,26 @@
         document.querySelectorAll('.scoreboard_name_col, .lane_name').forEach(function (el) {
             el.style.display = schedule_has_names ? 'table-cell' : 'none';
         });
+    }
+
+    // Render qualifying times rows
+    if ("qualifying_times" in s) {
+        var qtBody = document.getElementById("qualifying_times_body");
+        qtBody.innerHTML = "";
+        var qtList = s["qualifying_times"];
+        for (var q = 0; q < qtList.length; q++) {
+            var qt = qtList[q];
+            var tr = document.createElement("tr");
+            tr.className = "qualifying_time_row";
+            var td = document.createElement("td");
+            td.setAttribute("colspan", "4");
+            var parts = [qt.time, qt.tag];
+            if (qt.description && qt.description !== qt.tag) parts.push(qt.description);
+            if (qt.qualifiers) parts.push(qt.qualifiers);
+            td.textContent = parts.join("  ");
+            tr.appendChild(td);
+            qtBody.appendChild(tr);
+        }
     }
 
     s = {};

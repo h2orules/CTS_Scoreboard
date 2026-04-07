@@ -110,6 +110,7 @@ class HytekEventLoader():
 
     def __init__(self, file_name=None):
         self.event_names = {}
+        self.event_meta = {}  # event_number -> {stroke, distance, relay, age_min, age_max, genders}
         self.events = {}
         self.teams = {}
         self.events_uncombined = {}
@@ -134,6 +135,7 @@ class HytekEventLoader():
 
     def clear(self):
         self.event_names.clear()
+        self.event_meta.clear()
         self.events.clear()
         self.teams.clear()
         self.events_uncombined = copy.deepcopy(self.events)
@@ -167,6 +169,49 @@ class HytekEventLoader():
                 event_number = event_num_str
 
             self.event_names[event_number] = _build_event_name(event)
+
+            # Determine swimmer genders for this event
+            swimmer_genders = set()
+            for entry in event.entries:
+                for swimmer in entry.swimmers:
+                    if swimmer.gender == Gender.MALE:
+                        swimmer_genders.add('M')
+                    elif swimmer.gender == Gender.FEMALE:
+                        swimmer_genders.add('F')
+
+            # Map hy3 stroke enum to st2 stroke code
+            stroke_map = {
+                Stroke.FREESTYLE: 1,
+                Stroke.BACKSTROKE: 2,
+                Stroke.BREASTSTROKE: 3,
+                Stroke.BUTTERFLY: 4,
+                Stroke.MEDLEY: 5,
+            }
+            stroke_code = stroke_map.get(event.stroke)
+
+            # Map gender_age to st2 sex code
+            if event.gender_age in MALE_GENDERS:
+                sex_codes = [1]
+            elif event.gender_age in FEMALE_GENDERS:
+                sex_codes = [2]
+            elif 'M' in swimmer_genders and 'F' in swimmer_genders:
+                sex_codes = [1, 2]  # Mixed
+            elif 'M' in swimmer_genders:
+                sex_codes = [1]
+            elif 'F' in swimmer_genders:
+                sex_codes = [2]
+            else:
+                sex_codes = []
+
+            self.event_meta[event_number] = {
+                'stroke_code': stroke_code,
+                'distance': event.distance,
+                'relay': event.relay,
+                'age_min': event.age_min,
+                'age_max': event.age_max,
+                'sex_codes': sex_codes,
+                'is_mixed': len(sex_codes) > 1,
+            }
 
             for entry in event.entries:
                 heat = entry.finals_heat
@@ -240,6 +285,7 @@ class HytekEventLoader():
     def to_object(self):
         return pickle.dumps({
             "event_names": self.event_names,
+            "event_meta": self.event_meta,
             "events": self.events,
             "events_uncombined": self.events_uncombined,
             "teams": self.teams,
@@ -250,6 +296,7 @@ class HytekEventLoader():
     def from_object(self, p):
         o = pickle.loads(p.encode('utf8'))
         self.event_names = o['event_names']
+        self.event_meta = o.get('event_meta', {})
         self.events = o['events']
         self.events_uncombined = o['events_uncombined']
         self.teams = o.get('teams', {})
