@@ -114,7 +114,11 @@
 
 /* midnight blue */
 
-.qt-pr { color: #003D00; }  /* dark green - personal record */
+.qt-pr {
+    color: #003D00;
+}
+
+/* dark green - personal record */
 
 .content_meet_date {
     font-family: 'Overpass Mono', monospace;
