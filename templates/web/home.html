@@ -337,13 +337,15 @@
 
             var timeSpan = document.createElement("span");
             timeSpan.className = "qt_time";
-            timeSpan.textContent = qt.time.padStart(maxTimeLen);
+            timeSpan.textContent = qt.time;
+            timeSpan.style.minWidth = maxTimeLen + "ch";
             timeSpan.classList.add(qt.color_class);
             td.appendChild(timeSpan);
 
             var tagSpan = document.createElement("span");
             tagSpan.className = "qt_tag";
-            tagSpan.textContent = qt.tag.padEnd(maxTagDispLen);
+            tagSpan.textContent = qt.tag;
+            tagSpan.style.minWidth = maxTagDispLen + "ch";
             tagSpan.classList.add(qt.color_class);
             td.appendChild(tagSpan);
 
@@ -351,7 +353,8 @@
             if (maxDescLen > 0) {
                 var descSpan = document.createElement("span");
                 descSpan.className = "qt_desc";
-                descSpan.textContent = desc.padEnd(maxDescLen);
+                descSpan.textContent = desc;
+                descSpan.style.minWidth = maxDescLen + "ch";
                 descSpan.classList.add(qt.color_class);
                 td.appendChild(descSpan);
             }
