@@ -318,6 +318,7 @@ def route_web(name):
 @flask_login.login_required
 def route_settings():
     global settings
+    schedule_error = None
     if flask.request.method == 'POST':
         modified = False
         
@@ -329,12 +330,15 @@ def route_settings():
             if file and file.filename and file.filename.endswith('.hy3'):
                 try:
                     event_info.load_from_bytestream(file.stream)
-                except:
-                    return traceback.format_exc()
-
-                settings['event_info'] = event_info.to_object()
-                send_event_info()
-                modified = True
+                except Exception as e:
+                    detail = str(e)
+                    schedule_error = 'Failed to parse the schedule file'
+                    if detail:
+                        schedule_error += ': ' + detail
+                else:
+                    settings['event_info'] = event_info.to_object()
+                    send_event_info()
+                    modified = True
         
         for k in settings.keys(): 
             if k in flask.request.form and settings[k]!=flask.request.form.get(k):
@@ -359,6 +363,7 @@ def route_settings():
     for dirpath, dir, file in os.walk(os.path.join("static", "ad")):
         ad_url_list.extend(file)
  
+    schedule_loaded = bool(event_info.event_names)
     return flask.render_template('settings.html', 
                 meet_title=settings['meet_title'], 
                 serial_port=settings['serial_port'],
@@ -367,7 +372,9 @@ def route_settings():
                 ad_url_list = ad_url_list,
                 ad_url=settings['ad_url'],
                 num_lanes=settings['num_lanes'],
-                pool_course=settings.get('pool_course', 'SCY'))
+                pool_course=settings.get('pool_course', 'SCY'),
+                schedule_loaded=schedule_loaded,
+                schedule_error=schedule_error)
                 
 @app.route('/schedule_clear')
 @flask_login.login_required

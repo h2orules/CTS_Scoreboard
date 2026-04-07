@@ -86,6 +86,20 @@
                 <form action="/settings" method="POST" enctype="multipart/form-data">
                     <div class="input-group">
                         <label for="meet_schedule">Hytek Schedule (.hy3)</label>
+                        {% if schedule_error %}
+                        <div class="alert alert-danger" style="margin-bottom: 5px; padding: 6px 12px;">
+                            <strong>Upload failed:</strong> {{ schedule_error }}
+                        </div>
+                        {% endif %}
+                        {% if schedule_loaded %}
+                        <div class="alert alert-success" style="margin-bottom: 5px; padding: 6px 12px;">
+                            Schedule loaded
+                        </div>
+                        {% else %}
+                        <div class="alert alert-warning" style="margin-bottom: 5px; padding: 6px 12px;">
+                            No schedule loaded
+                        </div>
+                        {% endif %}
                         <div class="input-group">
                             <input id="meet_schedule" name="meet_schedule" value="{{ meet_schedule }}"
                                 class="form-control" aria-label="..."
