@@ -13,6 +13,7 @@ import json
 import os.path
 import glob
 from hytek_event_loader import HytekEventLoader
+from hytek_st2_parser import parse_st2_file
 import ap
 
 DEBUG = False
@@ -35,6 +36,9 @@ debug_console = False
 
 # Event Settings
 event_info = HytekEventLoader()
+
+# Time Standards
+time_standards = None
 
 app = flask.Flask(__name__)
 # config
@@ -62,12 +66,15 @@ running_time = '        '
 channel_running = [False for i in range(10)]
 
 def load_settings():
-    global settings
+    global settings, time_standards
     try:
         with open(settings_file, "rt") as f:
             settings.update(json.load(f))
         if 'event_info' in settings:
             event_info.from_object(settings['event_info'])
+        if 'time_standards' in settings:
+            import pickle, base64
+            time_standards = pickle.loads(base64.b64decode(settings['time_standards']))
     except: pass
 
 ## Stuff to move the cursor
@@ -319,6 +326,7 @@ def route_web(name):
 def route_settings():
     global settings
     schedule_error = None
+    standards_error = None
     if flask.request.method == 'POST':
         modified = False
         
@@ -339,6 +347,31 @@ def route_settings():
                     settings['event_info'] = event_info.to_object()
                     send_event_info()
                     modified = True
+        
+        if 'time_standards_file' in flask.request.files:
+            file = flask.request.files['time_standards_file']
+            if file and file.filename and file.filename.endswith('.st2'):
+                import pickle, base64
+                import tempfile
+                try:
+                    with tempfile.NamedTemporaryFile(suffix='.st2', delete=False) as tmp:
+                        tmp.write(file.stream.read())
+                        tmp_path = tmp.name
+                    global time_standards
+                    time_standards = parse_st2_file(tmp_path)
+                except Exception as e:
+                    detail = str(e)
+                    standards_error = 'Failed to parse the time standards file'
+                    if detail:
+                        standards_error += ': ' + detail
+                else:
+                    settings['time_standards'] = base64.b64encode(pickle.dumps(time_standards)).decode('ascii')
+                    modified = True
+                finally:
+                    try:
+                        os.unlink(tmp_path)
+                    except:
+                        pass
         
         for k in settings.keys(): 
             if k in flask.request.form and settings[k]!=flask.request.form.get(k):
@@ -364,6 +397,7 @@ def route_settings():
         ad_url_list.extend(file)
  
     schedule_loaded = bool(event_info.event_names)
+    standards_loaded = time_standards is not None
     return flask.render_template('settings.html', 
                 meet_title=settings['meet_title'], 
                 serial_port=settings['serial_port'],
@@ -374,13 +408,25 @@ def route_settings():
                 num_lanes=settings['num_lanes'],
                 pool_course=settings.get('pool_course', 'SCY'),
                 schedule_loaded=schedule_loaded,
-                schedule_error=schedule_error)
+                schedule_error=schedule_error,
+                standards_loaded=standards_loaded,
+                standards_error=standards_error)
                 
 @app.route('/schedule_clear')
 @flask_login.login_required
 def route_schedule_clear():
     event_info.clear()
     settings['event_info'] = event_info.to_object()
+    with open(settings_file, "wt") as f:
+        json.dump(settings, f, sort_keys=True, indent=4)
+    return flask.redirect('/settings')
+
+@app.route('/standards_clear')
+@flask_login.login_required
+def route_standards_clear():
+    global time_standards
+    time_standards = None
+    settings.pop('time_standards', None)
     with open(settings_file, "wt") as f:
         json.dump(settings, f, sort_keys=True, indent=4)
     return flask.redirect('/settings')
