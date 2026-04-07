@@ -95,6 +95,8 @@
     var schedule_has_names = {{ 'true' if schedule_has_names else 'false' }};
     var qtThresholds = [];  // Current event's qualifying time thresholds
     var laneAgeCodes = {};  // lane -> age_code string (e.g. "8B", "12G")
+    var laneSeedTimes = {}; // lane -> seed time in seconds (number or "")
+    var showPrTags = true;  // Whether to show PR tags
     var maxQtTagLen = 0;    // Longest tag string for space reservation
     var prevEventHeat = ""; // Track event/heat changes for reset
 
@@ -161,28 +163,38 @@
 
         // Reset to default
         timeEl.className = timeEl.className.replace(/\bqt-color-\d+\b/g, '').trim();
+        timeEl.classList.remove('qt-pr');
         var tagEl = document.getElementById("lane_qt_tag" + lane);
         if (tagEl) tagEl.textContent = "";
 
-        if (isRunning || qtThresholds.length === 0) return;
+        if (isRunning) return;
 
         var seconds = parseTimeToSeconds(timeText);
         if (seconds === null || seconds <= 0) return;
 
-        var thresholds = getThresholdsForLane(lane);
-        // Find the most stringent (fastest) standard met
+        // Check qualifying time standards
         var bestMatch = null;
-        for (var i = 0; i < thresholds.length; i++) {
-            var qt = thresholds[i];
-            if (seconds <= qt.time_seconds) {
-                if (bestMatch === null || qt.time_seconds < bestMatch.time_seconds) {
-                    bestMatch = qt;
+        if (qtThresholds.length > 0) {
+            var thresholds = getThresholdsForLane(lane);
+            for (var i = 0; i < thresholds.length; i++) {
+                var qt = thresholds[i];
+                if (seconds <= qt.time_seconds) {
+                    if (bestMatch === null || qt.time_seconds < bestMatch.time_seconds) {
+                        bestMatch = qt;
+                    }
                 }
             }
         }
         if (bestMatch) {
             timeEl.classList.add(bestMatch.color_class);
             if (tagEl) tagEl.textContent = bestMatch.tag;
+        } else if (showPrTags) {
+            // No qualifying standard met — check for personal record
+            var seed = laneSeedTimes[lane];
+            if (typeof seed === 'number' && seed > 0 && seconds < seed) {
+                timeEl.classList.add('qt-pr');
+                if (tagEl) tagEl.textContent = "PR";
+            }
         }
     }
 
@@ -190,7 +202,10 @@
     function resetLaneQualifications() {
         for (var i = 1; i <= {{ num_lanes }}; i++) {
             var timeEl = document.getElementById("lane_time" + i);
-            if (timeEl) timeEl.className = timeEl.className.replace(/\bqt-color-\d+\b/g, '').trim();
+            if (timeEl) {
+                timeEl.className = timeEl.className.replace(/\bqt-color-\d+\b/g, '').trim();
+                timeEl.classList.remove('qt-pr');
+            }
             var tagEl = document.getElementById("lane_qt_tag" + i);
             if (tagEl) tagEl.textContent = "";
         }
@@ -273,6 +288,10 @@
             if (el) el.textContent = (s[k] || '').trimEnd();
             laneAgeCodes[laneNum] = (s[k] || '').trim();
         }
+        var seedMatch = k.match(/^lane_seed_time(\d+)$/);
+        if (seedMatch) {
+            laneSeedTimes[seedMatch[1]] = s[k];
+        }
 
         // Check and update lane running
         if (k.startsWith("lane_running")) {
@@ -296,6 +315,10 @@
         document.querySelectorAll('.scoreboard_name_col, .lane_name').forEach(function (el) {
             el.style.display = schedule_has_names ? 'table-cell' : 'none';
         });
+    }
+
+    if ("show_pr_tags" in s) {
+        showPrTags = s["show_pr_tags"];
     }
 
     // Render qualifying times rows and update thresholds
