@@ -59,6 +59,7 @@
         <div class="jumbotron">
             <h1>CTS Scoreboard</h1>
             <h2>Settings</h2>
+            <a href="/" class="btn btn-default">Back to Site Map</a>
         </div>
 
 
@@ -111,6 +112,40 @@
                                     onclick="location.href = '/schedule_clear';">Clear</button>
                                 <button class="btn btn-default" type="button"
                                     onclick="location.href = '/schedule_preview';">Preview</button>
+                            </span>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="col-lg-8">
+                <form action="/settings" method="POST" enctype="multipart/form-data">
+                    <div class="input-group">
+                        <label for="time_standards_file">Hytek Time Standards (.st2)</label>
+                        {% if standards_error %}
+                        <div class="alert alert-danger" style="margin-bottom: 5px; padding: 6px 12px;">
+                            <strong>Upload failed:</strong> {{ standards_error }}
+                        </div>
+                        {% endif %}
+                        {% if standards_loaded %}
+                        <div class="alert alert-success" style="margin-bottom: 5px; padding: 6px 12px;">
+                            Time standards loaded
+                        </div>
+                        {% else %}
+                        <div class="alert alert-warning" style="margin-bottom: 5px; padding: 6px 12px;">
+                            No time standards loaded
+                        </div>
+                        {% endif %}
+                        <div class="input-group">
+                            <input id="time_standards_file" name="time_standards_file"
+                                class="form-control" aria-label="..." type="file"
+                                accept=".st2"></input>
+                            <span class="input-group-btn">
+                                <button class="btn btn-default" type="submit" id="time_standards_submit">Upload</button>
+                                <button class="btn btn-default" type="button"
+                                    onclick="location.href = '/standards_clear';">Clear</button>
                             </span>
                         </div>
                     </div>
