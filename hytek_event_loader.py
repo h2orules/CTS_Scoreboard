@@ -4,7 +4,7 @@ import tempfile
 import os
 
 from hytek_parser.hy3_parser import parse_hy3
-from hytek_parser.hy3.enums import Stroke, Gender, GenderAge, Course
+from hytek_parser.hy3.enums import Stroke, Gender, GenderAge, Course, ReplacedTimeTimeCode
 
 # Monkey-patch e2_parser to handle empty/invalid date fields in .hy3 files
 import hytek_parser.hy3.line_parsers.e_event_parsers as _e_parsers
@@ -121,6 +121,18 @@ def _get_age_code(entry, gender_age):
     return "%d%s" % (age, letter) if letter else ""
 
 
+def _get_seed_time_seconds(entry):
+    """Return seed time in seconds as a float, or None if unavailable/NT."""
+    if entry.relay:
+        return None
+    st = entry.seed_time
+    if isinstance(st, ReplacedTimeTimeCode):
+        return None
+    if isinstance(st, (int, float)) and st > 0:
+        return float(st)
+    return None
+
+
 class HytekEventLoader():
     max_display_string_length = 0
 
@@ -130,9 +142,11 @@ class HytekEventLoader():
         self.events = {}
         self.teams = {}
         self.age_codes = {}
+        self.seed_times = {}
         self.events_uncombined = {}
         self.teams_uncombined = {}
         self.age_codes_uncombined = {}
+        self.seed_times_uncombined = {}
         self.combined = {}
         self.has_names = False
         if file_name:
@@ -157,9 +171,11 @@ class HytekEventLoader():
         self.events.clear()
         self.teams.clear()
         self.age_codes.clear()
+        self.seed_times.clear()
         self.events_uncombined = copy.deepcopy(self.events)
         self.teams_uncombined = copy.deepcopy(self.teams)
         self.age_codes_uncombined = copy.deepcopy(self.age_codes)
+        self.seed_times_uncombined = copy.deepcopy(self.seed_times)
         self.combined.clear()
         self.max_display_string_length = 0
         self.has_names = False
@@ -250,14 +266,17 @@ class HytekEventLoader():
                     self.events[(event_number, heat)] = {}
                     self.teams[(event_number, heat)] = {}
                     self.age_codes[(event_number, heat)] = {}
+                    self.seed_times[(event_number, heat)] = {}
 
                 self.events[(event_number, heat)][lane] = display_string
                 self.teams[(event_number, heat)][lane] = team_code
                 self.age_codes[(event_number, heat)][lane] = _get_age_code(entry, event.gender_age)
+                self.seed_times[(event_number, heat)][lane] = _get_seed_time_seconds(entry)
 
         self.events_uncombined = copy.deepcopy(self.events)
         self.teams_uncombined = copy.deepcopy(self.teams)
         self.age_codes_uncombined = copy.deepcopy(self.age_codes)
+        self.seed_times_uncombined = copy.deepcopy(self.seed_times)
         self._compute_has_names()
 
     def combine_events(self, combined=None):
@@ -266,6 +285,7 @@ class HytekEventLoader():
         self.events = copy.deepcopy(self.events_uncombined)
         self.teams = copy.deepcopy(self.teams_uncombined)
         self.age_codes = copy.deepcopy(self.age_codes_uncombined)
+        self.seed_times = copy.deepcopy(self.seed_times_uncombined)
 
         for combine_source, combine_destination in self.combined.items():
             if (combine_source != combine_destination):
@@ -275,6 +295,8 @@ class HytekEventLoader():
                         self.teams[combine_destination][lane] = self.teams[combine_source][lane]
                     if combine_source in self.age_codes and lane in self.age_codes[combine_source]:
                         self.age_codes[combine_destination][lane] = self.age_codes[combine_source][lane]
+                    if combine_source in self.seed_times and lane in self.seed_times[combine_source]:
+                        self.seed_times[combine_destination][lane] = self.seed_times[combine_source][lane]
                 del self.events[combine_source]
                 self.events[combine_source] = self.events[combine_destination]
                 if combine_source in self.teams:
@@ -283,6 +305,9 @@ class HytekEventLoader():
                 if combine_source in self.age_codes:
                     del self.age_codes[combine_source]
                     self.age_codes[combine_source] = self.age_codes[combine_destination]
+                if combine_source in self.seed_times:
+                    del self.seed_times[combine_source]
+                    self.seed_times[combine_source] = self.seed_times[combine_destination]
         self._compute_has_names()
 
     def get_event_name(self, event_number):
@@ -312,6 +337,13 @@ class HytekEventLoader():
             pass
         return ""
 
+    def get_seed_time(self, event_number, heat_number, lane):
+        """Return seed time in seconds as a float, or None if unavailable."""
+        try:
+            return self.seed_times[(event_number, heat_number)][lane]
+        except Exception:
+            return None
+
     def get_display_string_uncombined(self, event_number, heat_number, lane):
         try:
             return self.events_uncombined[(event_number, heat_number)][lane]
@@ -329,6 +361,8 @@ class HytekEventLoader():
             "teams_uncombined": self.teams_uncombined,
             "age_codes": self.age_codes,
             "age_codes_uncombined": self.age_codes_uncombined,
+            "seed_times": self.seed_times,
+            "seed_times_uncombined": self.seed_times_uncombined,
             "combined": self.combined,
         }, protocol=0).decode('utf8')
 
@@ -342,6 +376,8 @@ class HytekEventLoader():
         self.teams_uncombined = o.get('teams_uncombined', {})
         self.age_codes = o.get('age_codes', {})
         self.age_codes_uncombined = o.get('age_codes_uncombined', {})
+        self.seed_times = o.get('seed_times', {})
+        self.seed_times_uncombined = o.get('seed_times_uncombined', {})
         self.combined = o['combined']
         self._compute_has_names()
 

@@ -28,7 +28,8 @@ settings = {
     'password': 'password',
     'ad_url': '',
     'num_lanes': 6,
-    'pool_course': 'SCY'
+    'pool_course': 'SCY',
+    'show_pr_tags': True
     }
 in_file = None
 out_file = None
@@ -168,11 +169,7 @@ def parse_line(l, out = None):
             
             if last_event_sent != event_tuple:
                 last_event_sent = event_tuple
-                update["event_name"] = event_info.get_event_name(event_tuple[0])
-                
-                for i in range(1,11):
-                    update["lane_name%i" % i] = event_info.get_display_string(event_tuple[0], event_tuple[1], i)
-                    update["lane_team%i" % i] = event_info.get_team_code(event_tuple[0], event_tuple[1], i)
+                send_event_info()
 
         if out:
             if s:
@@ -406,6 +403,10 @@ def send_event_info():
         update["lane_name%i" % i] = event_info.get_display_string(last_event_sent[0], last_event_sent[1], i)
         update["lane_team%i" % i] = event_info.get_team_code(last_event_sent[0], last_event_sent[1], i)
         update["lane_age_code%i" % i] = event_info.get_age_code(last_event_sent[0], last_event_sent[1], i) if show_age_codes else ""
+        seed = event_info.get_seed_time(last_event_sent[0], last_event_sent[1], i)
+        update["lane_seed_time%i" % i] = seed if seed is not None else ""
+
+    update["show_pr_tags"] = settings.get('show_pr_tags', True)
 
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
             
@@ -520,6 +521,13 @@ def route_settings():
                     settings[k]=flask.request.form.get(k)
                     modified = True
         
+        # Handle checkbox fields (not present in form when unchecked)
+        if 'show_pr_tags_form' in flask.request.form:
+            new_val = 'show_pr_tags' in flask.request.form
+            if settings.get('show_pr_tags') != new_val:
+                settings['show_pr_tags'] = new_val
+                modified = True
+        
         if modified:
             with open(settings_file, "wt") as f:
                 json.dump(settings, f, sort_keys=True, indent=4)
@@ -546,7 +554,8 @@ def route_settings():
                 schedule_loaded=schedule_loaded,
                 schedule_error=schedule_error,
                 standards_loaded=standards_loaded,
-                standards_error=standards_error)
+                standards_error=standards_error,
+                show_pr_tags=settings.get('show_pr_tags', True))
                 
 @app.route('/schedule_clear')
 @flask_login.login_required

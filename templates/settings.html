@@ -236,6 +236,25 @@
         <div class="row">
             <div class="col-lg-6">
                 <form action="/settings" method="POST">
+                    <input type="hidden" name="show_pr_tags_form" value="1">
+                    <div class="input-group">
+                        <label>
+                            <input type="checkbox" name="show_pr_tags" value="1"
+                                {% if show_pr_tags %}checked{% endif %}
+                                onchange="document.getElementById('show_pr_tags_submit').disabled=false;">
+                            Show PR (Personal Record) tags
+                        </label>
+                        <span class="input-group-btn">
+                            <button class="btn btn-default" type="submit" id="show_pr_tags_submit"
+                                disabled>Update</button>
+                        </span>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-lg-6">
+                <form action="/settings" method="POST">
                     <div class="input-group">
                         <label for="serial_port">Serial Port</label>
                         <div class="input-group">
