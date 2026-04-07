@@ -25,7 +25,8 @@ settings = {
     'username': 'admin',
     'password': 'password',
     'ad_url': '',
-    'num_lanes': 6
+    'num_lanes': 6,
+    'pool_course': 'SCY'
     }
 in_file = None
 out_file = None
@@ -365,7 +366,8 @@ def route_settings():
                 user_name=settings['username'],
                 ad_url_list = ad_url_list,
                 ad_url=settings['ad_url'],
-                num_lanes=settings['num_lanes'])
+                num_lanes=settings['num_lanes'],
+                pool_course=settings.get('pool_course', 'SCY'))
                 
 @app.route('/schedule_clear')
 @flask_login.login_required
