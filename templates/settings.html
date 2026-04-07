@@ -166,7 +166,8 @@
                         <div class="input-group">
                             <select id="pool_course" name="pool_course" class="form-control"
                                 oninput="document.getElementById('pool_course_submit').disabled=false;">
-                                {% for code, label in [('SCY', 'Short Course Yards (SCY)'), ('SCM', 'Short Course Meters (SCM)'), ('LCM', 'Long Course Meters (LCM)')] %}
+                                {% for code, label in [('SCY', 'Short Course Yards (SCY)'), ('SCM', 'Short Course Meters
+                                (SCM)'), ('LCM', 'Long Course Meters (LCM)')] %}
                                 {% if code == pool_course %}
                                 <option value="{{code}}" selected>{{label}}</option>
                                 {% else %}
