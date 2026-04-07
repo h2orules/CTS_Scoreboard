@@ -57,11 +57,7 @@
                     <tr class="{{ 'scoreboard_row_odd' if i % 2 == 1 else 'scoreboard_row_eve' }}">
                         <td align="center">{{ i }}</td>
                         <td id="lane_place{{ i }}" align="center"></td>
-                        <td id="lane_name{{ i }}" class="lane_name">
-                            <div class="lane_name-inner"><span class="lane_swimmer_name"
-                                    id="lane_swimmer_name{{ i }}">&nbsp;</span><span class="lane_team_code"
-                                    id="lane_team{{ i }}"></span></div>
-                        </td>
+                        <td id="lane_name{{ i }}" class="lane_name"><div class="lane_name-inner"><span class="lane_swimmer_name" id="lane_swimmer_name{{ i }}">&nbsp;</span><span class="lane_team_code" id="lane_team{{ i }}"></span></div></td>
                         <td align="right"><span id="lane_time{{ i }}"></span>&nbsp;</td>
                     </tr>
                     {% endfor %}

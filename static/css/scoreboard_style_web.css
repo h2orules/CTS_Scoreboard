@@ -141,6 +141,7 @@ table.scoreboard_table th {
     max-width: 400px !important;
     padding: 0 8px;
     display: none;
+    white-space: nowrap;
 }
 
 .lane_name-inner {
