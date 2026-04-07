@@ -105,6 +105,22 @@ def _get_team_code(entry):
     return ""
 
 
+def _get_age_code(entry, gender_age):
+    """Build abbreviated age+gender code like '8B', '12G'."""
+    if entry.relay or not entry.swimmers:
+        return ""
+    swimmer = entry.swimmers[0]
+    age = getattr(swimmer, 'age', None)
+    if age is None:
+        return ""
+    gender = swimmer.gender
+    if gender_age in (GenderAge.MEN_S, GenderAge.WOMEN_S):
+        letter = 'M' if gender == Gender.MALE else 'W' if gender == Gender.FEMALE else ''
+    else:
+        letter = 'B' if gender == Gender.MALE else 'G' if gender == Gender.FEMALE else ''
+    return "%d%s" % (age, letter) if letter else ""
+
+
 class HytekEventLoader():
     max_display_string_length = 0
 
@@ -113,8 +129,10 @@ class HytekEventLoader():
         self.event_meta = {}  # event_number -> {stroke, distance, relay, age_min, age_max, genders}
         self.events = {}
         self.teams = {}
+        self.age_codes = {}
         self.events_uncombined = {}
         self.teams_uncombined = {}
+        self.age_codes_uncombined = {}
         self.combined = {}
         self.has_names = False
         if file_name:
@@ -138,8 +156,10 @@ class HytekEventLoader():
         self.event_meta.clear()
         self.events.clear()
         self.teams.clear()
+        self.age_codes.clear()
         self.events_uncombined = copy.deepcopy(self.events)
         self.teams_uncombined = copy.deepcopy(self.teams)
+        self.age_codes_uncombined = copy.deepcopy(self.age_codes)
         self.combined.clear()
         self.max_display_string_length = 0
         self.has_names = False
@@ -229,12 +249,15 @@ class HytekEventLoader():
                 if (event_number, heat) not in self.events:
                     self.events[(event_number, heat)] = {}
                     self.teams[(event_number, heat)] = {}
+                    self.age_codes[(event_number, heat)] = {}
 
                 self.events[(event_number, heat)][lane] = display_string
                 self.teams[(event_number, heat)][lane] = team_code
+                self.age_codes[(event_number, heat)][lane] = _get_age_code(entry, event.gender_age)
 
         self.events_uncombined = copy.deepcopy(self.events)
         self.teams_uncombined = copy.deepcopy(self.teams)
+        self.age_codes_uncombined = copy.deepcopy(self.age_codes)
         self._compute_has_names()
 
     def combine_events(self, combined=None):
@@ -242,6 +265,7 @@ class HytekEventLoader():
             self.combined = combined
         self.events = copy.deepcopy(self.events_uncombined)
         self.teams = copy.deepcopy(self.teams_uncombined)
+        self.age_codes = copy.deepcopy(self.age_codes_uncombined)
 
         for combine_source, combine_destination in self.combined.items():
             if (combine_source != combine_destination):
@@ -249,11 +273,16 @@ class HytekEventLoader():
                     self.events[combine_destination][lane] = self.events[combine_source][lane] + '*'
                     if combine_source in self.teams and lane in self.teams[combine_source]:
                         self.teams[combine_destination][lane] = self.teams[combine_source][lane]
+                    if combine_source in self.age_codes and lane in self.age_codes[combine_source]:
+                        self.age_codes[combine_destination][lane] = self.age_codes[combine_source][lane]
                 del self.events[combine_source]
                 self.events[combine_source] = self.events[combine_destination]
                 if combine_source in self.teams:
                     del self.teams[combine_source]
                     self.teams[combine_source] = self.teams[combine_destination]
+                if combine_source in self.age_codes:
+                    del self.age_codes[combine_source]
+                    self.age_codes[combine_source] = self.age_codes[combine_destination]
         self._compute_has_names()
 
     def get_event_name(self, event_number):
@@ -276,6 +305,13 @@ class HytekEventLoader():
             pass
         return ""
 
+    def get_age_code(self, event_number, heat_number, lane):
+        try:
+            return self.age_codes[(event_number, heat_number)][lane]
+        except Exception:
+            pass
+        return ""
+
     def get_display_string_uncombined(self, event_number, heat_number, lane):
         try:
             return self.events_uncombined[(event_number, heat_number)][lane]
@@ -291,6 +327,8 @@ class HytekEventLoader():
             "events_uncombined": self.events_uncombined,
             "teams": self.teams,
             "teams_uncombined": self.teams_uncombined,
+            "age_codes": self.age_codes,
+            "age_codes_uncombined": self.age_codes_uncombined,
             "combined": self.combined,
         }, protocol=0).decode('utf8')
 
@@ -302,6 +340,8 @@ class HytekEventLoader():
         self.events_uncombined = o['events_uncombined']
         self.teams = o.get('teams', {})
         self.teams_uncombined = o.get('teams_uncombined', {})
+        self.age_codes = o.get('age_codes', {})
+        self.age_codes_uncombined = o.get('age_codes_uncombined', {})
         self.combined = o['combined']
         self._compute_has_names()
 
