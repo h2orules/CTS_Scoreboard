@@ -188,16 +188,48 @@
         var qtBody = document.getElementById("qualifying_times_body");
         qtBody.innerHTML = "";
         var qtList = s["qualifying_times"];
+
+        // Compute max widths for alignment
+        var maxTimeLen = 0, maxTagLen = 0, maxDescLen = 0;
+        for (var q = 0; q < qtList.length; q++) {
+            maxTimeLen = Math.max(maxTimeLen, qtList[q].time.length);
+            maxTagLen = Math.max(maxTagLen, qtList[q].tag.length);
+            var desc = (qtList[q].description && qtList[q].description !== qtList[q].tag) ? qtList[q].description : "";
+            maxDescLen = Math.max(maxDescLen, desc.length);
+        }
+
         for (var q = 0; q < qtList.length; q++) {
             var qt = qtList[q];
             var tr = document.createElement("tr");
             tr.className = "qualifying_time_row";
             var td = document.createElement("td");
             td.setAttribute("colspan", "4");
-            var parts = [qt.time, qt.tag];
-            if (qt.description && qt.description !== qt.tag) parts.push(qt.description);
-            if (qt.qualifiers) parts.push(qt.qualifiers);
-            td.textContent = parts.join("  ");
+
+            var timeSpan = document.createElement("span");
+            timeSpan.className = "qt_time";
+            timeSpan.textContent = qt.time.padStart(maxTimeLen);
+            td.appendChild(timeSpan);
+
+            var tagSpan = document.createElement("span");
+            tagSpan.className = "qt_tag";
+            tagSpan.textContent = qt.tag.padEnd(maxTagLen);
+            td.appendChild(tagSpan);
+
+            var desc = (qt.description && qt.description !== qt.tag) ? qt.description : "";
+            if (maxDescLen > 0) {
+                var descSpan = document.createElement("span");
+                descSpan.className = "qt_desc";
+                descSpan.textContent = desc.padEnd(maxDescLen);
+                td.appendChild(descSpan);
+            }
+
+            if (qt.qualifiers) {
+                var qualSpan = document.createElement("span");
+                qualSpan.className = "qt_qualifiers";
+                qualSpan.textContent = qt.qualifiers;
+                td.appendChild(qualSpan);
+            }
+
             tr.appendChild(td);
             qtBody.appendChild(tr);
         }
