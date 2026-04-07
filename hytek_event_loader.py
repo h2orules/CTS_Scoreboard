@@ -211,6 +211,7 @@ class HytekEventLoader():
                 'age_max': event.age_max,
                 'sex_codes': sex_codes,
                 'is_mixed': len(sex_codes) > 1,
+                'gender_age': event.gender_age,
             }
 
             for entry in event.entries:

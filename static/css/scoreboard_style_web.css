@@ -34,7 +34,15 @@
     font-size: 20px;
     background-color: #6a6a6a;
     padding: 0 30px;
-    text-align: center;
+    text-align: left;
+    white-space: pre;
+}
+
+.qt_time,
+.qt_tag,
+.qt_desc,
+.qt_qualifiers {
+    margin-right: 2ch;
 }
 
 .content_meet_date {

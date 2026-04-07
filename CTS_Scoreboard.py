@@ -13,6 +13,7 @@ import json
 import os.path
 import glob
 from hytek_event_loader import HytekEventLoader
+from hytek_parser.hy3.enums import GenderAge
 from hytek_st2_parser import parse_st2_file
 import ap
 
@@ -307,7 +308,12 @@ def _get_qualifying_times(event_number):
         age_ranges.append((age_min, age_max))
     
     # Find matching st2 events
-    sex_names = {1: 'Male', 2: 'Female'}
+    # Use age-appropriate gender names: Boys/Girls for youth, Men/Women for adults
+    gender_age = meta.get('gender_age')
+    if gender_age in (GenderAge.MEN_S, GenderAge.WOMEN_S):
+        sex_display = {1: 'Men', 2: 'Women'}
+    else:
+        sex_display = {1: 'Boys', 2: 'Girls'}
     matches = []
     
     for sex_code in sex_codes:
@@ -368,7 +374,7 @@ def _get_qualifying_times(event_number):
             else:
                 qualifiers.append("Open")
         if unique_sex:
-            qualifiers.append(sex_names.get(m['sex_code'], ''))
+            qualifiers.append(sex_display.get(m['sex_code'], ''))
         
         results.append({
             'time': m['time'],
