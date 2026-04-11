@@ -49,3 +49,4 @@ pip install PySerial
 ```
 source ~/.env/bin/activate
 python3 CTS_Scoreboard.py
+```
