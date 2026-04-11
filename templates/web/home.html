@@ -157,6 +157,9 @@
 
     // Evaluate a lane's time against its applicable thresholds
     function evaluateLaneTime(lane, timeText, isRunning) {
+        var timeEl = document.getElementById("lane_time" + lane);
+        if (!timeEl) return;
+
         // Reset to default
         timeEl.className = timeEl.className.replace(/\bqt-color-\d+\b/g, '').trim();
         timeEl.classList.remove('qt-pr');
@@ -202,10 +205,8 @@
 
         // Compute max tag length for space reservation in time cells
         maxQtTagLen = 0;
-        if (qtList) {
-            for (var q = 0; q < qtList.length; q++) {
-                maxQtTagLen = Math.max(maxQtTagLen, qtList[q].tag.length);
-            }
+        for (var q = 0; q < qtList.length; q++) {
+            maxQtTagLen = Math.max(maxQtTagLen, qtList[q].tag.length);
         }
         // Update tag placeholder widths
         for (var i = 1; i <= {{ num_lanes }}; i++) {
@@ -216,9 +217,6 @@
             }
         }
         
-        // If there's no new list, we've now cleared out any old qualifying times in the UI - bail out at this point
-        if (!qtList) return; 
-
         // Compute max widths for alignment
         var maxTimeLen = 0, maxTagDispLen = 0, maxDescLen = 0;
         for (var q = 0; q < qtList.length; q++) {
@@ -318,9 +316,11 @@
             if (newEventHeat !== prevEventHeat) {
                 prevEventHeat = newEventHeat;
                 resetLaneQualifications();
+                if (s["qualifying_times"]) {
+                    renderQualifyingTimes(s["qualifying_times"]);
+                }
                 laneTimes = {};
                 eventHeatChanged = true;
-                renderQualifyingTimes(s["qualifying_times"]);
             }
         }
 
