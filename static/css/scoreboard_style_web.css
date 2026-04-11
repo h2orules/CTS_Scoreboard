@@ -32,8 +32,8 @@
     font-family: 'Overpass Mono', monospace;
     color: #333333;
     font-size: 20px;
-    background-color: #e8e8e8;
-    padding: 0 30px;
+    background-color: #d8d8d8;
+    padding: 0 30px 0 0;
     text-align: left;
     white-space: nowrap;
 }
@@ -52,73 +52,73 @@
     text-align: right;
 }
 
-/* Time standard tag color palette (>=7:1 contrast vs #e8e8e8, #b7d7e8, #cfe0e8) */
+/* Time standard tag color palette (~5:1 contrast vs #d8d8d8) */
 .qt-color-0 {
-    color: #660000;
+    color: #8B0000;
 }
 
-/* maroon */
+/* crimson red */
 .qt-color-1 {
-    color: #003366;
+    color: #00508A;
 }
 
-/* dark navy */
+/* medium blue */
 .qt-color-2 {
-    color: #003300;
+    color: #1A6B1A;
 }
 
-/* dark green */
+/* forest green */
 .qt-color-3 {
-    color: #660066;
+    color: #8B008B;
 }
 
-/* dark magenta */
+/* medium magenta */
 .qt-color-4 {
-    color: #6B2000;
+    color: #A04000;
 }
 
-/* rust */
+/* burnt orange */
 .qt-color-5 {
-    color: #4B0082;
+    color: #6A2CB0;
 }
 
-/* indigo */
+/* medium purple */
 .qt-color-6 {
-    color: #660033;
+    color: #A0204A;
 }
 
-/* dark rose */
+/* rose */
 .qt-color-7 {
-    color: #002850;
+    color: #006888;
 }
 
-/* deep navy */
+/* teal */
 .qt-color-8 {
-    color: #4B0050;
+    color: #7A2080;
 }
 
-/* dark violet */
+/* orchid */
 .qt-color-9 {
-    color: #4A0000;
+    color: #6B3000;
 }
 
-/* deep maroon */
+/* brown */
 .qt-color-10 {
-    color: #550055;
+    color: #882288;
 }
 
-/* grape */
+/* plum */
 .qt-color-11 {
-    color: #191970;
+    color: #2E4AA0;
 }
 
-/* midnight blue */
+/* royal blue */
 
 .qt-pr {
-    color: #003D00;
+    color: #1A7A1A;
 }
 
-/* dark green - personal record */
+/* green - personal record */
 
 .content_meet_date {
     font-family: 'Overpass Mono', monospace;
@@ -160,6 +160,19 @@
     width: 400px;
     display: block;
     margin: 25px auto 0;
+}
+
+.scoreboard_disclaimer {
+    color: #404040;
+    font-family: Arial, Helvetica, sans-serif;
+    font-style: italic;
+    font-size: 20px;
+    text-align: center;
+    position: fixed;
+    bottom: 25px;
+    left: 0;
+    right: 0;
+    z-index: 100;
 }
 
 .content_scoreboard_table {
