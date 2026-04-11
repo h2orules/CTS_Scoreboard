@@ -95,6 +95,7 @@
     var schedule_has_names = {{ 'true' if schedule_has_names else 'false' }};
     var qtThresholds = [];  // Current event's qualifying time thresholds
     var laneAgeCodes = {};  // lane -> age_code string (e.g. "8B", "12G")
+    var laneTimes = {};    // lane -> display time string from last update
     var laneSeedTimes = {}; // lane -> seed time in seconds (number or "")
     var showPrTags = true;  // Whether to show PR tags
     var maxQtTagLen = 0;    // Longest tag string for space reservation
@@ -155,12 +156,7 @@
     }
 
     // Evaluate a lane's time against its applicable thresholds
-    function evaluateLaneTime(lane) {
-        var timeEl = document.getElementById("lane_time" + lane);
-        if (!timeEl) return;
-        var timeText = timeEl.textContent || timeEl.innerText;
-        var isRunning = lane_running[lane] || false;
-
+    function evaluateLaneTime(lane, timeText, isRunning) {
         // Reset to default
         timeEl.className = timeEl.className.replace(/\bqt-color-\d+\b/g, '').trim();
         timeEl.classList.remove('qt-pr');
@@ -195,6 +191,84 @@
                 timeEl.classList.add('qt-pr');
                 if (tagEl) tagEl.textContent = "PR";
             }
+        }
+    }
+
+    // Render qualifying times rows and update thresholds
+    function renderQualifyingTimes(qtList) {
+        qtThresholds = qtList;
+        var qtBody = document.getElementById("qualifying_times_body");
+        qtBody.innerHTML = "";
+
+        // Compute max tag length for space reservation in time cells
+        maxQtTagLen = 0;
+        if (qtList) {
+            for (var q = 0; q < qtList.length; q++) {
+                maxQtTagLen = Math.max(maxQtTagLen, qtList[q].tag.length);
+            }
+        }
+        // Update tag placeholder widths
+        for (var i = 1; i <= {{ num_lanes }}; i++) {
+            var tagEl = document.getElementById("lane_qt_tag" + i);
+            if (tagEl) {
+                tagEl.style.display = maxQtTagLen > 0 ? "inline-block" : "none";
+                tagEl.style.minWidth = maxQtTagLen > 0 ? maxQtTagLen + "ch" : "0";
+            }
+        }
+        
+        // If there's no new list, we've now cleared out any old qualifying times in the UI - bail out at this point
+        if (!qtList) return; 
+
+        // Compute max widths for alignment
+        var maxTimeLen = 0, maxTagDispLen = 0, maxDescLen = 0;
+        for (var q = 0; q < qtList.length; q++) {
+            maxTimeLen = Math.max(maxTimeLen, qtList[q].time.length);
+            maxTagDispLen = Math.max(maxTagDispLen, qtList[q].tag.length);
+            var desc = (qtList[q].description && qtList[q].description !== qtList[q].tag) ? qtList[q].description : "";
+            maxDescLen = Math.max(maxDescLen, desc.length);
+        }
+
+        for (var q = 0; q < qtList.length; q++) {
+            var qt = qtList[q];
+            var tr = document.createElement("tr");
+            tr.className = "qualifying_time_row";
+            var td = document.createElement("td");
+            td.setAttribute("colspan", "4");
+
+            var timeSpan = document.createElement("span");
+            timeSpan.className = "qt_time";
+            timeSpan.textContent = qt.time;
+            timeSpan.style.minWidth = maxTimeLen + "ch";
+            timeSpan.classList.add(qt.color_class);
+            td.appendChild(timeSpan);
+
+            var tagSpan = document.createElement("span");
+            tagSpan.className = "qt_tag";
+            tagSpan.textContent = qt.tag;
+            tagSpan.style.minWidth = maxTagDispLen + "ch";
+            tagSpan.classList.add(qt.color_class);
+            td.appendChild(tagSpan);
+
+            var desc = (qt.description && qt.description !== qt.tag) ? qt.description : "";
+            if (maxDescLen > 0) {
+                var descSpan = document.createElement("span");
+                descSpan.className = "qt_desc";
+                descSpan.textContent = desc;
+                descSpan.style.minWidth = maxDescLen + "ch";
+                descSpan.classList.add(qt.color_class);
+                td.appendChild(descSpan);
+            }
+
+            if (qt.qualifiers) {
+                var qualSpan = document.createElement("span");
+                qualSpan.className = "qt_qualifiers";
+                qualSpan.textContent = qt.qualifiers;
+                qualSpan.classList.add(qt.color_class);
+                td.appendChild(qualSpan);
+            }
+
+            tr.appendChild(td);
+            qtBody.appendChild(tr);
         }
     }
 
@@ -244,7 +318,9 @@
             if (newEventHeat !== prevEventHeat) {
                 prevEventHeat = newEventHeat;
                 resetLaneQualifications();
+                laneTimes = {};
                 eventHeatChanged = true;
+                renderQualifyingTimes(s["qualifying_times"]);
             }
         }
 
@@ -288,6 +364,10 @@
                 if (el) el.textContent = (s[k] || '').trimEnd();
                 laneAgeCodes[laneNum] = (s[k] || '').trim();
             }
+            var laneTimeMatch = k.match(/^lane_time(\d+)$/);
+            if (laneTimeMatch) {
+                laneTimes[laneTimeMatch[1]] = s[k] || "";
+            }
             var seedMatch = k.match(/^lane_seed_time(\d+)$/);
             if (seedMatch) {
                 laneSeedTimes[seedMatch[1]] = s[k];
@@ -321,84 +401,10 @@
             showPrTags = s["show_pr_tags"];
         }
 
-        // Render qualifying times rows and update thresholds
-        if ("qualifying_times" in s) {
-            qtThresholds = s["qualifying_times"];
-            var qtBody = document.getElementById("qualifying_times_body");
-            qtBody.innerHTML = "";
-            var qtList = s["qualifying_times"];
-
-            // Compute max tag length for space reservation in time cells
-            maxQtTagLen = 0;
-            for (var q = 0; q < qtList.length; q++) {
-                maxQtTagLen = Math.max(maxQtTagLen, qtList[q].tag.length);
-            }
-            // Update tag placeholder widths
-            for (var i = 1; i <= {{ num_lanes }}; i++) {
-                var tagEl = document.getElementById("lane_qt_tag" + i);
-                if (tagEl) {
-                    tagEl.style.display = maxQtTagLen > 0 ? "inline-block" : "none";
-                    tagEl.style.minWidth = maxQtTagLen > 0 ? maxQtTagLen + "ch" : "0";
-                }
-            }
-
-            // Compute max widths for alignment
-            var maxTimeLen = 0, maxTagDispLen = 0, maxDescLen = 0;
-            for (var q = 0; q < qtList.length; q++) {
-                maxTimeLen = Math.max(maxTimeLen, qtList[q].time.length);
-                maxTagDispLen = Math.max(maxTagDispLen, qtList[q].tag.length);
-                var desc = (qtList[q].description && qtList[q].description !== qtList[q].tag) ? qtList[q].description : "";
-                maxDescLen = Math.max(maxDescLen, desc.length);
-            }
-
-            for (var q = 0; q < qtList.length; q++) {
-                var qt = qtList[q];
-                var tr = document.createElement("tr");
-                tr.className = "qualifying_time_row";
-                var td = document.createElement("td");
-                td.setAttribute("colspan", "4");
-
-                var timeSpan = document.createElement("span");
-                timeSpan.className = "qt_time";
-                timeSpan.textContent = qt.time;
-                timeSpan.style.minWidth = maxTimeLen + "ch";
-                timeSpan.classList.add(qt.color_class);
-                td.appendChild(timeSpan);
-
-                var tagSpan = document.createElement("span");
-                tagSpan.className = "qt_tag";
-                tagSpan.textContent = qt.tag;
-                tagSpan.style.minWidth = maxTagDispLen + "ch";
-                tagSpan.classList.add(qt.color_class);
-                td.appendChild(tagSpan);
-
-                var desc = (qt.description && qt.description !== qt.tag) ? qt.description : "";
-                if (maxDescLen > 0) {
-                    var descSpan = document.createElement("span");
-                    descSpan.className = "qt_desc";
-                    descSpan.textContent = desc;
-                    descSpan.style.minWidth = maxDescLen + "ch";
-                    descSpan.classList.add(qt.color_class);
-                    td.appendChild(descSpan);
-                }
-
-                if (qt.qualifiers) {
-                    var qualSpan = document.createElement("span");
-                    qualSpan.className = "qt_qualifiers";
-                    qualSpan.textContent = qt.qualifiers;
-                    qualSpan.classList.add(qt.color_class);
-                    td.appendChild(qualSpan);
-                }
-
-                tr.appendChild(td);
-                qtBody.appendChild(tr);
-            }
-        }
-
         // Evaluate all lanes for time standard qualifications (skip if event/heat just changed with stale times)
         if (!eventHeatChanged) {
             for (var i = 1; i <= {{ num_lanes }}; i++) {
-                evaluateLaneTime(i);
+                evaluateLaneTime(i, laneTimes[i] || "", lane_running[i] || false);
             }
         }
 
