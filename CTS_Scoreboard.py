@@ -29,7 +29,11 @@ settings = {
     'ad_url': '',
     'num_lanes': 6,
     'pool_course': 'SCY',
-    'show_pr_tags': True
+    'show_pr_tags': True,
+    'team_home': '',
+    'team_guest1': '',
+    'team_guest2': '',
+    'team_guest3': ''
     }
 in_file = None
 out_file = None
@@ -518,7 +522,10 @@ def route_settings():
                         settings[k] = val
                         modified = True
                 else:
-                    settings[k]=flask.request.form.get(k)
+                    val = flask.request.form.get(k)
+                    if k.startswith('team_'):
+                        val = val[:15]
+                    settings[k]=val
                     modified = True
         
         # Handle checkbox fields (not present in form when unchecked)
@@ -555,7 +562,11 @@ def route_settings():
                 schedule_error=schedule_error,
                 standards_loaded=standards_loaded,
                 standards_error=standards_error,
-                show_pr_tags=settings.get('show_pr_tags', True))
+                show_pr_tags=settings.get('show_pr_tags', True),
+                team_home=settings.get('team_home', ''),
+                team_guest1=settings.get('team_guest1', ''),
+                team_guest2=settings.get('team_guest2', ''),
+                team_guest3=settings.get('team_guest3', ''))
                 
 @app.route('/schedule_clear')
 @flask_login.login_required
