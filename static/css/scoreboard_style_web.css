@@ -38,6 +38,96 @@
     white-space: nowrap;
 }
 
+.qt_time {
+    text-align: right;
+}
+
+/* Time standard tag color palette (~5:1 contrast vs #d8d8d8) */
+.qt-color-0 {
+    color: #8B0000;
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+}
+
+/* crimson red */
+.qt-color-1 {
+    color: #00508A;
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+}
+
+/* medium blue */
+.qt-color-2 {
+    color: #1A6B1A;
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+}
+
+/* forest green */
+.qt-color-3 {
+    color: #8B008B;
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+}
+
+/* medium magenta */
+.qt-color-4 {
+    color: #A04000;
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+}
+
+/* burnt orange */
+.qt-color-5 {
+    color: #6A2CB0;
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+}
+
+/* medium purple */
+.qt-color-6 {
+    color: #A0204A;
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+}
+
+/* rose */
+.qt-color-7 {
+    color: #006888;
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+}
+
+/* teal */
+.qt-color-8 {
+    color: #7A2080;
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+}
+
+/* orchid */
+.qt-color-9 {
+    color: #6B3000;
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+}
+
+/* brown */
+.qt-color-10 {
+    color: #882288;
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+}
+
+/* plum */
+.qt-color-11 {
+    color: #2E4AA0;
+    text-decoration-line: underline;
+    text-decoration-style: wavy;
+}
+
+/* royal blue */
+
 .qt_time,
 .qt_tag,
 .qt_desc,
@@ -46,76 +136,13 @@
     text-align: left;
     margin-right: 2ch;
     vertical-align: top;
+    text-decoration: none;
 }
-
-.qt_time {
-    text-align: right;
-}
-
-/* Time standard tag color palette (~5:1 contrast vs #d8d8d8) */
-.qt-color-0 {
-    color: #8B0000;
-}
-
-/* crimson red */
-.qt-color-1 {
-    color: #00508A;
-}
-
-/* medium blue */
-.qt-color-2 {
-    color: #1A6B1A;
-}
-
-/* forest green */
-.qt-color-3 {
-    color: #8B008B;
-}
-
-/* medium magenta */
-.qt-color-4 {
-    color: #A04000;
-}
-
-/* burnt orange */
-.qt-color-5 {
-    color: #6A2CB0;
-}
-
-/* medium purple */
-.qt-color-6 {
-    color: #A0204A;
-}
-
-/* rose */
-.qt-color-7 {
-    color: #006888;
-}
-
-/* teal */
-.qt-color-8 {
-    color: #7A2080;
-}
-
-/* orchid */
-.qt-color-9 {
-    color: #6B3000;
-}
-
-/* brown */
-.qt-color-10 {
-    color: #882288;
-}
-
-/* plum */
-.qt-color-11 {
-    color: #2E4AA0;
-}
-
-/* royal blue */
 
 .qt-pr {
-    color: #1A7A1A;
+    color: #d602d6;
+    text-decoration-line: underline;
+    text-decoration-style: dotted;
 }
 
 /* green - personal record */
@@ -130,7 +157,7 @@
 
 .content_scores {
     display: grid;
-    grid-template-columns: 21ch 21ch;
+    grid-template-columns: repeat(4, 21ch);
     column-gap: 4ch;
     justify-content: center;
     background-color: #daebe8;
@@ -458,6 +485,10 @@ table.scoreboard_table th {
 
     .content_scoreboard_ad {
         width: 60%;
+    }
+
+    .content_scores {
+        grid-template-columns: 21ch 21ch;
     }
 
     .background {
