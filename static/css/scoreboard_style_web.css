@@ -128,6 +128,36 @@
     padding: 0 30px;
 }
 
+.content_scores {
+    display: grid;
+    grid-template-columns: 21ch 21ch;
+    column-gap: 4ch;
+    justify-content: center;
+    background-color: #daebe8;
+    padding: 2px 0 4px;
+}
+
+.score_cell {
+    display: flex;
+    align-items: baseline;
+}
+
+.score_team_name {
+    font-family: 'Overpass Mono', monospace;
+    font-size: 20px;
+    color: #333333;
+    flex: 1;
+}
+
+.score_value {
+    font-family: 'Overpass Mono', monospace;
+    font-size: 24px;
+    font-weight: bold;
+    color: #000000;
+    text-align: right;
+    width: 4ch;
+}
+
 .content_event_number {
     font-family: 'Overpass Mono', monospace;
     font-size: 32px;
