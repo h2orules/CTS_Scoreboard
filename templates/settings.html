@@ -153,60 +153,7 @@
             </div>
         </div>
 
-        <div class="row">
-            <div class="col-lg-6">
-                <form action="/settings" method="POST">
-                    <div class="input-group">
-                        <label for="ad_url">Ad Image</label>
-                        <div class="input-group">
-                            <select id="ad_url" name="ad_url" class="form-control"
-                                oninput="document.getElementById('ad_url_submit').disabled=false;">
-                                <option value="" selected>-- None --</option>
-                                {% for url in ad_url_list %}
-                                {% if url == ad_url %}
-                                <option value="{{url}}" selected>{{url}}</option>
-                                {% else %}
-                                <option value="{{url}}">{{url}}</option>
-                                {% endif %}
-                                {% endfor %}
-                            </select>
-                            <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="ad_url_submit"
-                                    disabled>Update</button>
-                            </span>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-        {% if ad_url and (ad_url != '') %}
-        <img src="{{url_for('static', filename='ad/'+ad_url)}}" width='400px' />
-        {% endif %}
-        <div class="row">
-            <div class="col-lg-6">
-                <form action="/settings" method="POST">
-                    <div class="input-group">
-                        <label for="num_lanes">Number of Lanes</label>
-                        <div class="input-group">
-                            <select id="num_lanes" name="num_lanes" class="form-control"
-                                oninput="document.getElementById('num_lanes_submit').disabled=false;">
-                                {% for n in range(4, 11) %}
-                                {% if n == num_lanes %}
-                                <option value="{{n}}" selected>{{n}}</option>
-                                {% else %}
-                                <option value="{{n}}">{{n}}</option>
-                                {% endif %}
-                                {% endfor %}
-                            </select>
-                            <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="num_lanes_submit"
-                                    disabled>Update</button>
-                            </span>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
+        
         <div class="row">
             <div class="col-lg-6">
                 <form action="/settings" method="POST">
@@ -282,6 +229,61 @@
         </div>
         {% endfor %}
 
+        <h3>Ad Display</h3>
+        <div class="row">
+            <div class="col-lg-6">
+                <form action="/settings" method="POST">
+                    <div class="input-group">
+                        <label for="ad_url">Ad Image</label>
+                        <div class="input-group">
+                            <select id="ad_url" name="ad_url" class="form-control"
+                                oninput="document.getElementById('ad_url_submit').disabled=false;">
+                                <option value="" selected>-- None --</option>
+                                {% for url in ad_url_list %}
+                                {% if url == ad_url %}
+                                <option value="{{url}}" selected>{{url}}</option>
+                                {% else %}
+                                <option value="{{url}}">{{url}}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                            <span class="input-group-btn">
+                                <button class="btn btn-default" type="submit" id="ad_url_submit" disabled>Update</button>
+                            </span>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% if ad_url and (ad_url != '') %}
+        <img src="{{url_for('static', filename='ad/'+ad_url)}}" width='400px' />
+        {% endif %}
+        <div class="row">
+            <div class="col-lg-6">
+                <form action="/settings" method="POST">
+                    <div class="input-group">
+                        <label for="num_lanes">Number of Lanes</label>
+                        <div class="input-group">
+                            <select id="num_lanes" name="num_lanes" class="form-control"
+                                oninput="document.getElementById('num_lanes_submit').disabled=false;">
+                                {% for n in range(4, 11) %}
+                                {% if n == num_lanes %}
+                                <option value="{{n}}" selected>{{n}}</option>
+                                {% else %}
+                                <option value="{{n}}">{{n}}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                            <span class="input-group-btn">
+                                <button class="btn btn-default" type="submit" id="num_lanes_submit" disabled>Update</button>
+                            </span>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <h3>Advanced Settings</h3>
         <div class="row">
             <div class="col-lg-6">
                 <form action="/settings" method="POST">

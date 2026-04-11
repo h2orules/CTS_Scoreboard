@@ -70,6 +70,9 @@ lane_info = [[],
 time_info = [0,0,0,0,0,0,0,0]
 running_time = '        '
 channel_running = [False for i in range(10)]
+score_info = {0x14: [' ',' ',' ',' ',' ',' ',' ',' '],
+              0x15: [' ',' ',' ',' ',' ',' ',' ',' ']}
+team_scores = {'score_home': '', 'score_guest1': '', 'score_guest2': '', 'score_guest3': ''}
 
 def load_settings():
     global settings, time_standards
@@ -100,7 +103,7 @@ next_update = datetime.datetime.now()
 last_event_sent = (1,1)
 
 def parse_line(l, out = None):
-    global event_heat_info, lane_info, time_info, running_time, update, next_update, last_event_sent
+    global event_heat_info, lane_info, time_info, running_time, update, next_update, last_event_sent, team_scores
     
     s = ""
     if out:
@@ -174,6 +177,32 @@ def parse_line(l, out = None):
             if last_event_sent != event_tuple:
                 last_event_sent = event_tuple
                 send_event_info()
+
+        if channel in (0x14, 0x15) and not format_display:
+            # Team scores: 0x14 = Home + Guest 1, 0x15 = Guest 2 + Guest 3
+            while len(l):
+                c = l.pop(0)
+                score_info[channel][(c >> 4) & 0x0F] = hex_to_digit(c)
+
+            score_a = ''.join(score_info[channel][:4])
+            score_b = ''.join(score_info[channel][-4:])
+
+            if channel == 0x14:
+                new_scores = {'score_home': score_a, 'score_guest1': score_b}
+            else:
+                new_scores = {'score_guest2': score_a, 'score_guest3': score_b}
+
+            sendScores = False
+            for key, val in new_scores.items():
+                if team_scores[key] != val:
+                    team_scores[key] = val
+                    update[key] = val
+                    sendScores = True
+
+            s = "Scores ch%02X: %s / %s" % (channel, score_a.strip(), score_b.strip())
+
+            if sendScores:
+                send_scores_info()
 
         if out:
             if s:
@@ -413,6 +442,14 @@ def send_event_info():
     update["show_pr_tags"] = settings.get('show_pr_tags', True)
 
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+
+def send_scores_info():
+    update = {}
+    update["score_home"] = team_scores['score_home']
+    update["score_guest1"] = team_scores['score_guest1']
+    update["score_guest2"] = team_scores['score_guest2']
+    update["score_guest3"] = team_scores['score_guest3']
+    socketio.emit('update_scoreboard', update, namespace='/scoreboard')
             
 @socketio.on('connect', namespace='/scoreboard')
 def ws_scoreboard():
@@ -422,6 +459,7 @@ def ws_scoreboard():
         main_thread = socketio.start_background_task(target=main_thread_worker)
         
     send_event_info()
+    send_scores_info()
 
 @socketio.on('next_heat', namespace='/scoreboard')
 def ws_next_heat(d):
@@ -460,7 +498,7 @@ def route_web(name):
     web_name = "web/" + name + '.html'
     test_event = flask.request.args.get('event', None)
     test_heat = flask.request.args.get('heat', None)
-    return flask.render_template(web_name, meet_title=settings['meet_title'], test_background='test' in flask.request.args.keys(), num_lanes=settings['num_lanes'], test_event=test_event, test_heat=test_heat, ad_url=settings['ad_url'], schedule_has_names=event_info.has_names)
+    return flask.render_template(web_name, meet_title=settings['meet_title'], test_background='test' in flask.request.args.keys(), num_lanes=settings['num_lanes'], test_event=test_event, test_heat=test_heat, ad_url=settings['ad_url'], schedule_has_names=event_info.has_names, team_names=[('score_home', settings.get('team_home', '')), ('score_guest1', settings.get('team_guest1', '')), ('score_guest2', settings.get('team_guest2', '')), ('score_guest3', settings.get('team_guest3', ''))])
 
 @app.route('/settings', methods=['POST', 'GET'])
 @flask_login.login_required
