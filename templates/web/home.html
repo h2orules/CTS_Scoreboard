@@ -263,146 +263,146 @@
         {% endfor %}
         ];
 
-    var message_keys = Object.keys(s);
+        var message_keys = Object.keys(s);
 
-    message_keys.forEach((k) => {
-        if (valid_fields.indexOf(k) > 0) {
-            document.getElementById(k).innerHTML = s[k];
-        }
+        message_keys.forEach((k) => {
+            if (valid_fields.indexOf(k) > 0) {
+                document.getElementById(k).innerHTML = s[k];
+            }
 
-        // Map lane_name to swimmer name span, lane_team to team code span
-        var nameMatch = k.match(/^lane_name(\d+)$/);
-        if (nameMatch) {
-            var el = document.getElementById("lane_swimmer_name" + nameMatch[1]);
-            if (el) el.textContent = (s[k] || '').trimEnd() || '\u00A0';
-        }
-        var teamMatch = k.match(/^lane_team(\d+)$/);
-        if (teamMatch) {
-            var el = document.getElementById("lane_team" + teamMatch[1]);
-            if (el) el.textContent = (s[k] || '').trimEnd();
-        }
-        var ageCodeMatch = k.match(/^lane_age_code(\d+)$/);
-        if (ageCodeMatch) {
-            var laneNum = ageCodeMatch[1];
-            var el = document.getElementById("lane_age_code" + laneNum);
-            if (el) el.textContent = (s[k] || '').trimEnd();
-            laneAgeCodes[laneNum] = (s[k] || '').trim();
-        }
-        var seedMatch = k.match(/^lane_seed_time(\d+)$/);
-        if (seedMatch) {
-            laneSeedTimes[seedMatch[1]] = s[k];
-        }
+            // Map lane_name to swimmer name span, lane_team to team code span
+            var nameMatch = k.match(/^lane_name(\d+)$/);
+            if (nameMatch) {
+                var el = document.getElementById("lane_swimmer_name" + nameMatch[1]);
+                if (el) el.textContent = (s[k] || '').trimEnd() || '\u00A0';
+            }
+            var teamMatch = k.match(/^lane_team(\d+)$/);
+            if (teamMatch) {
+                var el = document.getElementById("lane_team" + teamMatch[1]);
+                if (el) el.textContent = (s[k] || '').trimEnd();
+            }
+            var ageCodeMatch = k.match(/^lane_age_code(\d+)$/);
+            if (ageCodeMatch) {
+                var laneNum = ageCodeMatch[1];
+                var el = document.getElementById("lane_age_code" + laneNum);
+                if (el) el.textContent = (s[k] || '').trimEnd();
+                laneAgeCodes[laneNum] = (s[k] || '').trim();
+            }
+            var seedMatch = k.match(/^lane_seed_time(\d+)$/);
+            if (seedMatch) {
+                laneSeedTimes[seedMatch[1]] = s[k];
+            }
 
-        // Check and update lane running
-        if (k.startsWith("lane_running")) {
-            lane_running[k.replace("lane_running", "")] = s[k];
-        }
+            // Check and update lane running
+            if (k.startsWith("lane_running")) {
+                lane_running[k.replace("lane_running", "")] = s[k];
+            }
 
-    })
+        })
 
-    // Fill in the running time
-    if ("running_time" in s) {
-        for (var i = 1; i <= {{ num_lanes }}; i++) {
-        if (lane_running[i] || false) {
-            document.getElementById("lane_time" + i).innerHTML = s["running_time"];
-        }
-    }
-        }
-
-    // Show/hide name column based on server-cached schedule_has_names flag
-    if ("schedule_has_names" in s) {
-        schedule_has_names = s["schedule_has_names"];
-        document.querySelectorAll('.scoreboard_name_col, .lane_name').forEach(function (el) {
-            el.style.display = schedule_has_names ? 'table-cell' : 'none';
-        });
-    }
-
-    if ("show_pr_tags" in s) {
-        showPrTags = s["show_pr_tags"];
-    }
-
-    // Render qualifying times rows and update thresholds
-    if ("qualifying_times" in s) {
-        qtThresholds = s["qualifying_times"];
-        var qtBody = document.getElementById("qualifying_times_body");
-        qtBody.innerHTML = "";
-        var qtList = s["qualifying_times"];
-
-        // Compute max tag length for space reservation in time cells
-        maxQtTagLen = 0;
-        for (var q = 0; q < qtList.length; q++) {
-            maxQtTagLen = Math.max(maxQtTagLen, qtList[q].tag.length);
-        }
-        // Update tag placeholder widths
-        for (var i = 1; i <= {{ num_lanes }}; i++) {
-            var tagEl = document.getElementById("lane_qt_tag" + i);
-            if (tagEl) {
-                tagEl.style.display = maxQtTagLen > 0 ? "inline-block" : "none";
-                tagEl.style.minWidth = maxQtTagLen > 0 ? maxQtTagLen + "ch" : "0";
+        // Fill in the running time
+        if ("running_time" in s) {
+            for (var i = 1; i <= {{ num_lanes }}; i++) {
+                if (lane_running[i] || false) {
+                    document.getElementById("lane_time" + i).innerHTML = s["running_time"];
+                }
             }
         }
 
-        // Compute max widths for alignment
-        var maxTimeLen = 0, maxTagDispLen = 0, maxDescLen = 0;
-        for (var q = 0; q < qtList.length; q++) {
-            maxTimeLen = Math.max(maxTimeLen, qtList[q].time.length);
-            maxTagDispLen = Math.max(maxTagDispLen, qtList[q].tag.length);
-            var desc = (qtList[q].description && qtList[q].description !== qtList[q].tag) ? qtList[q].description : "";
-            maxDescLen = Math.max(maxDescLen, desc.length);
+        // Show/hide name column based on server-cached schedule_has_names flag
+        if ("schedule_has_names" in s) {
+            schedule_has_names = s["schedule_has_names"];
+            document.querySelectorAll('.scoreboard_name_col, .lane_name').forEach(function (el) {
+                el.style.display = schedule_has_names ? 'table-cell' : 'none';
+            });
         }
 
-        for (var q = 0; q < qtList.length; q++) {
-            var qt = qtList[q];
-            var tr = document.createElement("tr");
-            tr.className = "qualifying_time_row";
-            var td = document.createElement("td");
-            td.setAttribute("colspan", "4");
+        if ("show_pr_tags" in s) {
+            showPrTags = s["show_pr_tags"];
+        }
 
-            var timeSpan = document.createElement("span");
-            timeSpan.className = "qt_time";
-            timeSpan.textContent = qt.time;
-            timeSpan.style.minWidth = maxTimeLen + "ch";
-            timeSpan.classList.add(qt.color_class);
-            td.appendChild(timeSpan);
+        // Render qualifying times rows and update thresholds
+        if ("qualifying_times" in s) {
+            qtThresholds = s["qualifying_times"];
+            var qtBody = document.getElementById("qualifying_times_body");
+            qtBody.innerHTML = "";
+            var qtList = s["qualifying_times"];
 
-            var tagSpan = document.createElement("span");
-            tagSpan.className = "qt_tag";
-            tagSpan.textContent = qt.tag;
-            tagSpan.style.minWidth = maxTagDispLen + "ch";
-            tagSpan.classList.add(qt.color_class);
-            td.appendChild(tagSpan);
-
-            var desc = (qt.description && qt.description !== qt.tag) ? qt.description : "";
-            if (maxDescLen > 0) {
-                var descSpan = document.createElement("span");
-                descSpan.className = "qt_desc";
-                descSpan.textContent = desc;
-                descSpan.style.minWidth = maxDescLen + "ch";
-                descSpan.classList.add(qt.color_class);
-                td.appendChild(descSpan);
+            // Compute max tag length for space reservation in time cells
+            maxQtTagLen = 0;
+            for (var q = 0; q < qtList.length; q++) {
+                maxQtTagLen = Math.max(maxQtTagLen, qtList[q].tag.length);
+            }
+            // Update tag placeholder widths
+            for (var i = 1; i <= {{ num_lanes }}; i++) {
+                var tagEl = document.getElementById("lane_qt_tag" + i);
+                if (tagEl) {
+                    tagEl.style.display = maxQtTagLen > 0 ? "inline-block" : "none";
+                    tagEl.style.minWidth = maxQtTagLen > 0 ? maxQtTagLen + "ch" : "0";
+                }
             }
 
-            if (qt.qualifiers) {
-                var qualSpan = document.createElement("span");
-                qualSpan.className = "qt_qualifiers";
-                qualSpan.textContent = qt.qualifiers;
-                qualSpan.classList.add(qt.color_class);
-                td.appendChild(qualSpan);
+            // Compute max widths for alignment
+            var maxTimeLen = 0, maxTagDispLen = 0, maxDescLen = 0;
+            for (var q = 0; q < qtList.length; q++) {
+                maxTimeLen = Math.max(maxTimeLen, qtList[q].time.length);
+                maxTagDispLen = Math.max(maxTagDispLen, qtList[q].tag.length);
+                var desc = (qtList[q].description && qtList[q].description !== qtList[q].tag) ? qtList[q].description : "";
+                maxDescLen = Math.max(maxDescLen, desc.length);
             }
 
-            tr.appendChild(td);
-            qtBody.appendChild(tr);
-        }
-    }
+            for (var q = 0; q < qtList.length; q++) {
+                var qt = qtList[q];
+                var tr = document.createElement("tr");
+                tr.className = "qualifying_time_row";
+                var td = document.createElement("td");
+                td.setAttribute("colspan", "4");
 
-    // Evaluate all lanes for time standard qualifications (skip if event/heat just changed with stale times)
-    if (!eventHeatChanged) {
-        for (var i = 1; i <= {{ num_lanes }}; i++) {
-            evaluateLaneTime(i);
-        }
-    }
+                var timeSpan = document.createElement("span");
+                timeSpan.className = "qt_time";
+                timeSpan.textContent = qt.time;
+                timeSpan.style.minWidth = maxTimeLen + "ch";
+                timeSpan.classList.add(qt.color_class);
+                td.appendChild(timeSpan);
 
-    s = {};
+                var tagSpan = document.createElement("span");
+                tagSpan.className = "qt_tag";
+                tagSpan.textContent = qt.tag;
+                tagSpan.style.minWidth = maxTagDispLen + "ch";
+                tagSpan.classList.add(qt.color_class);
+                td.appendChild(tagSpan);
+
+                var desc = (qt.description && qt.description !== qt.tag) ? qt.description : "";
+                if (maxDescLen > 0) {
+                    var descSpan = document.createElement("span");
+                    descSpan.className = "qt_desc";
+                    descSpan.textContent = desc;
+                    descSpan.style.minWidth = maxDescLen + "ch";
+                    descSpan.classList.add(qt.color_class);
+                    td.appendChild(descSpan);
+                }
+
+                if (qt.qualifiers) {
+                    var qualSpan = document.createElement("span");
+                    qualSpan.className = "qt_qualifiers";
+                    qualSpan.textContent = qt.qualifiers;
+                    qualSpan.classList.add(qt.color_class);
+                    td.appendChild(qualSpan);
+                }
+
+                tr.appendChild(td);
+                qtBody.appendChild(tr);
+            }
+        }
+
+        // Evaluate all lanes for time standard qualifications (skip if event/heat just changed with stale times)
+        if (!eventHeatChanged) {
+            for (var i = 1; i <= {{ num_lanes }}; i++) {
+                evaluateLaneTime(i);
+            }
+        }
+
+        s = {};
     });
 
 </script>
