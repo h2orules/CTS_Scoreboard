@@ -424,12 +424,15 @@
         var recList = setData.records;
 
         // Compute max widths for alignment
+        var isTeamSpecific = setData.set_team_tag && setData.set_team_tag !== 'ALL';
         var maxTimeLen = 0, maxNameLen = 0, maxTeamLen = 0;
         for (var r = 0; r < recList.length; r++) {
             maxTimeLen = Math.max(maxTimeLen, recList[r].time.length);
             var name = recList[r].relay_names || recList[r].swimmer_name || "";
             maxNameLen = Math.min(25, Math.max(maxNameLen, name.length));
-            maxTeamLen = Math.max(maxTeamLen, (recList[r].record_team || "").length);
+            if (!isTeamSpecific) {
+                maxTeamLen = Math.max(maxTeamLen, (recList[r].record_team || "").length);
+            }
         }
 
         for (var r = 0; r < recList.length; r++) {
@@ -451,7 +454,7 @@
                 row.appendChild(yearSpan);
             }
 
-            if (maxTeamLen > 0) {
+            if (!isTeamSpecific && maxTeamLen > 0) {
                 var teamSpan = document.createElement("span");
                 teamSpan.className = "rec_team";
                 teamSpan.textContent = rec.record_team || "";
