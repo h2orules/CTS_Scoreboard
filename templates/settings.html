@@ -150,6 +150,23 @@
                 </form>
             </div>
         </div>
+        <div class="row">
+            <div class="col-lg-6">
+                <form action="/settings" method="POST">
+                    <input type="hidden" name="show_confetti_form" value="1">
+                    <div class="input-group">
+                        <label>
+                            <input type="checkbox" name="show_confetti" value="1" {% if show_confetti %}checked{% endif %}
+                                onchange="document.getElementById('show_confetti_submit').disabled=false;">
+                            Show confetti for time qualifications
+                        </label>
+                        <span class="input-group-btn">
+                            <button class="btn btn-default" type="submit" id="show_confetti_submit" disabled>Update</button>
+                        </span>
+                    </div>
+                </form>
+            </div>
+        </div>
         
         <h3>Team Names</h3>
         <div>Clear team names to prevent showing scores for that team.</div>
