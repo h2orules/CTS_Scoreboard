@@ -702,6 +702,7 @@ def route_settings():
                         schedule_error += ': ' + detail
                 else:
                     settings['event_info'] = event_info.to_object()
+                    settings['schedule_filename'] = file.filename
                     send_event_info()
                     modified = True
         
@@ -723,6 +724,7 @@ def route_settings():
                         standards_error += ': ' + detail
                 else:
                     settings['time_standards'] = base64.b64encode(pickle.dumps(time_standards)).decode('ascii')
+                    settings['standards_filename'] = file.filename
                     modified = True
                 finally:
                     try:
@@ -857,8 +859,10 @@ def route_settings():
                 pool_course=settings.get('pool_course', 'SCY'),
                 schedule_loaded=schedule_loaded,
                 schedule_error=schedule_error,
+                schedule_filename=settings.get('schedule_filename', ''),
                 standards_loaded=standards_loaded,
                 standards_error=standards_error,
+                standards_filename=settings.get('standards_filename', ''),
                 rec_set_info=rec_set_info,
                 records_error=records_error,
                 team_tag_options=team_tag_options,
@@ -877,6 +881,7 @@ def route_settings():
 def route_schedule_clear():
     event_info.clear()
     settings['event_info'] = event_info.to_object()
+    settings.pop('schedule_filename', None)
     with open(settings_file, "wt") as f:
         json.dump(settings, f, sort_keys=True, indent=4)
     return flask.redirect('/settings')
@@ -887,6 +892,7 @@ def route_standards_clear():
     global time_standards
     time_standards = None
     settings.pop('time_standards', None)
+    settings.pop('standards_filename', None)
     with open(settings_file, "wt") as f:
         json.dump(settings, f, sort_keys=True, indent=4)
     return flask.redirect('/settings')
