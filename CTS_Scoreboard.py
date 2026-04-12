@@ -38,7 +38,8 @@ settings = {
     'team_guest2': '',
     'team_guest2_tag': '',
     'team_guest3': '',
-    'team_guest3_tag': ''
+    'team_guest3_tag': '',
+    'std_desc_overrides': {}
     }
 in_file = None
 out_file = None
@@ -432,11 +433,12 @@ def _get_qualifying_times(event_number):
         if unique_sex:
             qualifiers.append(sex_display.get(m['sex_code'], ''))
         
+        desc_overrides = settings.get('std_desc_overrides', {})
         results.append({
             'time': m['time'],
             'time_seconds': m['time_seconds'],
             'tag': m['tag'],
-            'description': m['description'],
+            'description': desc_overrides.get(m['tag'], m['description']),
             'color_class': 'qt-color-%d' % (color_idx % 12),
             'qualifiers': ' '.join(qualifiers),
             'sex_code': m['sex_code'],
@@ -725,6 +727,14 @@ def route_settings():
                 else:
                     settings['time_standards'] = base64.b64encode(pickle.dumps(time_standards)).decode('ascii')
                     settings['standards_filename'] = file.filename
+                    # Auto-populate desc overrides for new tags, preserve existing
+                    new_tags = {s.tag for s in time_standards.header.standards}
+                    overrides = settings.get('std_desc_overrides', {})
+                    for std in time_standards.header.standards:
+                        if std.tag not in overrides:
+                            overrides[std.tag] = std.description
+                    # Remove stale tags no longer in the file
+                    settings['std_desc_overrides'] = {k: v for k, v in overrides.items() if k in new_tags}
                     modified = True
                 finally:
                     try:
@@ -775,6 +785,18 @@ def route_settings():
                     settings['swim_record_sets'] = base64.b64encode(pickle.dumps(swim_record_sets)).decode('ascii')
                     modified = True
         
+        # Handle time standard description overrides
+        if time_standards is not None:
+            overrides = settings.get('std_desc_overrides', {})
+            for std in time_standards.header.standards:
+                form_key = 'std_desc_' + std.tag
+                if form_key in flask.request.form:
+                    new_desc = flask.request.form[form_key].strip()[:15]
+                    if new_desc and new_desc != overrides.get(std.tag):
+                        overrides[std.tag] = new_desc
+                        modified = True
+            settings['std_desc_overrides'] = overrides
+
         # Handle team tag auto-fill: if tag field is empty on Update, auto-fill from name
         for team_base in ['team_home', 'team_guest1', 'team_guest2', 'team_guest3']:
             tag_key = team_base + '_tag'
@@ -863,6 +885,7 @@ def route_settings():
                 standards_loaded=standards_loaded,
                 standards_error=standards_error,
                 standards_filename=settings.get('standards_filename', ''),
+                std_tag_info=[{'tag': s.tag, 'original_desc': s.description, 'desc_override': settings.get('std_desc_overrides', {}).get(s.tag, s.description)} for s in time_standards.header.standards] if time_standards else [],
                 rec_set_info=rec_set_info,
                 records_error=records_error,
                 team_tag_options=team_tag_options,
@@ -893,6 +916,7 @@ def route_standards_clear():
     time_standards = None
     settings.pop('time_standards', None)
     settings.pop('standards_filename', None)
+    settings.pop('std_desc_overrides', None)
     with open(settings_file, "wt") as f:
         json.dump(settings, f, sort_keys=True, indent=4)
     return flask.redirect('/settings')
