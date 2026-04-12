@@ -207,7 +207,7 @@
 .rec_time {
     display: inline-block;
     text-align: right;
-    margin-right: 2ch;
+    margin-right: 1ch;
     vertical-align: top;
 }
 
@@ -228,20 +228,27 @@
 .rec_year {
     display: inline-block;
     text-align: left;
-    margin-right: 2ch;
+    margin-right: 1ch;
     vertical-align: top;
 }
 
 .rec_qualifiers {
     display: inline-block;
     text-align: left;
-    margin-right: 2ch;
+    margin-right: 1ch;
     vertical-align: top;
     text-decoration: none;
 }
 
 .rec_header {
     font-weight: bold;
+    font-size: 24px;
+    margin-bottom: 2px;
+}
+
+.rec_subheader {
+    font-style: italic;
+    font-size: 20px;
     margin-bottom: 2px;
 }
 
