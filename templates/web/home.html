@@ -112,6 +112,9 @@
     var laneTimes = {};    // lane -> display time string from last update
     var laneSeedTimes = {}; // lane -> seed time in seconds (number or "")
     var showPrTags = true;  // Whether to show PR tags
+    var showConfetti = true; // Whether to show confetti on qualifications
+    var CONFETTI_FADE_MS = 1200; // Duration for confetti particles to fade out
+    var confettiFired = {};  // Track which lanes have already shown confetti
     var maxQtTagLen = 0;    // Longest tag string for space reservation
     var prevEventHeat = ""; // Track event/heat changes for reset
 
@@ -206,6 +209,60 @@
         return applicable;
     }
 
+    // Spawn confetti particles from the center of a given element
+    function spawnConfetti(lane, targetEl) {
+        if (!showConfetti) return;
+        if (confettiFired[lane]) return;
+        confettiFired[lane] = true;
+        var rect = targetEl.getBoundingClientRect();
+        var cx = rect.left + rect.width / 2;
+        var cy = rect.top + rect.height / 2;
+        var colors = ['#ff0', '#f0f', '#0ff', '#f00', '#0f0', '#00f', '#ff8800', '#ff44aa'];
+        var count = 40;
+        for (var i = 0; i < count; i++) {
+            var particle = document.createElement('div');
+            particle.className = 'confetti-particle';
+            particle.style.left = cx + 'px';
+            particle.style.top = cy + 'px';
+            particle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+            var size = 4 + Math.random() * 6;
+            particle.style.width = size + 'px';
+            particle.style.height = size + 'px';
+            if (Math.random() > 0.5) particle.style.borderRadius = '50%';
+            document.body.appendChild(particle);
+            animateParticle(particle, cx, cy);
+        }
+    }
+
+    function animateParticle(el, startX, startY) {
+        var angle = Math.random() * 2 * Math.PI;
+        var speed = 80 + Math.random() * 180;
+        var vx = Math.cos(angle) * speed;
+        var vy = Math.sin(angle) * speed - 120; // upward bias
+        var gravity = 320;
+        var x = 0, y = 0;
+        var start = null;
+        var duration = CONFETTI_FADE_MS;
+        var spin = (Math.random() - 0.5) * 720;
+
+        function frame(ts) {
+            if (!start) start = ts;
+            var t = (ts - start) / 1000; // seconds
+            var progress = (ts - start) / duration;
+            if (progress >= 1) {
+                el.remove();
+                return;
+            }
+            x = vx * t;
+            y = vy * t + 0.5 * gravity * t * t;
+            var opacity = 1 - progress;
+            el.style.transform = 'translate(' + x + 'px,' + y + 'px) rotate(' + (spin * t) + 'deg)';
+            el.style.opacity = opacity;
+            requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+    }
+
     // Evaluate a lane's time against standards and records
     function evaluateLaneTime(lane, timeText, isRunning) {
         var timeEl = document.getElementById("lane_time" + lane);
@@ -254,20 +311,24 @@
             // Both standard met and record broken → double underline, standard color
             timeEl.classList.add('qt-highlight', 'qt-std', 'qt-rec', bestStd.color_class);
             if (tagEl) tagEl.textContent = bestStd.tag + " REC";
+            spawnConfetti(lane, timeEl.parentElement);
         } else if (bestStd) {
             // Standard met only → solid underline, standard color
             timeEl.classList.add('qt-highlight', 'qt-std', bestStd.color_class);
             if (tagEl) tagEl.textContent = bestStd.tag;
+            spawnConfetti(lane, timeEl.parentElement);
         } else if (bestRec) {
             // Record broken only → wavy underline, record color
             timeEl.classList.add('qt-highlight', 'qt-rec', bestRec.color_class);
             if (tagEl) tagEl.textContent = "REC";
+            spawnConfetti(lane, timeEl.parentElement);
         } else if (showPrTags) {
             // No qualifying standard or record — check for personal record
             var seed = laneSeedTimes[lane];
             if (typeof seed === 'number' && seed > 0 && seconds < seed) {
                 timeEl.classList.add('qt-highlight', 'qt-pr');
                 if (tagEl) tagEl.textContent = "PR";
+                spawnConfetti(lane, timeEl.parentElement);
             }
         }
     }
@@ -549,6 +610,7 @@
             if (newEventHeat !== prevEventHeat) {
                 prevEventHeat = newEventHeat;
                 resetLaneQualifications();
+                confettiFired = {};
                 // Only re-render qualifying info when full event data is present
                 // (send_event_info includes these; parse_line serial updates do not)
                 if ("qualifying_times" in s || "record_sets" in s) {
@@ -649,6 +711,10 @@
 
         if ("show_pr_tags" in s) {
             showPrTags = s["show_pr_tags"];
+        }
+
+        if ("show_confetti" in s) {
+            showConfetti = s["show_confetti"];
         }
 
         // Evaluate all lanes for time standard qualifications (skip if event/heat just changed with stale times)

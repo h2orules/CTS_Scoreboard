@@ -31,6 +31,7 @@ settings = {
     'num_lanes': 6,
     'pool_course': 'SCY',
     'show_pr_tags': True,
+    'show_confetti': True,
     'team_home': '',
     'team_home_tag': '',
     'team_guest1': '',
@@ -625,6 +626,7 @@ def send_event_info():
         update["lane_seed_time%i" % i] = seed if seed is not None else ""
 
     update["show_pr_tags"] = settings.get('show_pr_tags', True)
+    update["show_confetti"] = settings.get('show_confetti', True)
 
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
 
@@ -842,6 +844,12 @@ def route_settings():
             if settings.get('show_pr_tags') != new_val:
                 settings['show_pr_tags'] = new_val
                 modified = True
+
+        if 'show_confetti_form' in flask.request.form:
+            new_val = 'show_confetti' in flask.request.form
+            if settings.get('show_confetti') != new_val:
+                settings['show_confetti'] = new_val
+                modified = True
         
         if modified:
             with open(settings_file, "wt") as f:
@@ -896,6 +904,7 @@ def route_settings():
                 records_error=records_error,
                 team_tag_options=team_tag_options,
                 show_pr_tags=settings.get('show_pr_tags', True),
+                show_confetti=settings.get('show_confetti', True),
                 team_home=settings.get('team_home', ''),
                 team_home_tag=settings.get('team_home_tag', ''),
                 team_guest1=settings.get('team_guest1', ''),

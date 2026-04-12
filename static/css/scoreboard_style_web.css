@@ -634,3 +634,12 @@ table.scoreboard_table th {
         overflow: hidden;
     }
 }
+
+/* Confetti particles */
+.confetti-particle {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    width: 6px;
+    height: 6px;
+}
