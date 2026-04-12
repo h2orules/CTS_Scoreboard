@@ -256,6 +256,34 @@
             </div>
         </div>
 
+        {% if standards_loaded and std_tag_info %}
+        <div class="row">
+            <div class="col-lg-8">
+                <form action="/settings" method="POST" enctype="multipart/form-data">
+                    <table style="width: auto; border-collapse: separate; border-spacing: 2ch 2px;">
+                        <tr><th>Tag</th><th>Description</th><th></th></tr>
+                        {% for info in std_tag_info %}
+                        <tr>
+                            <td style="font-family: monospace;">{{ info.tag }}</td>
+                            <td>
+                                <input type="text" name="std_desc_{{ info.tag }}" maxlength="15"
+                                    value="{{ info.desc_override }}"
+                                    data-original="{{ info.original_desc }}"
+                                    class="form-control" style="width: 20ch; display: inline-block;">
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-default btn-xs"
+                                    onclick="var inp=this.closest('tr').querySelector('input');inp.value=inp.dataset.original;">Clear</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                    <button class="btn btn-default" type="submit" style="margin-top: 4px;">Save Descriptions</button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="row">
             <div class="col-lg-6">
                 <form action="/settings" method="POST" enctype="multipart/form-data">
