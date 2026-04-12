@@ -15,6 +15,7 @@ import glob
 from hytek_event_loader import HytekEventLoader
 from hytek_parser.hy3.enums import GenderAge
 from hytek_st2_parser import parse_st2_file
+from hytek_rec_parser import parse_rec_file, format_record_date
 import ap
 
 DEBUG = False
@@ -46,6 +47,9 @@ event_info = HytekEventLoader()
 # Time Standards
 time_standards = None
 
+# Swim Records
+swim_records = None
+
 app = flask.Flask(__name__)
 # config
 app.config.update(
@@ -75,7 +79,7 @@ score_info = {0x14: [' ',' ',' ',' ',' ',' ',' ',' '],
 team_scores = {'score_home': '', 'score_guest1': '', 'score_guest2': '', 'score_guest3': ''}
 
 def load_settings():
-    global settings, time_standards
+    global settings, time_standards, swim_records
     try:
         with open(settings_file, "rt") as f:
             settings.update(json.load(f))
@@ -84,6 +88,9 @@ def load_settings():
         if 'time_standards' in settings:
             import pickle, base64
             time_standards = pickle.loads(base64.b64decode(settings['time_standards']))
+        if 'swim_records' in settings:
+            import pickle, base64
+            swim_records = pickle.loads(base64.b64decode(settings['swim_records']))
     except: pass
 
 ## Stuff to move the cursor
@@ -423,14 +430,153 @@ def _get_qualifying_times(event_number):
     
     return results, (unique_sex or unique_age)
 
+def _get_matching_records(event_number):
+    """Look up swim records for a given event.
+    
+    Returns (list_of_dicts, show_age_codes) similar to _get_qualifying_times.
+    Records use strict less-than for breaking (tying does not break a record).
+    """
+    if swim_records is None:
+        return [], False
+    
+    meta = event_info.event_meta.get(event_number)
+    if not meta:
+        return [], False
+    
+    pool_course = settings.get('pool_course', 'SCY')
+    
+    # Check if records file course matches pool course
+    if swim_records.header.course != pool_course:
+        return [], False
+    
+    sex_codes = meta.get('sex_codes', [])
+    if not sex_codes:
+        return [], False
+    
+    stroke_code = meta.get('stroke_code')
+    distance = meta.get('distance')
+    is_relay = meta.get('relay', False)
+    age_min = meta.get('age_min')
+    age_max = meta.get('age_max')
+    
+    event_type_match = "Relay" if is_relay else "Individual"
+    
+    # For combined events, collect all source event age ranges
+    age_ranges = []
+    combined = event_info.combined
+    for src, dst in combined.items():
+        if dst == (event_number, 1) or src == (event_number, 1):
+            src_meta = event_info.event_meta.get(src[0])
+            if src_meta:
+                age_ranges.append((src_meta.get('age_min'), src_meta.get('age_max')))
+    if not age_ranges:
+        age_ranges.append((age_min, age_max))
+    
+    gender_age = meta.get('gender_age')
+    if gender_age in (GenderAge.MEN_S, GenderAge.WOMEN_S):
+        sex_display = {1: 'Men', 2: 'Women'}
+    else:
+        sex_display = {1: 'Boys', 2: 'Girls'}
+    
+    matches = []
+    for sex_code in sex_codes:
+        for ar_min, ar_max in age_ranges:
+            for rec in swim_records.records:
+                if rec.stroke_code != stroke_code:
+                    continue
+                if rec.distance != distance:
+                    continue
+                if rec.event_type != event_type_match:
+                    continue
+                if rec.sex_code != sex_code:
+                    continue
+                
+                # Age range overlap check
+                rec_min = rec.age_group_min
+                rec_max = rec.age_group_max
+                ev_min = ar_min if ar_min else 0
+                ev_max = ar_max if ar_max else 999
+                r_min = rec_min if rec_min else 0
+                r_max = rec_max if rec_max else 999
+                
+                if ev_min > r_max or r_min > ev_max:
+                    continue
+                
+                from hytek_rec_parser import EPOCH
+                rec_year = rec.record_date.year if rec.record_date != EPOCH else None
+                
+                matches.append({
+                    'sex_code': sex_code,
+                    'age_min': rec_min,
+                    'age_max': rec_max,
+                    'time': rec.time_formatted,
+                    'time_seconds': rec.time_seconds,
+                    'swimmer_name': rec.swimmer_name or '',
+                    'record_team': rec.record_team or '',
+                    'record_year': str(rec_year) if rec_year else '',
+                    'relay_names': rec.relay_names or '',
+                })
+    
+    if not matches:
+        return [], False
+    
+    unique_sex = len(set(m['sex_code'] for m in matches)) > 1
+    unique_age = len(set((m['age_min'], m['age_max']) for m in matches)) > 1
+    
+    # Sort: girls (2) before boys (1), youngest first, then fastest first
+    def sort_key(m):
+        sex_order = 0 if m['sex_code'] == 2 else 1
+        age_lo = m['age_min'] if m['age_min'] else 0
+        return (sex_order, age_lo, m['time_seconds'])
+    matches.sort(key=sort_key)
+    
+    results = []
+    color_idx = 0
+    for m in matches:
+        qualifiers = []
+        if unique_age:
+            a_min = m['age_min']
+            a_max = m['age_max']
+            if a_min and a_max:
+                qualifiers.append("%d-%d" % (a_min, a_max))
+            elif a_max:
+                qualifiers.append("%d & Under" % a_max)
+            elif a_min:
+                qualifiers.append("%d & Over" % a_min)
+            else:
+                qualifiers.append("Open")
+        if unique_sex:
+            qualifiers.append(sex_display.get(m['sex_code'], ''))
+        
+        results.append({
+            'time': m['time'],
+            'time_seconds': m['time_seconds'],
+            'swimmer_name': m['swimmer_name'],
+            'record_team': m['record_team'],
+            'record_year': m['record_year'],
+            'relay_names': m['relay_names'],
+            'color_class': 'rec-color-%d' % (color_idx % 12),
+            'qualifiers': ' '.join(qualifiers),
+            'sex_code': m['sex_code'],
+            'age_min': m['age_min'],
+            'age_max': m['age_max'],
+        })
+        color_idx += 1
+    
+    return results, (unique_sex or unique_age)
+
 def send_event_info():            
     update={}
     update["current_event"] = str(last_event_sent[0])
     update["current_heat"] = str(last_event_sent[1])
     update["event_name"] = event_info.get_event_name(last_event_sent[0])
     update["schedule_has_names"] = event_info.has_names
-    qt_results, show_age_codes = _get_qualifying_times(last_event_sent[0])
+    qt_results, qt_show_age = _get_qualifying_times(last_event_sent[0])
+    rec_results, rec_show_age = _get_matching_records(last_event_sent[0])
+    show_age_codes = qt_show_age or rec_show_age
     update["qualifying_times"] = qt_results
+    update["records"] = rec_results
+    update["record_set_name"] = swim_records.header.record_set_name if swim_records else ""
     
     for i in range(1,11):
         update["lane_name%i" % i] = event_info.get_display_string(last_event_sent[0], last_event_sent[1], i)
@@ -506,6 +652,7 @@ def route_settings():
     global settings
     schedule_error = None
     standards_error = None
+    records_error = None
     if flask.request.method == 'POST':
         modified = False
         
@@ -552,6 +699,31 @@ def route_settings():
                     except:
                         pass
         
+        if 'records_file' in flask.request.files:
+            file = flask.request.files['records_file']
+            if file and file.filename and file.filename.endswith('.rec'):
+                import pickle, base64
+                import tempfile
+                try:
+                    with tempfile.NamedTemporaryFile(suffix='.rec', delete=False) as tmp:
+                        tmp.write(file.stream.read())
+                        tmp_path = tmp.name
+                    global swim_records
+                    swim_records = parse_rec_file(tmp_path)
+                except Exception as e:
+                    detail = str(e)
+                    records_error = 'Failed to parse the records file'
+                    if detail:
+                        records_error += ': ' + detail
+                else:
+                    settings['swim_records'] = base64.b64encode(pickle.dumps(swim_records)).decode('ascii')
+                    modified = True
+                finally:
+                    try:
+                        os.unlink(tmp_path)
+                    except:
+                        pass
+        
         for k in settings.keys(): 
             if k in flask.request.form and settings[k]!=flask.request.form.get(k):
                 if k == 'num_lanes':
@@ -587,6 +759,7 @@ def route_settings():
  
     schedule_loaded = bool(event_info.event_names)
     standards_loaded = time_standards is not None
+    records_loaded = swim_records is not None
     return flask.render_template('settings.html', 
                 meet_title=settings['meet_title'], 
                 serial_port=settings['serial_port'],
@@ -600,6 +773,8 @@ def route_settings():
                 schedule_error=schedule_error,
                 standards_loaded=standards_loaded,
                 standards_error=standards_error,
+                records_loaded=records_loaded,
+                records_error=records_error,
                 show_pr_tags=settings.get('show_pr_tags', True),
                 team_home=settings.get('team_home', ''),
                 team_guest1=settings.get('team_guest1', ''),
@@ -621,6 +796,16 @@ def route_standards_clear():
     global time_standards
     time_standards = None
     settings.pop('time_standards', None)
+    with open(settings_file, "wt") as f:
+        json.dump(settings, f, sort_keys=True, indent=4)
+    return flask.redirect('/settings')
+
+@app.route('/records_clear')
+@flask_login.login_required
+def route_records_clear():
+    global swim_records
+    swim_records = None
+    settings.pop('swim_records', None)
     with open(settings_file, "wt") as f:
         json.dump(settings, f, sort_keys=True, indent=4)
     return flask.redirect('/settings')

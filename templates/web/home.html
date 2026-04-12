@@ -106,6 +106,8 @@
     var s = {}
     var schedule_has_names = {{ 'true' if schedule_has_names else 'false' }};
     var qtThresholds = [];  // Current event's qualifying time thresholds
+    var recThresholds = []; // Current event's record thresholds
+    var recRecordSetName = ""; // Record set name from .rec header
     var laneAgeCodes = {};  // lane -> age_code string (e.g. "8B", "12G")
     var laneTimes = {};    // lane -> display time string from last update
     var laneSeedTimes = {}; // lane -> seed time in seconds (number or "")
@@ -167,14 +169,43 @@
         return applicable;
     }
 
-    // Evaluate a lane's time against its applicable thresholds
+    // Get applicable record thresholds for a given lane based on its age code
+    function getRecordsForLane(lane) {
+        if (recThresholds.length === 0) return [];
+        var ageCode = laneAgeCodes[lane] || "";
+        var laneAge = null, laneSexCode = null;
+        if (ageCode) {
+            var m = ageCode.match(/^(\d+)([BGMW])$/);
+            if (m) {
+                laneAge = parseInt(m[1]);
+                var letterMap = {'B': 1, 'M': 1, 'G': 2, 'W': 2};
+                laneSexCode = letterMap[m[2]];
+            }
+        }
+        var applicable = [];
+        for (var i = 0; i < recThresholds.length; i++) {
+            var rec = recThresholds[i];
+            if (laneAge === null || laneSexCode === null) {
+                applicable.push(rec);
+                continue;
+            }
+            if (rec.sex_code !== laneSexCode) continue;
+            var rMin = rec.age_min || 0;
+            var rMax = rec.age_max || 999;
+            if (laneAge < rMin || laneAge > rMax) continue;
+            applicable.push(rec);
+        }
+        return applicable;
+    }
+
+    // Evaluate a lane's time against standards and records
     function evaluateLaneTime(lane, timeText, isRunning) {
         var timeEl = document.getElementById("lane_time" + lane);
         if (!timeEl) return;
 
         // Reset to default
-        timeEl.className = timeEl.className.replace(/\bqt-color-\d+\b/g, '').trim();
-        timeEl.classList.remove('qt-pr', 'qt-highlight');
+        timeEl.className = timeEl.className.replace(/\b(qt-color|rec-color)-\d+\b/g, '').trim();
+        timeEl.classList.remove('qt-pr', 'qt-highlight', 'qt-std', 'qt-rec');
         var tagEl = document.getElementById("lane_qt_tag" + lane);
         if (tagEl) tagEl.textContent = "";
 
@@ -183,24 +214,48 @@
         var seconds = parseTimeToSeconds(timeText);
         if (seconds === null || seconds <= 0) return;
 
-        // Check qualifying time standards
-        var bestMatch = null;
+        // Check qualifying time standards (<=)
+        var bestStd = null;
         if (qtThresholds.length > 0) {
             var thresholds = getThresholdsForLane(lane);
             for (var i = 0; i < thresholds.length; i++) {
                 var qt = thresholds[i];
                 if (seconds <= qt.time_seconds) {
-                    if (bestMatch === null || qt.time_seconds < bestMatch.time_seconds) {
-                        bestMatch = qt;
+                    if (bestStd === null || qt.time_seconds < bestStd.time_seconds) {
+                        bestStd = qt;
                     }
                 }
             }
         }
-        if (bestMatch) {
-            timeEl.classList.add('qt-highlight', bestMatch.color_class);
-            if (tagEl) tagEl.textContent = bestMatch.tag;
+
+        // Check records (strict <, tie does not break)
+        var bestRec = null;
+        if (recThresholds.length > 0) {
+            var records = getRecordsForLane(lane);
+            for (var i = 0; i < records.length; i++) {
+                var rec = records[i];
+                if (seconds < rec.time_seconds) {
+                    if (bestRec === null || rec.time_seconds < bestRec.time_seconds) {
+                        bestRec = rec;
+                    }
+                }
+            }
+        }
+
+        if (bestStd && bestRec) {
+            // Both standard met and record broken → double underline, standard color
+            timeEl.classList.add('qt-highlight', 'qt-std', 'qt-rec', bestStd.color_class);
+            if (tagEl) tagEl.textContent = bestStd.tag + " REC";
+        } else if (bestStd) {
+            // Standard met only → solid underline, standard color
+            timeEl.classList.add('qt-highlight', 'qt-std', bestStd.color_class);
+            if (tagEl) tagEl.textContent = bestStd.tag;
+        } else if (bestRec) {
+            // Record broken only → wavy underline, record color
+            timeEl.classList.add('qt-highlight', 'qt-rec', bestRec.color_class);
+            if (tagEl) tagEl.textContent = "REC";
         } else if (showPrTags) {
-            // No qualifying standard met — check for personal record
+            // No qualifying standard or record — check for personal record
             var seed = laneSeedTimes[lane];
             if (typeof seed === 'number' && seed > 0 && seconds < seed) {
                 timeEl.classList.add('qt-highlight', 'qt-pr');
@@ -209,9 +264,11 @@
         }
     }
 
-    // Render qualifying times rows and update thresholds
-    function renderQualifyingTimes(qtList) {
+    // Render qualifying times and records into two-column layout
+    function renderQualifyingInfo(qtList, recList, recordSetName) {
         qtThresholds = qtList;
+        recThresholds = recList;
+        recRecordSetName = recordSetName || "";
         var qtBody = document.getElementById("qualifying_times_body");
         qtBody.innerHTML = "";
 
@@ -220,6 +277,15 @@
         for (var q = 0; q < qtList.length; q++) {
             maxQtTagLen = Math.max(maxQtTagLen, qtList[q].tag.length);
         }
+        if (recList.length > 0) {
+            // Combined tag: "{tag} REC" or just "REC"
+            var recTagLen = 3; // "REC"
+            if (maxQtTagLen > 0) {
+                recTagLen = maxQtTagLen + 4; // "TAG REC"
+            }
+            maxQtTagLen = Math.max(maxQtTagLen, recTagLen);
+        }
+
         // Update tag placeholder widths
         for (var i = 1; i <= {{ num_lanes }}; i++) {
             var tagEl = document.getElementById("lane_qt_tag" + i);
@@ -228,7 +294,39 @@
                 tagEl.style.minWidth = maxQtTagLen > 0 ? maxQtTagLen + "ch" : "0";
             }
         }
-        
+
+        if (qtList.length === 0 && recList.length === 0) return;
+
+        // Create container row
+        var tr = document.createElement("tr");
+        tr.className = "qualifying_time_row";
+        var td = document.createElement("td");
+        td.setAttribute("colspan", "4");
+
+        var container = document.createElement("div");
+        container.className = "standards-records-container";
+
+        if (qtList.length > 0) {
+            var stdDiv = document.createElement("div");
+            stdDiv.className = "standards-column";
+            buildStandardsRows(stdDiv, qtList);
+            container.appendChild(stdDiv);
+        }
+
+        if (recList.length > 0) {
+            var recDiv = document.createElement("div");
+            recDiv.className = "records-column";
+            buildRecordsRows(recDiv, recList);
+            container.appendChild(recDiv);
+        }
+
+        td.appendChild(container);
+        tr.appendChild(td);
+        qtBody.appendChild(tr);
+    }
+
+    // Build standards rows DOM inside a container div
+    function buildStandardsRows(container, qtList) {
         // Compute max widths for alignment
         var maxTimeLen = 0, maxTagDispLen = 0, maxDescLen = 0;
         for (var q = 0; q < qtList.length; q++) {
@@ -240,24 +338,21 @@
 
         for (var q = 0; q < qtList.length; q++) {
             var qt = qtList[q];
-            var tr = document.createElement("tr");
-            tr.className = "qualifying_time_row";
-            var td = document.createElement("td");
-            td.setAttribute("colspan", "4");
+            var row = document.createElement("div");
 
             var timeSpan = document.createElement("span");
             timeSpan.className = "qt_time";
             timeSpan.textContent = qt.time;
             timeSpan.style.minWidth = maxTimeLen + "ch";
             timeSpan.classList.add(qt.color_class);
-            td.appendChild(timeSpan);
+            row.appendChild(timeSpan);
 
             var tagSpan = document.createElement("span");
             tagSpan.className = "qt_tag";
             tagSpan.textContent = qt.tag;
             tagSpan.style.minWidth = maxTagDispLen + "ch";
             tagSpan.classList.add(qt.color_class);
-            td.appendChild(tagSpan);
+            row.appendChild(tagSpan);
 
             var desc = (qt.description && qt.description !== qt.tag) ? qt.description : "";
             if (maxDescLen > 0) {
@@ -266,7 +361,7 @@
                 descSpan.textContent = desc;
                 descSpan.style.minWidth = maxDescLen + "ch";
                 descSpan.classList.add(qt.color_class);
-                td.appendChild(descSpan);
+                row.appendChild(descSpan);
             }
 
             if (qt.qualifiers) {
@@ -274,11 +369,79 @@
                 qualSpan.className = "qt_qualifiers";
                 qualSpan.textContent = qt.qualifiers;
                 qualSpan.classList.add(qt.color_class);
-                td.appendChild(qualSpan);
+                row.appendChild(qualSpan);
             }
 
-            tr.appendChild(td);
-            qtBody.appendChild(tr);
+            container.appendChild(row);
+        }
+    }
+
+    // Build records rows DOM inside a container div
+    function buildRecordsRows(container, recList) {
+        // Header with record set name
+        if (recRecordSetName) {
+            var header = document.createElement("div");
+            header.className = "rec_header";
+            header.textContent = recRecordSetName;
+            container.appendChild(header);
+        }
+
+        // Compute max widths for alignment
+        var maxTimeLen = 0, maxNameLen = 0, maxTeamLen = 0;
+        for (var r = 0; r < recList.length; r++) {
+            maxTimeLen = Math.max(maxTimeLen, recList[r].time.length);
+            var name = recList[r].swimmer_name || recList[r].relay_names || "";
+            maxNameLen = Math.max(maxNameLen, name.length);
+            maxTeamLen = Math.max(maxTeamLen, (recList[r].record_team || "").length);
+        }
+
+        for (var r = 0; r < recList.length; r++) {
+            var rec = recList[r];
+            var row = document.createElement("div");
+
+            var timeSpan = document.createElement("span");
+            timeSpan.className = "rec_time";
+            timeSpan.textContent = rec.time;
+            timeSpan.style.minWidth = maxTimeLen + "ch";
+            timeSpan.classList.add(rec.color_class);
+            row.appendChild(timeSpan);
+
+            var name = rec.swimmer_name || rec.relay_names || "";
+            if (maxNameLen > 0) {
+                var nameSpan = document.createElement("span");
+                nameSpan.className = "rec_name";
+                nameSpan.textContent = name;
+                nameSpan.style.minWidth = Math.min(maxNameLen, 20) + "ch";
+                nameSpan.classList.add(rec.color_class);
+                row.appendChild(nameSpan);
+            }
+
+            if (maxTeamLen > 0) {
+                var teamSpan = document.createElement("span");
+                teamSpan.className = "rec_team";
+                teamSpan.textContent = rec.record_team || "";
+                teamSpan.style.minWidth = maxTeamLen + "ch";
+                teamSpan.classList.add(rec.color_class);
+                row.appendChild(teamSpan);
+            }
+
+            if (rec.record_year) {
+                var yearSpan = document.createElement("span");
+                yearSpan.className = "rec_year";
+                yearSpan.textContent = rec.record_year;
+                yearSpan.classList.add(rec.color_class);
+                row.appendChild(yearSpan);
+            }
+
+            if (rec.qualifiers) {
+                var qualSpan = document.createElement("span");
+                qualSpan.className = "rec_qualifiers";
+                qualSpan.textContent = rec.qualifiers;
+                qualSpan.classList.add(rec.color_class);
+                row.appendChild(qualSpan);
+            }
+
+            container.appendChild(row);
         }
     }
 
@@ -287,8 +450,8 @@
         for (var i = 1; i <= {{ num_lanes }}; i++) {
             var timeEl = document.getElementById("lane_time" + i);
             if (timeEl) {
-                timeEl.className = timeEl.className.replace(/\bqt-color-\d+\b/g, '').trim();
-                timeEl.classList.remove('qt-pr', 'qt-highlight');
+                timeEl.className = timeEl.className.replace(/\b(qt-color|rec-color)-\d+\b/g, '').trim();
+                timeEl.classList.remove('qt-pr', 'qt-highlight', 'qt-std', 'qt-rec');
             }
             var tagEl = document.getElementById("lane_qt_tag" + i);
             if (tagEl) tagEl.textContent = "";
@@ -328,9 +491,11 @@
             if (newEventHeat !== prevEventHeat) {
                 prevEventHeat = newEventHeat;
                 resetLaneQualifications();
-                if (s["qualifying_times"]) {
-                    renderQualifyingTimes(s["qualifying_times"]);
-                }
+                renderQualifyingInfo(
+                    s["qualifying_times"] || [],
+                    s["records"] || [],
+                    s["record_set_name"] || ""
+                );
                 laneTimes = {};
                 eventHeatChanged = true;
             }

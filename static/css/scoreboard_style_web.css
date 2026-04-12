@@ -45,7 +45,18 @@
 /* Common decoration for qualified times in lane display */
 .qt-highlight {
     text-decoration-line: underline;
+}
+
+.qt-highlight.qt-std {
+    text-decoration-style: solid;
+}
+
+.qt-highlight.qt-rec {
     text-decoration-style: wavy;
+}
+
+.qt-highlight.qt-std.qt-rec {
+    text-decoration-style: double;
 }
 
 .qt-highlight.qt-pr {
@@ -113,6 +124,126 @@
 }
 
 /* royal blue */
+
+/* Record color palette (~5:1 contrast vs #d8d8d8) */
+.rec-color-0 {
+    color: #B03000;
+}
+
+/* rust */
+.rec-color-1 {
+    color: #005EA6;
+}
+
+/* sapphire */
+.rec-color-2 {
+    color: #307030;
+}
+
+/* kelly green */
+.rec-color-3 {
+    color: #9400D3;
+}
+
+/* dark violet */
+.rec-color-4 {
+    color: #B07000;
+}
+
+/* dark amber */
+.rec-color-5 {
+    color: #5B2C8B;
+}
+
+/* grape */
+.rec-color-6 {
+    color: #C02050;
+}
+
+/* crimson rose */
+.rec-color-7 {
+    color: #007050;
+}
+
+/* viridian */
+.rec-color-8 {
+    color: #802060;
+}
+
+/* boysenberry */
+.rec-color-9 {
+    color: #804000;
+}
+
+/* raw umber */
+.rec-color-10 {
+    color: #3040A0;
+}
+
+/* persian blue */
+.rec-color-11 {
+    color: #607020;
+}
+
+/* olive drab */
+
+.standards-records-container {
+    display: flex;
+    flex-direction: row;
+    gap: 3ch;
+}
+
+.standards-column,
+.records-column {
+    flex: 1;
+    min-width: 0;
+}
+
+.records-column {
+    border-left: 1px solid #bbb;
+    padding-left: 1ch;
+}
+
+.rec_time {
+    display: inline-block;
+    text-align: right;
+    margin-right: 2ch;
+    vertical-align: top;
+}
+
+.rec_name {
+    display: inline-block;
+    text-align: left;
+    margin-right: 1ch;
+    vertical-align: top;
+}
+
+.rec_team {
+    display: inline-block;
+    text-align: left;
+    margin-right: 1ch;
+    vertical-align: top;
+}
+
+.rec_year {
+    display: inline-block;
+    text-align: left;
+    margin-right: 2ch;
+    vertical-align: top;
+}
+
+.rec_qualifiers {
+    display: inline-block;
+    text-align: left;
+    margin-right: 2ch;
+    vertical-align: top;
+    text-decoration: none;
+}
+
+.rec_header {
+    font-weight: bold;
+    margin-bottom: 2px;
+}
 
 .qt_time,
 .qt_tag,
@@ -457,6 +588,18 @@ table.scoreboard_table th {
     .qualifying_time_row td {
         font-size: min(20px, 3vw);
         padding: 0 4px;
+    }
+
+    .standards-records-container {
+        flex-direction: column-reverse;
+    }
+
+    .records-column {
+        border-left: none;
+        padding-left: 0;
+        border-bottom: 1px solid #bbb;
+        padding-bottom: 4px;
+        margin-bottom: 4px;
     }
 
     .content_meet_title {
