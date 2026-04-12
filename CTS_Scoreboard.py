@@ -903,7 +903,8 @@ def route_settings():
                 team_guest2=settings.get('team_guest2', ''),
                 team_guest2_tag=settings.get('team_guest2_tag', ''),
                 team_guest3=settings.get('team_guest3', ''),
-                team_guest3_tag=settings.get('team_guest3_tag', ''))
+                team_guest3_tag=settings.get('team_guest3_tag', ''),
+                shutdown_nonce=_new_shutdown_nonce())
                 
 @app.route('/schedule_clear')
 @flask_login.login_required
@@ -941,6 +942,31 @@ def route_records_remove(set_id):
         json.dump(settings, f, sort_keys=True, indent=4)
     return flask.redirect('/settings')
                 
+_shutdown_nonces = []
+
+def _new_shutdown_nonce():
+    import secrets
+    nonce = secrets.token_hex(16)
+    _shutdown_nonces.append(nonce)
+    if len(_shutdown_nonces) > 10:
+        del _shutdown_nonces[:-10]
+    return nonce
+
+@app.route('/shutdown', methods=['POST'])
+@flask_login.login_required
+def route_shutdown():
+    nonce = flask.request.form.get('nonce', '')
+    if not nonce or nonce not in _shutdown_nonces:
+        return 'Invalid request', 403
+    _shutdown_nonces.clear()  # Invalidate all
+    import threading
+    def _exit():
+        import time
+        time.sleep(0.5)
+        os._exit(0)
+    threading.Thread(target=_exit, daemon=True).start()
+    return 'Server shutting down...', 200
+
 @app.route('/combine_events')
 @flask_login.login_required
 def route_combine_events():
