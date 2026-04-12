@@ -894,8 +894,9 @@ def route_site_map():
             if title not in ['login','logout','site map']:
                 links.append((url, title.title()))
                 
-    for file in glob.glob(os.path.join("templates", "overlay", "*.html")):
-        links.append( (file[file.startswith("templates") and len("templates"):].rsplit('.',1)[0], "Overlay " + os.path.basename(file).rsplit('.',1)[0]) )
+#   for file in glob.glob(os.path.join("templates", "overlay", "*.html")):
+#        links.append( (file[file.startswith("templates") and len("templates"):].rsplit('.',1)[0], "Overlay " + os.path.basename(file).rsplit('.',1)[0]) )
+
     for file in glob.glob(os.path.join("templates", "web", "*.html")):
         links.append( (file[file.startswith("templates") and len("templates"):].rsplit('.',1)[0], "Web " + os.path.basename(file).rsplit('.',1)[0]) )
 
