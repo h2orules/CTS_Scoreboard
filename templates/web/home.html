@@ -491,11 +491,15 @@
             if (newEventHeat !== prevEventHeat) {
                 prevEventHeat = newEventHeat;
                 resetLaneQualifications();
-                renderQualifyingInfo(
-                    s["qualifying_times"] || [],
-                    s["records"] || [],
-                    s["record_set_name"] || ""
-                );
+                // Only re-render qualifying info when full event data is present
+                // (send_event_info includes these; parse_line serial updates do not)
+                if ("qualifying_times" in s || "records" in s) {
+                    renderQualifyingInfo(
+                        s["qualifying_times"] || [],
+                        s["records"] || [],
+                        s["record_set_name"] || ""
+                    );
+                }
                 laneTimes = {};
                 eventHeatChanged = true;
             }
