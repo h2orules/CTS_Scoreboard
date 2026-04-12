@@ -273,16 +273,22 @@
     }
 
     // Render qualifying times and records into two-column layout
-    function renderQualifyingInfo(qtList, recSetList) {
-        qtThresholds = qtList;
+    function renderQualifyingInfo(qtGroups, recSetList) {
+        // Flatten groups into a single array for lane threshold evaluation
+        qtThresholds = [];
+        for (var g = 0; g < qtGroups.length; g++) {
+            for (var i = 0; i < qtGroups[g].items.length; i++) {
+                qtThresholds.push(qtGroups[g].items[i]);
+            }
+        }
         recSets = recSetList;
         var qtBody = document.getElementById("qualifying_times_body");
         qtBody.innerHTML = "";
 
         // Compute max tag length for space reservation in time cells
         maxQtTagLen = 0;
-        for (var q = 0; q < qtList.length; q++) {
-            maxQtTagLen = Math.max(maxQtTagLen, qtList[q].tag.length);
+        for (var q = 0; q < qtThresholds.length; q++) {
+            maxQtTagLen = Math.max(maxQtTagLen, qtThresholds[q].tag.length);
         }
         var hasAnyRecords = false;
         for (var rs = 0; rs < recSetList.length; rs++) {
@@ -306,7 +312,7 @@
             }
         }
 
-        if (qtList.length === 0 && !hasAnyRecords) return;
+        if (qtThresholds.length === 0 && !hasAnyRecords) return;
 
         // Create container row
         var tr = document.createElement("tr");
@@ -317,10 +323,10 @@
         var container = document.createElement("div");
         container.className = "standards-records-container";
 
-        if (qtList.length > 0) {
+        if (qtGroups.length > 0) {
             var stdDiv = document.createElement("div");
             stdDiv.className = "standards-column";
-            buildStandardsRows(stdDiv, qtList);
+            buildStandardsRows(stdDiv, qtGroups);
             container.appendChild(stdDiv);
         }
 
@@ -352,58 +358,70 @@
     }
 
     // Build standards rows DOM inside a container div
-    function buildStandardsRows(container, qtList) {
+    function buildStandardsRows(container, qtGroups) {
         var header = document.createElement("div");
         header.className = "rec_header";
         header.textContent = "Time Standards";
         container.appendChild(header);
 
-        // Compute max widths for alignment
+        // Compute max widths for alignment across all items
         var maxTimeLen = 0, maxTagDispLen = 0, maxDescLen = 0;
-        for (var q = 0; q < qtList.length; q++) {
-            maxTimeLen = Math.max(maxTimeLen, qtList[q].time.length);
-            maxTagDispLen = Math.max(maxTagDispLen, qtList[q].tag.length);
-            var desc = (qtList[q].description && qtList[q].description !== qtList[q].tag) ? qtList[q].description : "";
-            maxDescLen = Math.max(maxDescLen, desc.length);
+        for (var g = 0; g < qtGroups.length; g++) {
+            var items = qtGroups[g].items;
+            for (var i = 0; i < items.length; i++) {
+                maxTimeLen = Math.max(maxTimeLen, items[i].time.length);
+                maxTagDispLen = Math.max(maxTagDispLen, items[i].tag.length);
+                var desc = (items[i].description && items[i].description !== items[i].tag) ? items[i].description : "";
+                maxDescLen = Math.max(maxDescLen, desc.length);
+            }
         }
 
-        for (var q = 0; q < qtList.length; q++) {
-            var qt = qtList[q];
-            var row = document.createElement("div");
+        for (var g = 0; g < qtGroups.length; g++) {
+            var group = qtGroups[g];
 
-            var timeSpan = document.createElement("span");
-            timeSpan.className = "qt_time";
-            timeSpan.textContent = qt.time;
-            timeSpan.style.minWidth = maxTimeLen + "ch";
-            timeSpan.classList.add(qt.color_class);
-            row.appendChild(timeSpan);
-
-            var tagSpan = document.createElement("span");
-            tagSpan.className = "qt_tag";
-            tagSpan.textContent = qt.tag;
-            tagSpan.style.minWidth = maxTagDispLen + "ch";
-            tagSpan.classList.add(qt.color_class);
-            row.appendChild(tagSpan);
-
-            var desc = (qt.description && qt.description !== qt.tag) ? qt.description : "";
-            if (maxDescLen > 0) {
-                var descSpan = document.createElement("span");
-                descSpan.className = "qt_desc";
-                descSpan.textContent = desc;
-                descSpan.style.minWidth = maxDescLen + "ch";
-                descSpan.classList.add(qt.color_class);
-                row.appendChild(descSpan);
+            // Subheader for qualifier group (only when multiple groups)
+            if (qtGroups.length > 1 && group.qualifiers) {
+                if (g > 0) {
+                    var divider = document.createElement("div");
+                    divider.className = "rec_set_divider";
+                    container.appendChild(divider);
+                }
+                var subHeader = document.createElement("div");
+                subHeader.className = "rec_subheader";
+                subHeader.textContent = group.qualifiers;
+                container.appendChild(subHeader);
             }
 
-            if (qt.qualifiers) {
-                var qualSpan = document.createElement("span");
-                qualSpan.className = "qt_qualifiers";
-                qualSpan.textContent = qt.qualifiers;
-                qualSpan.classList.add(qt.color_class);
-                row.appendChild(qualSpan);
-            }
+            for (var i = 0; i < group.items.length; i++) {
+                var qt = group.items[i];
+                var row = document.createElement("div");
 
-            container.appendChild(row);
+                var timeSpan = document.createElement("span");
+                timeSpan.className = "qt_time";
+                timeSpan.textContent = qt.time;
+                timeSpan.style.minWidth = maxTimeLen + "ch";
+                timeSpan.classList.add(qt.color_class);
+                row.appendChild(timeSpan);
+
+                var tagSpan = document.createElement("span");
+                tagSpan.className = "qt_tag";
+                tagSpan.textContent = qt.tag;
+                tagSpan.style.minWidth = maxTagDispLen + "ch";
+                tagSpan.classList.add(qt.color_class);
+                row.appendChild(tagSpan);
+
+                var desc = (qt.description && qt.description !== qt.tag) ? qt.description : "";
+                if (maxDescLen > 0) {
+                    var descSpan = document.createElement("span");
+                    descSpan.className = "qt_desc";
+                    descSpan.textContent = desc;
+                    descSpan.style.minWidth = maxDescLen + "ch";
+                    descSpan.classList.add(qt.color_class);
+                    row.appendChild(descSpan);
+                }
+
+                container.appendChild(row);
+            }
         }
     }
 
