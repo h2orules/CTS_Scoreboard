@@ -537,7 +537,13 @@
         message_keys.forEach((k) => {
             if (valid_fields.indexOf(k) > 0) {
                 var el = document.getElementById(k);
-                if (el) el.innerHTML = s[k];
+                if (el) {
+                    var val = s[k];
+                    if (k.startsWith("score_")) {
+                        val = (val && val.trim() !== "" && val.trim() !== "0") ? val.trim() : "0";
+                    }
+                    el.innerHTML = val;
+                }
             }
 
             // Map lane_name to swimmer name span, lane_team to team code span
