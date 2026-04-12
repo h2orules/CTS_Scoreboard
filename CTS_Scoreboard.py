@@ -16,6 +16,7 @@ from hytek_event_loader import HytekEventLoader
 from hytek_parser.hy3.enums import GenderAge
 from hytek_st2_parser import parse_st2_file
 from hytek_rec_parser import parse_rec_file, format_record_date
+from race_state_machine import RaceStateMachine
 import ap
 
 DEBUG = False
@@ -84,6 +85,7 @@ channel_running = [False for i in range(10)]
 score_info = {0x14: [' ',' ',' ',' ',' ',' ',' ',' '],
               0x15: [' ',' ',' ',' ',' ',' ',' ',' ']}
 team_scores = {'score_home': '', 'score_guest1': '', 'score_guest2': '', 'score_guest3': ''}
+race_fsm = RaceStateMachine()
 
 def load_settings():
     global settings, time_standards, swim_record_sets, _next_rec_set_id
@@ -240,6 +242,8 @@ def parse_line(l, out = None):
     finally:
         #Output anything we got
         if "current_event" in update or "running_time" in update:
+            race_fsm.evaluate_update(channel_running, update)
+            update["race_state"] = race_fsm.state_name
             socketio.emit('update_scoreboard', update, namespace='/scoreboard')
             update.clear()
             
@@ -627,6 +631,7 @@ def send_event_info():
 
     update["show_pr_tags"] = settings.get('show_pr_tags', True)
     update["show_confetti"] = settings.get('show_confetti', True)
+    update["race_state"] = race_fsm.state_name
 
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
 
@@ -636,6 +641,7 @@ def send_scores_info():
     update["score_guest1"] = team_scores['score_guest1']
     update["score_guest2"] = team_scores['score_guest2']
     update["score_guest3"] = team_scores['score_guest3']
+    update["race_state"] = race_fsm.state_name
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
             
 @socketio.on('connect', namespace='/scoreboard')
@@ -663,6 +669,7 @@ def ws_next_heat(d):
         event_tuple = event_list[0]
     
     last_event_sent = event_tuple
+    race_fsm.notify_event_change()
     send_event_info()
 
 @socketio.on('set_event_heat', namespace='/scoreboard')
@@ -671,6 +678,7 @@ def ws_set_event_heat(d):
     event = int(d.get('event', last_event_sent[0]))
     heat = int(d.get('heat', last_event_sent[1]))
     last_event_sent = (event, heat)
+    race_fsm.notify_event_change()
     send_event_info()
 
         
