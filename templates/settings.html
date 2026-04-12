@@ -83,6 +83,109 @@
         </div>
 
         <div class="row">
+            <div class="col-lg-6">
+                <form action="/settings" method="POST">
+                    <div class="input-group">
+                        <label for="num_lanes">Number of Lanes</label>
+                        <div class="input-group">
+                            <select id="num_lanes" name="num_lanes" class="form-control"
+                                oninput="document.getElementById('num_lanes_submit').disabled=false;">
+                                {% for n in range(4, 11) %}
+                                {% if n == num_lanes %}
+                                <option value="{{n}}" selected>{{n}}</option>
+                                {% else %}
+                                <option value="{{n}}">{{n}}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                            <span class="input-group-btn">
+                                <button class="btn btn-default" type="submit" id="num_lanes_submit" disabled>Update</button>
+                            </span>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        
+        <div class="row">
+            <div class="col-lg-6">
+                <form action="/settings" method="POST">
+                    <div class="input-group">
+                        <label for="pool_course">Pool Course</label>
+                        <div class="input-group">
+                            <select id="pool_course" name="pool_course" class="form-control"
+                                oninput="document.getElementById('pool_course_submit').disabled=false;">
+                                {% for code, label in [('SCY', 'Short Course Yards (SCY)'), ('SCM', 'Short Course Meters
+                                (SCM)'), ('LCM', 'Long Course Meters (LCM)')] %}
+                                {% if code == pool_course %}
+                                <option value="{{code}}" selected>{{label}}</option>
+                                {% else %}
+                                <option value="{{code}}">{{label}}</option>
+                                {% endif %}
+                                {% endfor %}
+                            </select>
+                            <span class="input-group-btn">
+                                <button class="btn btn-default" type="submit" id="pool_course_submit" disabled>Update</button>
+                            </span>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-lg-6">
+                <form action="/settings" method="POST">
+                    <input type="hidden" name="show_pr_tags_form" value="1">
+                    <div class="input-group">
+                        <label>
+                            <input type="checkbox" name="show_pr_tags" value="1" {% if show_pr_tags %}checked{% endif %}
+                                onchange="document.getElementById('show_pr_tags_submit').disabled=false;">
+                            Show PR (Personal Record) tags
+                        </label>
+                        <span class="input-group-btn">
+                            <button class="btn btn-default" type="submit" id="show_pr_tags_submit" disabled>Update</button>
+                        </span>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <h3>Team Names</h3>
+        <div>Clear team names to prevent showing scores for that team.</div>
+        {% for team_key, team_label, team_val, tag_key, tag_val in [
+        ('team_home', 'Home', team_home, 'team_home_tag', team_home_tag),
+        ('team_guest1', 'Guest 1', team_guest1, 'team_guest1_tag', team_guest1_tag),
+        ('team_guest2', 'Guest 2', team_guest2, 'team_guest2_tag', team_guest2_tag),
+        ('team_guest3', 'Guest 3', team_guest3, 'team_guest3_tag', team_guest3_tag)
+        ] %}
+        <div class="row">
+            <div class="col-lg-8">
+                <form action="/settings" method="POST">
+                    <div class="input-group">
+                        <label for="{{ team_key }}" style="display: inline-block; width: 7ch;">{{ team_label }}</label>
+                        <div class="input-group" style="display: inline-flex; width: auto;">
+                            <input id="{{ team_key }}" name="{{ team_key }}" value="{{ team_val }}" class="form-control"
+                                maxlength="15" aria-label="Team name" placeholder="Team name" style="width: 20ch;"
+                                oninput="document.getElementById('{{ team_key }}_submit').disabled=false;"></input>
+                            <input id="{{ tag_key }}" name="{{ tag_key }}" value="{{ tag_val }}" class="form-control"
+                                maxlength="5" aria-label="Tag" placeholder="TEAM" style="width: 8ch; margin-left: 1ch;"
+                                oninput="document.getElementById('{{ team_key }}_submit').disabled=false;"></input>
+                            <span class="input-group-btn">
+                                <button class="btn btn-default" type="submit" id="{{ team_key }}_submit"
+                                    disabled>Update</button>
+                                <button class="btn btn-default" type="button"
+                                    onclick="document.getElementById('{{ team_key }}').value=''; document.getElementById('{{ tag_key }}').value=''; document.getElementById('{{ team_key }}_submit').disabled=false;">Clear</button>
+                            </span>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+
+        <h3>Meet Manager (Hytek/Active) Data</h3>
+        <div class="row">
             <div class="col-lg-8">
                 <form action="/settings" method="POST" enctype="multipart/form-data">
                     <div class="input-group">
@@ -94,7 +197,7 @@
                         {% endif %}
                         {% if schedule_loaded %}
                         <div class="alert alert-success" style="margin-bottom: 5px; padding: 6px 12px;">
-                            Schedule loaded
+                            Schedule loaded{% if schedule_filename %}: {{ schedule_filename }}{% endif %}
                         </div>
                         {% else %}
                         <div class="alert alert-warning" style="margin-bottom: 5px; padding: 6px 12px;">
@@ -131,7 +234,7 @@
                         {% endif %}
                         {% if standards_loaded %}
                         <div class="alert alert-success" style="margin-bottom: 5px; padding: 6px 12px;">
-                            Time standards loaded
+                            Time standards loaded{% if standards_filename %}: {{ standards_filename }}{% endif %}
                         </div>
                         {% else %}
                         <div class="alert alert-warning" style="margin-bottom: 5px; padding: 6px 12px;">
@@ -178,21 +281,21 @@
         {% if rec_set_info %}
         <div class="row">
             <div class="col-lg-10">
-                <table class="table table-condensed" style="margin-top: 8px;">
+                <table class="table table-condensed" style="margin-top: 8px; width: auto;">
                     <thead>
                         <tr>
-                            <th>Record Set Name</th>
-                            <th>Filename</th>
-                            <th>Team</th>
+                            <th style="padding-right: 2ch;">Record Set Name</th>
+                            <th style="padding-right: 2ch;">Filename</th>
+                            <th style="padding-right: 2ch;">Team</th>
                             <th></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for rs in rec_set_info %}
                         <tr>
-                            <td>{{ rs.set_name or 'Unnamed' }}</td>
-                            <td>{{ rs.filename }}</td>
-                            <td>
+                            <td style="padding-right: 2ch;">{{ rs.set_name or 'Unnamed' }}</td>
+                            <td style="padding-right: 2ch;">{{ rs.filename }}</td>
+                            <td style="padding-right: 2ch;">
                                 <form action="/settings" method="POST" style="display:inline;">
                                     <select name="rec_team_{{ rs.set_id }}" class="form-control input-sm" style="width:auto;display:inline-block;"
                                         onchange="this.form.submit();">
@@ -221,112 +324,6 @@
             </div>
         </div>
         {% endif %}
-
-        <h3>Pool Settings</h3>
-        <div class="row">
-            <div class="col-lg-6">
-                <form action="/settings" method="POST">
-                    <div class="input-group">
-                        <label for="num_lanes">Number of Lanes</label>
-                        <div class="input-group">
-                            <select id="num_lanes" name="num_lanes" class="form-control"
-                                oninput="document.getElementById('num_lanes_submit').disabled=false;">
-                                {% for n in range(4, 11) %}
-                                {% if n == num_lanes %}
-                                <option value="{{n}}" selected>{{n}}</option>
-                                {% else %}
-                                <option value="{{n}}">{{n}}</option>
-                                {% endif %}
-                                {% endfor %}
-                            </select>
-                            <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="num_lanes_submit" disabled>Update</button>
-                            </span>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        
-        <div class="row">
-            <div class="col-lg-6">
-                <form action="/settings" method="POST">
-                    <div class="input-group">
-                        <label for="pool_course">Pool Course</label>
-                        <div class="input-group">
-                            <select id="pool_course" name="pool_course" class="form-control"
-                                oninput="document.getElementById('pool_course_submit').disabled=false;">
-                                {% for code, label in [('SCY', 'Short Course Yards (SCY)'), ('SCM', 'Short Course Meters
-                                (SCM)'), ('LCM', 'Long Course Meters (LCM)')] %}
-                                {% if code == pool_course %}
-                                <option value="{{code}}" selected>{{label}}</option>
-                                {% else %}
-                                <option value="{{code}}">{{label}}</option>
-                                {% endif %}
-                                {% endfor %}
-                            </select>
-                            <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="pool_course_submit"
-                                    disabled>Update</button>
-                            </span>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-        <div class="row">
-            <div class="col-lg-6">
-                <form action="/settings" method="POST">
-                    <input type="hidden" name="show_pr_tags_form" value="1">
-                    <div class="input-group">
-                        <label>
-                            <input type="checkbox" name="show_pr_tags" value="1"
-                                {% if show_pr_tags %}checked{% endif %}
-                                onchange="document.getElementById('show_pr_tags_submit').disabled=false;">
-                            Show PR (Personal Record) tags
-                        </label>
-                        <span class="input-group-btn">
-                            <button class="btn btn-default" type="submit" id="show_pr_tags_submit"
-                                disabled>Update</button>
-                        </span>
-                    </div>
-                </form>
-            </div>
-        </div>
-
-        <h3>Team Names</h3>
-        <div>Clear team names to prevent showing scores for that team.</div>
-        {% for team_key, team_label, team_val, tag_key, tag_val in [
-            ('team_home', 'Home', team_home, 'team_home_tag', team_home_tag),
-            ('team_guest1', 'Guest 1', team_guest1, 'team_guest1_tag', team_guest1_tag),
-            ('team_guest2', 'Guest 2', team_guest2, 'team_guest2_tag', team_guest2_tag),
-            ('team_guest3', 'Guest 3', team_guest3, 'team_guest3_tag', team_guest3_tag)
-        ] %}
-        <div class="row">
-            <div class="col-lg-8">
-                <form action="/settings" method="POST">
-                    <div class="input-group">
-                        <label for="{{ team_key }}" style="display: inline-block; width: 7ch;">{{ team_label }}</label>
-                        <div class="input-group" style="display: inline-flex; width: auto;">
-                            <input id="{{ team_key }}" name="{{ team_key }}" value="{{ team_val }}" class="form-control"
-                                maxlength="15" aria-label="Team name" placeholder="Team name" style="width: 20ch;"
-                                oninput="document.getElementById('{{ team_key }}_submit').disabled=false;"></input>
-                            <input id="{{ tag_key }}" name="{{ tag_key }}" value="{{ tag_val }}" class="form-control"
-                                maxlength="5" aria-label="Tag" placeholder="TEAM" style="width: 8ch; margin-left: 1ch;"
-                                oninput="document.getElementById('{{ team_key }}_submit').disabled=false;"></input>
-                            <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="{{ team_key }}_submit"
-                                    disabled>Update</button>
-                                <button class="btn btn-default" type="button"
-                                    onclick="document.getElementById('{{ team_key }}').value=''; document.getElementById('{{ tag_key }}').value=''; document.getElementById('{{ team_key }}_submit').disabled=false;">Clear</button>
-                            </span>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-        {% endfor %}
 
         <h3>Ad Display</h3>
         <div class="row">
