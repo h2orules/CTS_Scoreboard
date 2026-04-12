@@ -409,11 +409,15 @@
 
     // Build records rows for one record set inside the records column
     function buildRecordsRows(container, setData) {
-        // Sub-header with set name
+        // Sub-header with set name (and team tag if team-specific)
         if (setData.set_name) {
             var subHeader = document.createElement("div");
             subHeader.className = "rec_subheader";
-            subHeader.textContent = setData.set_name;
+            var label = setData.set_name;
+            if (setData.set_team_tag && setData.set_team_tag !== 'ALL') {
+                label += " (" + setData.set_team_tag + ")";
+            }
+            subHeader.textContent = label;
             container.appendChild(subHeader);
         }
 
