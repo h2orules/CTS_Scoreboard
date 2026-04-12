@@ -252,6 +252,11 @@
     margin-bottom: 2px;
 }
 
+.rec_set_divider {
+    border-top: 1px solid #bbb;
+    margin: 4px 0;
+}
+
 .qt_time,
 .qt_tag,
 .qt_desc,

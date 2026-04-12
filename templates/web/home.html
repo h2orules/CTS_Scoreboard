@@ -106,9 +106,9 @@
     var s = {}
     var schedule_has_names = {{ 'true' if schedule_has_names else 'false' }};
     var qtThresholds = [];  // Current event's qualifying time thresholds
-    var recThresholds = []; // Current event's record thresholds
-    var recRecordSetName = ""; // Record set name from .rec header
+    var recSets = [];       // Current event's record sets [{set_name, set_team_tag, records:[...]}, ...]
     var laneAgeCodes = {};  // lane -> age_code string (e.g. "8B", "12G")
+    var laneTeamCodes = {}; // lane -> team code string
     var laneTimes = {};    // lane -> display time string from last update
     var laneSeedTimes = {}; // lane -> seed time in seconds (number or "")
     var showPrTags = true;  // Whether to show PR tags
@@ -169,10 +169,11 @@
         return applicable;
     }
 
-    // Get applicable record thresholds for a given lane based on its age code
+    // Get applicable record thresholds for a given lane based on age code and team
     function getRecordsForLane(lane) {
-        if (recThresholds.length === 0) return [];
+        if (recSets.length === 0) return [];
         var ageCode = laneAgeCodes[lane] || "";
+        var laneTeam = (laneTeamCodes[lane] || "").toUpperCase();
         var laneAge = null, laneSexCode = null;
         if (ageCode) {
             var m = ageCode.match(/^(\d+)([BGMW])$/);
@@ -183,17 +184,24 @@
             }
         }
         var applicable = [];
-        for (var i = 0; i < recThresholds.length; i++) {
-            var rec = recThresholds[i];
-            if (laneAge === null || laneSexCode === null) {
-                applicable.push(rec);
-                continue;
+        for (var s = 0; s < recSets.length; s++) {
+            var set = recSets[s];
+            // Team filtering: if set is mapped to a specific team, only match that team
+            if (set.set_team_tag !== 'ALL') {
+                if (laneTeam !== set.set_team_tag.toUpperCase()) continue;
             }
-            if (rec.sex_code !== laneSexCode) continue;
-            var rMin = rec.age_min || 0;
-            var rMax = rec.age_max || 999;
-            if (laneAge < rMin || laneAge > rMax) continue;
-            applicable.push(rec);
+            for (var i = 0; i < set.records.length; i++) {
+                var rec = set.records[i];
+                if (laneAge === null || laneSexCode === null) {
+                    applicable.push(rec);
+                    continue;
+                }
+                if (rec.sex_code !== laneSexCode) continue;
+                var rMin = rec.age_min || 0;
+                var rMax = rec.age_max || 999;
+                if (laneAge < rMin || laneAge > rMax) continue;
+                applicable.push(rec);
+            }
         }
         return applicable;
     }
@@ -230,7 +238,7 @@
 
         // Check records (strict <, tie does not break)
         var bestRec = null;
-        if (recThresholds.length > 0) {
+        if (recSets.length > 0) {
             var records = getRecordsForLane(lane);
             for (var i = 0; i < records.length; i++) {
                 var rec = records[i];
@@ -265,10 +273,9 @@
     }
 
     // Render qualifying times and records into two-column layout
-    function renderQualifyingInfo(qtList, recList, recordSetName) {
+    function renderQualifyingInfo(qtList, recSetList) {
         qtThresholds = qtList;
-        recThresholds = recList;
-        recRecordSetName = recordSetName || "";
+        recSets = recSetList;
         var qtBody = document.getElementById("qualifying_times_body");
         qtBody.innerHTML = "";
 
@@ -277,7 +284,11 @@
         for (var q = 0; q < qtList.length; q++) {
             maxQtTagLen = Math.max(maxQtTagLen, qtList[q].tag.length);
         }
-        if (recList.length > 0) {
+        var hasAnyRecords = false;
+        for (var rs = 0; rs < recSetList.length; rs++) {
+            if (recSetList[rs].records.length > 0) { hasAnyRecords = true; break; }
+        }
+        if (hasAnyRecords) {
             // Combined tag: "{tag} REC" or just "REC"
             var recTagLen = 3; // "REC"
             if (maxQtTagLen > 0) {
@@ -295,7 +306,7 @@
             }
         }
 
-        if (qtList.length === 0 && recList.length === 0) return;
+        if (qtList.length === 0 && !hasAnyRecords) return;
 
         // Create container row
         var tr = document.createElement("tr");
@@ -313,10 +324,25 @@
             container.appendChild(stdDiv);
         }
 
-        if (recList.length > 0) {
+        if (hasAnyRecords) {
             var recDiv = document.createElement("div");
             recDiv.className = "records-column";
-            buildRecordsRows(recDiv, recList);
+            // "Records" header
+            var header = document.createElement("div");
+            header.className = "rec_header";
+            header.textContent = "Records";
+            recDiv.appendChild(header);
+            // Render each record set
+            for (var rs = 0; rs < recSetList.length; rs++) {
+                var setData = recSetList[rs];
+                if (setData.records.length === 0) continue;
+                if (rs > 0) {
+                    var divider = document.createElement("div");
+                    divider.className = "rec_set_divider";
+                    recDiv.appendChild(divider);
+                }
+                buildRecordsRows(recDiv, setData);
+            }
             container.appendChild(recDiv);
         }
 
@@ -381,18 +407,17 @@
         }
     }
 
-    // Build records rows DOM inside a container div
-    function buildRecordsRows(container, recList) {
-        var header = document.createElement("div");
-        header.className = "rec_header";
-        header.textContent = "Records";
-        container.appendChild(header);
-        if (recRecordSetName) {
+    // Build records rows for one record set inside the records column
+    function buildRecordsRows(container, setData) {
+        // Sub-header with set name
+        if (setData.set_name) {
             var subHeader = document.createElement("div");
             subHeader.className = "rec_subheader";
-            subHeader.textContent = recRecordSetName;
+            subHeader.textContent = setData.set_name;
             container.appendChild(subHeader);
         }
+
+        var recList = setData.records;
 
         // Compute max widths for alignment
         var maxTimeLen = 0, maxNameLen = 0, maxTeamLen = 0;
@@ -501,11 +526,10 @@
                 resetLaneQualifications();
                 // Only re-render qualifying info when full event data is present
                 // (send_event_info includes these; parse_line serial updates do not)
-                if ("qualifying_times" in s || "records" in s) {
+                if ("qualifying_times" in s || "record_sets" in s) {
                     renderQualifyingInfo(
                         s["qualifying_times"] || [],
-                        s["records"] || [],
-                        s["record_set_name"] || ""
+                        s["record_sets"] || []
                     );
                 }
                 laneTimes = {};
@@ -556,6 +580,7 @@
             if (teamMatch) {
                 var el = document.getElementById("lane_team" + teamMatch[1]);
                 if (el) el.textContent = (s[k] || '').trimEnd();
+                laneTeamCodes[teamMatch[1]] = (s[k] || '').trim();
             }
             var ageCodeMatch = k.match(/^lane_age_code(\d+)$/);
             if (ageCodeMatch) {

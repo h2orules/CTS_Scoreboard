@@ -163,29 +163,64 @@
                             <strong>Upload failed:</strong> {{ records_error }}
                         </div>
                         {% endif %}
-                        {% if records_loaded %}
-                        <div class="alert alert-success" style="margin-bottom: 5px; padding: 6px 12px;">
-                            Records loaded
-                        </div>
-                        {% else %}
-                        <div class="alert alert-warning" style="margin-bottom: 5px; padding: 6px 12px;">
-                            No records loaded
-                        </div>
-                        {% endif %}
                         <div class="input-group">
                             <input id="records_file" name="records_file"
                                 class="form-control" aria-label="..." type="file"
                                 accept=".rec"></input>
                             <span class="input-group-btn">
                                 <button class="btn btn-default" type="submit" id="records_submit">Upload</button>
-                                <button class="btn btn-default" type="button"
-                                    onclick="location.href = '/records_clear';">Clear</button>
                             </span>
                         </div>
                     </div>
                 </form>
             </div>
         </div>
+        {% if rec_set_info %}
+        <div class="row">
+            <div class="col-lg-10">
+                <table class="table table-condensed" style="margin-top: 8px;">
+                    <thead>
+                        <tr>
+                            <th>Record Set Name</th>
+                            <th>Filename</th>
+                            <th>Team</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for rs in rec_set_info %}
+                        <tr>
+                            <td>{{ rs.set_name or 'Unnamed' }}</td>
+                            <td>{{ rs.filename }}</td>
+                            <td>
+                                <form action="/settings" method="POST" style="display:inline;">
+                                    <select name="rec_team_{{ rs.set_id }}" class="form-control input-sm" style="width:auto;display:inline-block;"
+                                        onchange="this.form.submit();">
+                                        {% for val, label in team_tag_options %}
+                                        <option value="{{ val }}" {% if val == rs.team_tag %}selected{% endif %}>{{ label }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </form>
+                            </td>
+                            <td>
+                                <button class="btn btn-default btn-sm" type="button"
+                                    onclick="location.href = '/records_remove/{{ rs.set_id }}';">Remove</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% elif not records_error %}
+        <div class="row">
+            <div class="col-lg-6">
+                <div class="alert alert-warning" style="margin-bottom: 5px; padding: 6px 12px;">
+                    No records loaded
+                </div>
+            </div>
+        </div>
+        {% endif %}
 
         <h3>Pool Settings</h3>
         <div class="row">
@@ -262,26 +297,29 @@
 
         <h3>Team Names</h3>
         <div>Clear team names to prevent showing scores for that team.</div>
-        {% for team_key, team_label, team_val in [
-            ('team_home', 'Home', team_home),
-            ('team_guest1', 'Guest 1', team_guest1),
-            ('team_guest2', 'Guest 2', team_guest2),
-            ('team_guest3', 'Guest 3', team_guest3)
+        {% for team_key, team_label, team_val, tag_key, tag_val in [
+            ('team_home', 'Home', team_home, 'team_home_tag', team_home_tag),
+            ('team_guest1', 'Guest 1', team_guest1, 'team_guest1_tag', team_guest1_tag),
+            ('team_guest2', 'Guest 2', team_guest2, 'team_guest2_tag', team_guest2_tag),
+            ('team_guest3', 'Guest 3', team_guest3, 'team_guest3_tag', team_guest3_tag)
         ] %}
         <div class="row">
             <div class="col-lg-8">
                 <form action="/settings" method="POST">
                     <div class="input-group">
-                        <label for="{{ team_key }}">{{ team_label }}</label>
-                        <div class="input-group">
+                        <label for="{{ team_key }}" style="display: inline-block; width: 7ch;">{{ team_label }}</label>
+                        <div class="input-group" style="display: inline-flex; width: auto;">
                             <input id="{{ team_key }}" name="{{ team_key }}" value="{{ team_val }}" class="form-control"
-                                maxlength="15" aria-label="..."
+                                maxlength="15" aria-label="Team name" placeholder="Team name" style="width: 20ch;"
+                                oninput="document.getElementById('{{ team_key }}_submit').disabled=false;"></input>
+                            <input id="{{ tag_key }}" name="{{ tag_key }}" value="{{ tag_val }}" class="form-control"
+                                maxlength="5" aria-label="Tag" placeholder="TEAM" style="width: 8ch; margin-left: 1ch;"
                                 oninput="document.getElementById('{{ team_key }}_submit').disabled=false;"></input>
                             <span class="input-group-btn">
                                 <button class="btn btn-default" type="submit" id="{{ team_key }}_submit"
                                     disabled>Update</button>
                                 <button class="btn btn-default" type="button"
-                                    onclick="document.getElementById('{{ team_key }}').value=''; document.getElementById('{{ team_key }}_submit').disabled=false;">Clear</button>
+                                    onclick="document.getElementById('{{ team_key }}').value=''; document.getElementById('{{ tag_key }}').value=''; document.getElementById('{{ team_key }}_submit').disabled=false;">Clear</button>
                             </span>
                         </div>
                     </div>

@@ -32,9 +32,13 @@ settings = {
     'pool_course': 'SCY',
     'show_pr_tags': True,
     'team_home': '',
+    'team_home_tag': '',
     'team_guest1': '',
+    'team_guest1_tag': '',
     'team_guest2': '',
-    'team_guest3': ''
+    'team_guest2_tag': '',
+    'team_guest3': '',
+    'team_guest3_tag': ''
     }
 in_file = None
 out_file = None
@@ -47,8 +51,9 @@ event_info = HytekEventLoader()
 # Time Standards
 time_standards = None
 
-# Swim Records
-swim_records = None
+# Swim Records (list of dicts: {rec_file, filename, team_tag, set_id})
+swim_record_sets = []
+_next_rec_set_id = 0
 
 app = flask.Flask(__name__)
 # config
@@ -79,7 +84,7 @@ score_info = {0x14: [' ',' ',' ',' ',' ',' ',' ',' '],
 team_scores = {'score_home': '', 'score_guest1': '', 'score_guest2': '', 'score_guest3': ''}
 
 def load_settings():
-    global settings, time_standards, swim_records
+    global settings, time_standards, swim_record_sets, _next_rec_set_id
     try:
         with open(settings_file, "rt") as f:
             settings.update(json.load(f))
@@ -88,9 +93,21 @@ def load_settings():
         if 'time_standards' in settings:
             import pickle, base64
             time_standards = pickle.loads(base64.b64decode(settings['time_standards']))
-        if 'swim_records' in settings:
+        if 'swim_record_sets' in settings:
             import pickle, base64
-            swim_records = pickle.loads(base64.b64decode(settings['swim_records']))
+            swim_record_sets = pickle.loads(base64.b64decode(settings['swim_record_sets']))
+            if swim_record_sets:
+                _next_rec_set_id = max(s['set_id'] for s in swim_record_sets) + 1
+        elif 'swim_records' in settings:
+            # Backward compat: migrate single record file to list format
+            import pickle, base64
+            old_rec = pickle.loads(base64.b64decode(settings['swim_records']))
+            swim_record_sets = [{'rec_file': old_rec, 'filename': 'migrated.rec', 'team_tag': 'ALL', 'set_id': 0}]
+            _next_rec_set_id = 1
+            settings['swim_record_sets'] = base64.b64encode(pickle.dumps(swim_record_sets)).decode('ascii')
+            settings.pop('swim_records', None)
+            with open(settings_file, "wt") as f:
+                json.dump(settings, f, sort_keys=True, indent=4)
     except: pass
 
 ## Stuff to move the cursor
@@ -431,12 +448,13 @@ def _get_qualifying_times(event_number):
     return results, (unique_sex or unique_age)
 
 def _get_matching_records(event_number):
-    """Look up swim records for a given event.
+    """Look up swim records for a given event across all loaded record sets.
     
-    Returns (list_of_dicts, show_age_codes) similar to _get_qualifying_times.
+    Returns (list_of_set_results, show_age_codes) where list_of_set_results is:
+    [{set_name, set_team_tag, records: [...]}, ...] in upload order.
     Records use strict less-than for breaking (tying does not break a record).
     """
-    if swim_records is None:
+    if not swim_record_sets:
         return [], False
     
     meta = event_info.event_meta.get(event_number)
@@ -444,10 +462,6 @@ def _get_matching_records(event_number):
         return [], False
     
     pool_course = settings.get('pool_course', 'SCY')
-    
-    # Check if records file course matches pool course
-    if swim_records.header.course != pool_course:
-        return [], False
     
     sex_codes = meta.get('sex_codes', [])
     if not sex_codes:
@@ -478,92 +492,110 @@ def _get_matching_records(event_number):
     else:
         sex_display = {1: 'Boys', 2: 'Girls'}
     
-    matches = []
-    for sex_code in sex_codes:
-        for ar_min, ar_max in age_ranges:
-            for rec in swim_records.records:
-                if rec.stroke_code != stroke_code:
-                    continue
-                if rec.distance != distance:
-                    continue
-                if rec.event_type != event_type_match:
-                    continue
-                if rec.sex_code != sex_code:
-                    continue
-                
-                # Age range overlap check
-                rec_min = rec.age_group_min
-                rec_max = rec.age_group_max
-                ev_min = ar_min if ar_min else 0
-                ev_max = ar_max if ar_max else 999
-                r_min = rec_min if rec_min else 0
-                r_max = rec_max if rec_max else 999
-                
-                if ev_min > r_max or r_min > ev_max:
-                    continue
-                
-                from hytek_rec_parser import EPOCH
-                rec_year = rec.record_date.year if rec.record_date != EPOCH else None
-                
-                matches.append({
-                    'sex_code': sex_code,
-                    'age_min': rec_min,
-                    'age_max': rec_max,
-                    'time': rec.time_formatted,
-                    'time_seconds': rec.time_seconds,
-                    'swimmer_name': rec.swimmer_name or '',
-                    'record_team': rec.record_team or '',
-                    'record_year': str(rec_year) if rec_year else '',
-                    'relay_names': rec.relay_names or '',
-                })
-    
-    if not matches:
-        return [], False
-    
-    unique_sex = len(set(m['sex_code'] for m in matches)) > 1
-    unique_age = len(set((m['age_min'], m['age_max']) for m in matches)) > 1
-    
-    # Sort: girls (2) before boys (1), youngest first, then fastest first
-    def sort_key(m):
-        sex_order = 0 if m['sex_code'] == 2 else 1
-        age_lo = m['age_min'] if m['age_min'] else 0
-        return (sex_order, age_lo, m['time_seconds'])
-    matches.sort(key=sort_key)
-    
-    results = []
+    all_set_results = []
+    any_show_age = False
     color_idx = 0
-    for m in matches:
-        qualifiers = []
-        if unique_age:
-            a_min = m['age_min']
-            a_max = m['age_max']
-            if a_min and a_max:
-                qualifiers.append("%d-%d" % (a_min, a_max))
-            elif a_max:
-                qualifiers.append("%d & Under" % a_max)
-            elif a_min:
-                qualifiers.append("%d & Over" % a_min)
-            else:
-                qualifiers.append("Open")
-        if unique_sex:
-            qualifiers.append(sex_display.get(m['sex_code'], ''))
-        
-        results.append({
-            'time': m['time'],
-            'time_seconds': m['time_seconds'],
-            'swimmer_name': m['swimmer_name'],
-            'record_team': m['record_team'],
-            'record_year': m['record_year'],
-            'relay_names': m['relay_names'],
-            'color_class': 'rec-color-%d' % (color_idx % 12),
-            'qualifiers': ' '.join(qualifiers),
-            'sex_code': m['sex_code'],
-            'age_min': m['age_min'],
-            'age_max': m['age_max'],
-        })
-        color_idx += 1
     
-    return results, (unique_sex or unique_age)
+    for rec_set in swim_record_sets:
+        rec_file = rec_set['rec_file']
+        
+        # Check if records file course matches pool course
+        if rec_file.header.course != pool_course:
+            continue
+        
+        matches = []
+        for sex_code in sex_codes:
+            for ar_min, ar_max in age_ranges:
+                for rec in rec_file.records:
+                    if rec.stroke_code != stroke_code:
+                        continue
+                    if rec.distance != distance:
+                        continue
+                    if rec.event_type != event_type_match:
+                        continue
+                    if rec.sex_code != sex_code:
+                        continue
+                    
+                    # Age range overlap check
+                    rec_min = rec.age_group_min
+                    rec_max = rec.age_group_max
+                    ev_min = ar_min if ar_min else 0
+                    ev_max = ar_max if ar_max else 999
+                    r_min = rec_min if rec_min else 0
+                    r_max = rec_max if rec_max else 999
+                    
+                    if ev_min > r_max or r_min > ev_max:
+                        continue
+                    
+                    from hytek_rec_parser import EPOCH
+                    rec_year = rec.record_date.year if rec.record_date != EPOCH else None
+                    
+                    matches.append({
+                        'sex_code': sex_code,
+                        'age_min': rec_min,
+                        'age_max': rec_max,
+                        'time': rec.time_formatted,
+                        'time_seconds': rec.time_seconds,
+                        'swimmer_name': rec.swimmer_name or '',
+                        'record_team': rec.record_team or '',
+                        'record_year': str(rec_year) if rec_year else '',
+                        'relay_names': rec.relay_names or '',
+                    })
+        
+        if not matches:
+            continue
+        
+        unique_sex = len(set(m['sex_code'] for m in matches)) > 1
+        unique_age = len(set((m['age_min'], m['age_max']) for m in matches)) > 1
+        if unique_sex or unique_age:
+            any_show_age = True
+        
+        # Sort: girls (2) before boys (1), youngest first, then fastest first
+        def sort_key(m):
+            sex_order = 0 if m['sex_code'] == 2 else 1
+            age_lo = m['age_min'] if m['age_min'] else 0
+            return (sex_order, age_lo, m['time_seconds'])
+        matches.sort(key=sort_key)
+        
+        records = []
+        for m in matches:
+            qualifiers = []
+            if unique_age:
+                a_min = m['age_min']
+                a_max = m['age_max']
+                if a_min and a_max:
+                    qualifiers.append("%d-%d" % (a_min, a_max))
+                elif a_max:
+                    qualifiers.append("%d & Under" % a_max)
+                elif a_min:
+                    qualifiers.append("%d & Over" % a_min)
+                else:
+                    qualifiers.append("Open")
+            if unique_sex:
+                qualifiers.append(sex_display.get(m['sex_code'], ''))
+            
+            records.append({
+                'time': m['time'],
+                'time_seconds': m['time_seconds'],
+                'swimmer_name': m['swimmer_name'],
+                'record_team': m['record_team'],
+                'record_year': m['record_year'],
+                'relay_names': m['relay_names'],
+                'color_class': 'rec-color-%d' % (color_idx % 12),
+                'qualifiers': ' '.join(qualifiers),
+                'sex_code': m['sex_code'],
+                'age_min': m['age_min'],
+                'age_max': m['age_max'],
+            })
+            color_idx += 1
+        
+        all_set_results.append({
+            'set_name': rec_file.header.record_set_name or '',
+            'set_team_tag': rec_set['team_tag'],
+            'records': records,
+        })
+    
+    return all_set_results, any_show_age
 
 def send_event_info():            
     update={}
@@ -572,11 +604,10 @@ def send_event_info():
     update["event_name"] = event_info.get_event_name(last_event_sent[0])
     update["schedule_has_names"] = event_info.has_names
     qt_results, qt_show_age = _get_qualifying_times(last_event_sent[0])
-    rec_results, rec_show_age = _get_matching_records(last_event_sent[0])
+    rec_set_results, rec_show_age = _get_matching_records(last_event_sent[0])
     show_age_codes = qt_show_age or rec_show_age
     update["qualifying_times"] = qt_results
-    update["records"] = rec_results
-    update["record_set_name"] = swim_records.header.record_set_name if swim_records else ""
+    update["record_sets"] = rec_set_results
     
     for i in range(1,11):
         update["lane_name%i" % i] = event_info.get_display_string(last_event_sent[0], last_event_sent[1], i)
@@ -708,21 +739,56 @@ def route_settings():
                     with tempfile.NamedTemporaryFile(suffix='.rec', delete=False) as tmp:
                         tmp.write(file.stream.read())
                         tmp_path = tmp.name
-                    global swim_records
-                    swim_records = parse_rec_file(tmp_path)
+                    global _next_rec_set_id
+                    new_rec = parse_rec_file(tmp_path)
                 except Exception as e:
                     detail = str(e)
                     records_error = 'Failed to parse the records file'
                     if detail:
                         records_error += ': ' + detail
                 else:
-                    settings['swim_records'] = base64.b64encode(pickle.dumps(swim_records)).decode('ascii')
+                    swim_record_sets.append({
+                        'rec_file': new_rec,
+                        'filename': file.filename,
+                        'team_tag': 'ALL',
+                        'set_id': _next_rec_set_id,
+                    })
+                    _next_rec_set_id += 1
+                    settings['swim_record_sets'] = base64.b64encode(pickle.dumps(swim_record_sets)).decode('ascii')
                     modified = True
                 finally:
                     try:
                         os.unlink(tmp_path)
                     except:
                         pass
+        
+        # Handle record set team_tag dropdown updates
+        for rec_set in swim_record_sets:
+            form_key = 'rec_team_%d' % rec_set['set_id']
+            if form_key in flask.request.form:
+                new_tag = flask.request.form[form_key]
+                if new_tag != rec_set['team_tag']:
+                    rec_set['team_tag'] = new_tag
+                    import pickle, base64
+                    settings['swim_record_sets'] = base64.b64encode(pickle.dumps(swim_record_sets)).decode('ascii')
+                    modified = True
+        
+        # Handle team tag auto-fill: if tag field is empty on Update, auto-fill from name
+        for team_base in ['team_home', 'team_guest1', 'team_guest2', 'team_guest3']:
+            tag_key = team_base + '_tag'
+            if team_base in flask.request.form:
+                name_val = flask.request.form.get(team_base, '').strip()
+                tag_val = flask.request.form.get(tag_key, '').strip()
+                if name_val and not tag_val:
+                    # Auto-fill tag from name
+                    tag_val = name_val[:5].upper()
+                elif not name_val:
+                    # Clear clears both
+                    tag_val = ''
+                tag_val = tag_val[:5]
+                if settings.get(tag_key) != tag_val:
+                    settings[tag_key] = tag_val
+                    modified = True
         
         for k in settings.keys(): 
             if k in flask.request.form and settings[k]!=flask.request.form.get(k):
@@ -731,9 +797,11 @@ def route_settings():
                     if val != settings[k]:
                         settings[k] = val
                         modified = True
+                elif k.endswith('_tag'):
+                    pass  # Already handled above
                 else:
                     val = flask.request.form.get(k)
-                    if k.startswith('team_'):
+                    if k.startswith('team_') and not k.endswith('_tag'):
                         val = val[:15]
                     settings[k]=val
                     modified = True
@@ -759,7 +827,25 @@ def route_settings():
  
     schedule_loaded = bool(event_info.event_names)
     standards_loaded = time_standards is not None
-    records_loaded = swim_records is not None
+    
+    # Build record set info for template
+    rec_set_info = []
+    for rs in swim_record_sets:
+        rec_set_info.append({
+            'set_id': rs['set_id'],
+            'filename': rs['filename'],
+            'set_name': rs['rec_file'].header.record_set_name or '',
+            'team_tag': rs['team_tag'],
+        })
+    
+    # Build team tag options for record set dropdown
+    team_tag_options = [('ALL', 'All')]
+    for tag_key, name_key in [('team_home_tag', 'team_home'), ('team_guest1_tag', 'team_guest1'), ('team_guest2_tag', 'team_guest2'), ('team_guest3_tag', 'team_guest3')]:
+        tag = settings.get(tag_key, '')
+        name = settings.get(name_key, '')
+        if tag:
+            team_tag_options.append((tag, '%s (%s)' % (tag, name) if name else tag))
+    
     return flask.render_template('settings.html', 
                 meet_title=settings['meet_title'], 
                 serial_port=settings['serial_port'],
@@ -773,13 +859,18 @@ def route_settings():
                 schedule_error=schedule_error,
                 standards_loaded=standards_loaded,
                 standards_error=standards_error,
-                records_loaded=records_loaded,
+                rec_set_info=rec_set_info,
                 records_error=records_error,
+                team_tag_options=team_tag_options,
                 show_pr_tags=settings.get('show_pr_tags', True),
                 team_home=settings.get('team_home', ''),
+                team_home_tag=settings.get('team_home_tag', ''),
                 team_guest1=settings.get('team_guest1', ''),
+                team_guest1_tag=settings.get('team_guest1_tag', ''),
                 team_guest2=settings.get('team_guest2', ''),
-                team_guest3=settings.get('team_guest3', ''))
+                team_guest2_tag=settings.get('team_guest2_tag', ''),
+                team_guest3=settings.get('team_guest3', ''),
+                team_guest3_tag=settings.get('team_guest3_tag', ''))
                 
 @app.route('/schedule_clear')
 @flask_login.login_required
@@ -800,12 +891,16 @@ def route_standards_clear():
         json.dump(settings, f, sort_keys=True, indent=4)
     return flask.redirect('/settings')
 
-@app.route('/records_clear')
+@app.route('/records_remove/<int:set_id>')
 @flask_login.login_required
-def route_records_clear():
-    global swim_records
-    swim_records = None
-    settings.pop('swim_records', None)
+def route_records_remove(set_id):
+    global swim_record_sets
+    swim_record_sets = [s for s in swim_record_sets if s['set_id'] != set_id]
+    import pickle, base64
+    if swim_record_sets:
+        settings['swim_record_sets'] = base64.b64encode(pickle.dumps(swim_record_sets)).decode('ascii')
+    else:
+        settings.pop('swim_record_sets', None)
     with open(settings_file, "wt") as f:
         json.dump(settings, f, sort_keys=True, indent=4)
     return flask.redirect('/settings')
