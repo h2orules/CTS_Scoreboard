@@ -415,8 +415,11 @@ def _get_qualifying_times(event_number):
     unique_sex = len(set(m['sex_code'] for m in matches)) > 1
     unique_age = len(set((m['age_min'], m['age_max']) for m in matches)) > 1
     
-    results = []
+    # Build results grouped by qualifier string
+    groups = []         # [{qualifiers: str, items: [...]}, ...]
+    group_map = {}      # qualifiers_str -> index in groups
     color_idx = 0
+    desc_overrides = settings.get('std_desc_overrides', {})
     for m in matches:
         qualifiers = []
         if unique_age:
@@ -433,21 +436,24 @@ def _get_qualifying_times(event_number):
         if unique_sex:
             qualifiers.append(sex_display.get(m['sex_code'], ''))
         
-        desc_overrides = settings.get('std_desc_overrides', {})
-        results.append({
+        qual_str = ' '.join(qualifiers)
+        item = {
             'time': m['time'],
             'time_seconds': m['time_seconds'],
             'tag': m['tag'],
             'description': desc_overrides.get(m['tag'], m['description']),
             'color_class': 'qt-color-%d' % (color_idx % 12),
-            'qualifiers': ' '.join(qualifiers),
             'sex_code': m['sex_code'],
             'age_min': m['age_min'],
             'age_max': m['age_max'],
-        })
+        }
+        if qual_str not in group_map:
+            group_map[qual_str] = len(groups)
+            groups.append({'qualifiers': qual_str, 'items': []})
+        groups[group_map[qual_str]]['items'].append(item)
         color_idx += 1
     
-    return results, (unique_sex or unique_age)
+    return groups, (unique_sex or unique_age)
 
 def _get_matching_records(event_number):
     """Look up swim records for a given event across all loaded record sets.
