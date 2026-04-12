@@ -174,7 +174,7 @@
 
         // Reset to default
         timeEl.className = timeEl.className.replace(/\bqt-color-\d+\b/g, '').trim();
-        timeEl.classList.remove('qt-pr');
+        timeEl.classList.remove('qt-pr', 'qt-highlight');
         var tagEl = document.getElementById("lane_qt_tag" + lane);
         if (tagEl) tagEl.textContent = "";
 
@@ -197,13 +197,13 @@
             }
         }
         if (bestMatch) {
-            timeEl.classList.add(bestMatch.color_class);
+            timeEl.classList.add('qt-highlight', bestMatch.color_class);
             if (tagEl) tagEl.textContent = bestMatch.tag;
         } else if (showPrTags) {
             // No qualifying standard met — check for personal record
             var seed = laneSeedTimes[lane];
             if (typeof seed === 'number' && seed > 0 && seconds < seed) {
-                timeEl.classList.add('qt-pr');
+                timeEl.classList.add('qt-highlight', 'qt-pr');
                 if (tagEl) tagEl.textContent = "PR";
             }
         }
@@ -288,7 +288,7 @@
             var timeEl = document.getElementById("lane_time" + i);
             if (timeEl) {
                 timeEl.className = timeEl.className.replace(/\bqt-color-\d+\b/g, '').trim();
-                timeEl.classList.remove('qt-pr');
+                timeEl.classList.remove('qt-pr', 'qt-highlight');
             }
             var tagEl = document.getElementById("lane_qt_tag" + i);
             if (tagEl) tagEl.textContent = "";
