@@ -327,6 +327,11 @@
 
     // Build standards rows DOM inside a container div
     function buildStandardsRows(container, qtList) {
+        var header = document.createElement("div");
+        header.className = "rec_header";
+        header.textContent = "Time Standards";
+        container.appendChild(header);
+
         // Compute max widths for alignment
         var maxTimeLen = 0, maxTagDispLen = 0, maxDescLen = 0;
         for (var q = 0; q < qtList.length; q++) {
@@ -378,20 +383,23 @@
 
     // Build records rows DOM inside a container div
     function buildRecordsRows(container, recList) {
-        // Header with record set name
+        var header = document.createElement("div");
+        header.className = "rec_header";
+        header.textContent = "Records";
+        container.appendChild(header);
         if (recRecordSetName) {
-            var header = document.createElement("div");
-            header.className = "rec_header";
-            header.textContent = recRecordSetName;
-            container.appendChild(header);
+            var subHeader = document.createElement("div");
+            subHeader.className = "rec_subheader";
+            subHeader.textContent = recRecordSetName;
+            container.appendChild(subHeader);
         }
 
         // Compute max widths for alignment
         var maxTimeLen = 0, maxNameLen = 0, maxTeamLen = 0;
         for (var r = 0; r < recList.length; r++) {
             maxTimeLen = Math.max(maxTimeLen, recList[r].time.length);
-            var name = recList[r].swimmer_name || recList[r].relay_names || "";
-            maxNameLen = Math.max(maxNameLen, name.length);
+            var name = recList[r].relay_names || recList[r].swimmer_name || "";
+            maxNameLen = Math.min(25, Math.max(maxNameLen, name.length));
             maxTeamLen = Math.max(maxTeamLen, (recList[r].record_team || "").length);
         }
 
@@ -402,28 +410,9 @@
             var timeSpan = document.createElement("span");
             timeSpan.className = "rec_time";
             timeSpan.textContent = rec.time;
-            timeSpan.style.minWidth = maxTimeLen + "ch";
+            timeSpan.style.minWidth = maxTimeLen + "c";
             timeSpan.classList.add(rec.color_class);
             row.appendChild(timeSpan);
-
-            var name = rec.swimmer_name || rec.relay_names || "";
-            if (maxNameLen > 0) {
-                var nameSpan = document.createElement("span");
-                nameSpan.className = "rec_name";
-                nameSpan.textContent = name;
-                nameSpan.style.minWidth = Math.min(maxNameLen, 20) + "ch";
-                nameSpan.classList.add(rec.color_class);
-                row.appendChild(nameSpan);
-            }
-
-            if (maxTeamLen > 0) {
-                var teamSpan = document.createElement("span");
-                teamSpan.className = "rec_team";
-                teamSpan.textContent = rec.record_team || "";
-                teamSpan.style.minWidth = maxTeamLen + "ch";
-                teamSpan.classList.add(rec.color_class);
-                row.appendChild(teamSpan);
-            }
 
             if (rec.record_year) {
                 var yearSpan = document.createElement("span");
@@ -431,6 +420,25 @@
                 yearSpan.textContent = rec.record_year;
                 yearSpan.classList.add(rec.color_class);
                 row.appendChild(yearSpan);
+            }
+
+            if (maxTeamLen > 0) {
+                var teamSpan = document.createElement("span");
+                teamSpan.className = "rec_team";
+                teamSpan.textContent = rec.record_team || "";
+                teamSpan.style.minWidth = maxTeamLen + "c";
+                teamSpan.classList.add(rec.color_class);
+                row.appendChild(teamSpan);
+            }
+
+            var name = rec.relay_names || rec.swimmer_name || "";
+            if (maxNameLen > 0) {
+                var nameSpan = document.createElement("span");
+                nameSpan.className = "rec_name";
+                nameSpan.textContent = name;
+                nameSpan.style.minWidth = Math.min(maxNameLen, 20) + "c";
+                nameSpan.classList.add(rec.color_class);
+                row.appendChild(nameSpan);
             }
 
             if (rec.qualifiers) {
