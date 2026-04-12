@@ -117,6 +117,7 @@
     var confettiFired = {};  // Track which lanes have already shown confetti
     var maxQtTagLen = 0;    // Longest tag string for space reservation
     var prevEventHeat = ""; // Track event/heat changes for reset
+    var raceState = "TotalBlank"; // Current race state from server FSM
 
     // Apply initial name column visibility
     document.querySelectorAll('.scoreboard_name_col, .lane_name').forEach(function (el) {
@@ -622,6 +623,14 @@
                 laneTimes = {};
                 eventHeatChanged = true;
             }
+        }
+
+        // Track race state from server FSM
+        if ("race_state" in s) {
+            if (s["race_state"] !== raceState) {
+                console.log("Race state:", raceState, "→", s["race_state"]);
+            }
+            raceState = s["race_state"];
         }
 
         // Track current event/heat for test controls
