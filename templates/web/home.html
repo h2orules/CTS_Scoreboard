@@ -116,7 +116,6 @@
     var CONFETTI_FADE_MS = 1200; // Duration for confetti particles to fade out
     var confettiFired = {};  // Track which lanes have already shown confetti
     var maxQtTagLen = 0;    // Longest tag string for space reservation
-    var prevEventHeat = ""; // Track event/heat changes for reset
     var raceState = "TotalBlank"; // Current race state from server FSM
 
     // Apply initial name column visibility
@@ -213,6 +212,7 @@
     // Spawn confetti particles from the center of a given element
     function spawnConfetti(lane, targetEl) {
         if (!showConfetti) return;
+        if (raceState !== "Running" && raceState !== "Finished") return;
         if (confettiFired[lane]) return;
         confettiFired[lane] = true;
         var rect = targetEl.getBoundingClientRect();
@@ -578,6 +578,21 @@
         }
     }
 
+    // Called on any *PreRace state entry (new event/heat arrived)
+    function onPreRaceEntry(s) {
+        resetLaneQualifications();
+        confettiFired = {};
+        laneTimes = {};
+        // Only re-render qualifying info when full event data is present
+        // (send_event_info includes these; parse_line serial updates do not)
+        if ("qualifying_times" in s || "record_sets" in s) {
+            renderQualifyingInfo(
+                s["qualifying_times"] || [],
+                s["record_sets"] || []
+            );
+        }
+    }
+
     var socket = io.connect('http://' + document.domain + ':' + location.port + '/scoreboard');
     socket.on('connect', function () {
         {% if test_event %}
@@ -604,33 +619,19 @@
             s[k] = new_s[k];
         }
 
-        // Detect event/heat change and reset qualifications
+        // Track race state from server FSM and handle transitions
         var eventHeatChanged = false;
-        if ("current_event" in s || "current_heat" in s) {
-            var newEventHeat = (s["current_event"] || currentEvent) + "/" + (s["current_heat"] || currentHeat);
-            if (newEventHeat !== prevEventHeat) {
-                prevEventHeat = newEventHeat;
-                resetLaneQualifications();
-                confettiFired = {};
-                // Only re-render qualifying info when full event data is present
-                // (send_event_info includes these; parse_line serial updates do not)
-                if ("qualifying_times" in s || "record_sets" in s) {
-                    renderQualifyingInfo(
-                        s["qualifying_times"] || [],
-                        s["record_sets"] || []
-                    );
-                }
-                laneTimes = {};
+        if ("race_state" in s && s["race_state"] !== raceState) {
+            var prevState = raceState;
+            raceState = s["race_state"];
+            console.log("Race state:", prevState, "→", raceState);
+
+            // All *PreRace states trigger the same reset
+            if (raceState === "PreRace" || raceState === "ClearPreRace" ||
+                raceState === "BlankPreRace" || raceState === "TotalBlankPreRace") {
+                onPreRaceEntry(s);
                 eventHeatChanged = true;
             }
-        }
-
-        // Track race state from server FSM
-        if ("race_state" in s) {
-            if (s["race_state"] !== raceState) {
-                console.log("Race state:", raceState, "→", s["race_state"]);
-            }
-            raceState = s["race_state"];
         }
 
         // Track current event/heat for test controls
