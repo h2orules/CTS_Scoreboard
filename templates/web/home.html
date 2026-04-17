@@ -85,6 +85,7 @@
                 {% endif %}
             </div>
         </div>
+        <div id="blank_clock" class="blank-clock"></div>
         {% if test_background %}
         <div class="controls">
             <button type="button" onclick="changeEvent(-1);">◀ Event</button>
@@ -578,6 +579,42 @@
         }
     }
 
+    // Show/hide scoreboard elements based on blank states
+    function updateBlankDisplay(state) {
+        var tableEl = document.querySelector('.content_scoreboard_table');
+        var scoresEl = document.querySelector('.content_scores');
+        var clockEl = document.getElementById('blank_clock');
+
+        var isBlank = (state === "Blank" || state === "BlankPreRace");
+        var isTotalBlank = (state === "TotalBlank" || state === "TotalBlankPreRace");
+        var isHidden = isBlank || isTotalBlank;
+
+        if (isHidden) {
+            // Fade out scoreboard table and scores
+            if (tableEl) tableEl.style.opacity = '0';
+            if (scoresEl) scoresEl.style.opacity = '0';
+            setTimeout(function () {
+                if (tableEl && tableEl.style.opacity === '0') tableEl.style.display = 'none';
+                if (scoresEl && scoresEl.style.opacity === '0') scoresEl.style.display = 'none';
+            }, 500);
+        } else {
+            // Restore scoreboard table and scores
+            if (tableEl) { tableEl.style.display = ''; tableEl.style.opacity = '1'; }
+            if (scoresEl) { scoresEl.style.display = ''; scoresEl.style.opacity = '1'; }
+        }
+
+        if (isBlank) {
+            // Show large clock
+            if (clockEl) { clockEl.style.display = 'block'; clockEl.style.opacity = '1'; }
+        } else {
+            // Hide large clock
+            if (clockEl) clockEl.style.opacity = '0';
+            setTimeout(function () {
+                if (clockEl && clockEl.style.opacity === '0') clockEl.style.display = 'none';
+            }, 500);
+        }
+    }
+
     // Called on any *PreRace state entry (new event/heat arrived)
     function onPreRaceEntry(s) {
         resetLaneQualifications();
@@ -632,6 +669,9 @@
                 onPreRaceEntry(s);
                 eventHeatChanged = true;
             }
+
+            // Update display mode for blank states
+            updateBlankDisplay(raceState);
         }
 
         // Track current event/heat for test controls
@@ -689,6 +729,12 @@
             var laneTimeMatch = k.match(/^lane_time(\d+)$/);
             if (laneTimeMatch) {
                 laneTimes[laneTimeMatch[1]] = s[k] || "";
+                // Feed lane 3 time to blank clock when in Blank state
+                if (laneTimeMatch[1] === "3" &&
+                    (raceState === "Blank" || raceState === "BlankPreRace")) {
+                    var clockEl = document.getElementById('blank_clock');
+                    if (clockEl) clockEl.textContent = (s[k] || '').trim();
+                }
             }
             var seedMatch = k.match(/^lane_seed_time(\d+)$/);
             if (seedMatch) {
