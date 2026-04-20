@@ -654,10 +654,17 @@
             }
             if (tableEl) { tableEl.style.opacity = '1'; }
             if (scoresEl) {
-                scoresEl.style.padding = '';
-                scoresEl.style.maxHeight = scoresEl.scrollHeight + 'px';
-                scoresEl.style.opacity = '1';
-                setTimeout(function () { if (scoresEl) scoresEl.style.maxHeight = ''; }, 500);
+                // Only restore scores if they have non-zero values
+                var hasScores = Array.from(scoresEl.querySelectorAll('.score_value')).some(function (el) {
+                    var v = (el.textContent || '').trim();
+                    return v !== '' && v !== '0';
+                });
+                if (hasScores) {
+                    scoresEl.style.padding = '';
+                    scoresEl.style.maxHeight = scoresEl.scrollHeight + 'px';
+                    scoresEl.style.opacity = '1';
+                    setTimeout(function () { if (scoresEl) scoresEl.style.maxHeight = ''; }, 500);
+                }
             }
         }
 

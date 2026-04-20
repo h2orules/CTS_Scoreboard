@@ -868,6 +868,7 @@ def ws_sim_step(d):
         socketio.emit('update_scoreboard', update, namespace='/scoreboard')
         # Re-send event info so names/teams reappear on scoreboard
         send_event_info()
+        send_scores_info()
 
     elif step == 'blank':
         _sim_running = False
