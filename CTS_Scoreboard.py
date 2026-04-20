@@ -804,6 +804,8 @@ def ws_sim_load_event(d=None):
     # --- Trigger PreRace ---
     last_event_sent = (ev_num, heat_num)
     race_fsm.notify_event_change()
+    # Transition out of blank states since we now have lane data
+    race_fsm.trigger('show_lanes')
     send_event_info()
     send_scores_info()
 

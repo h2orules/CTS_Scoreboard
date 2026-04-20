@@ -596,22 +596,69 @@
         var tableEl = document.querySelector('.content_scoreboard_table');
         var scoresEl = document.querySelector('.content_scores');
         var clockEl = document.getElementById('blank_clock');
+        var stackEl = document.querySelector('.scoreboard-stack');
+        var titleEl = document.querySelector('.content_title_block');
 
         var isBlank = (state === "Blank" || state === "BlankPreRace");
         var isTotalBlank = (state === "TotalBlank" || state === "TotalBlankPreRace");
         var isHidden = isBlank || isTotalBlank;
 
-        if (isHidden) {
-            // Fade out scoreboard table and scores (keep table in layout to size the stack)
+        // Lock title block width when entering blank/totalblank states
+        if (isHidden && titleEl && !titleEl.style.minWidth) {
+            titleEl.style.minWidth = titleEl.offsetWidth + 'px';
+        } else if (!isHidden && titleEl) {
+            titleEl.style.minWidth = '';
+        }
+
+        if (isTotalBlank) {
+            // Fade out and collapse scoreboard + scores
             if (tableEl) tableEl.style.opacity = '0';
-            if (scoresEl) scoresEl.style.opacity = '0';
-            setTimeout(function () {
-                if (scoresEl && scoresEl.style.opacity === '0') scoresEl.style.display = 'none';
-            }, 500);
+            if (scoresEl) {
+                scoresEl.style.opacity = '0';
+                scoresEl.style.maxHeight = scoresEl.scrollHeight + 'px';
+                void scoresEl.offsetHeight;
+                scoresEl.style.maxHeight = '0';
+                scoresEl.style.padding = '0';
+            }
+            if (stackEl) {
+                // Set explicit max-height from current size so transition animates
+                stackEl.style.maxHeight = stackEl.scrollHeight + 'px';
+                // Force reflow before collapsing
+                void stackEl.offsetHeight;
+                stackEl.style.maxHeight = '0';
+            }
+        } else if (isBlank) {
+            // Fade out table and scores, expand stack for clock overlay
+            if (tableEl) tableEl.style.opacity = '0';
+            if (scoresEl) {
+                scoresEl.style.opacity = '0';
+                scoresEl.style.maxHeight = scoresEl.scrollHeight + 'px';
+                void scoresEl.offsetHeight;
+                scoresEl.style.maxHeight = '0';
+                scoresEl.style.padding = '0';
+            }
+            if (stackEl && stackEl.style.maxHeight === '0px') {
+                // Expanding from collapsed (TotalBlank → Blank): animate to full height
+                var tbl = stackEl.querySelector('.scoreboard_table');
+                stackEl.style.maxHeight = (tbl ? tbl.scrollHeight : stackEl.scrollHeight) + 'px';
+                setTimeout(function () { if (stackEl) stackEl.style.maxHeight = ''; }, 500);
+            } else if (stackEl) {
+                stackEl.style.maxHeight = '';
+            }
         } else {
-            // Restore scoreboard table and scores
+            // Restore scoreboard table, scores, and stack height
+            if (stackEl) {
+                // Expand: set max-height to scroll height for animation, then clear it
+                stackEl.style.maxHeight = stackEl.scrollHeight + 'px';
+                setTimeout(function () { if (stackEl) stackEl.style.maxHeight = ''; }, 500);
+            }
             if (tableEl) { tableEl.style.opacity = '1'; }
-            if (scoresEl) { scoresEl.style.display = ''; scoresEl.style.opacity = '1'; }
+            if (scoresEl) {
+                scoresEl.style.padding = '';
+                scoresEl.style.maxHeight = scoresEl.scrollHeight + 'px';
+                scoresEl.style.opacity = '1';
+                setTimeout(function () { if (scoresEl) scoresEl.style.maxHeight = ''; }, 500);
+            }
         }
 
         if (isBlank) {
@@ -843,7 +890,18 @@
                 var v = (el.textContent || '').trim();
                 return v === '' || v === '0';
             });
-            scoresEl.style.display = allZero ? 'none' : '';
+            if (allZero && scoresEl.style.opacity !== '0') {
+                scoresEl.style.opacity = '0';
+                scoresEl.style.maxHeight = scoresEl.scrollHeight + 'px';
+                void scoresEl.offsetHeight;
+                scoresEl.style.maxHeight = '0';
+                scoresEl.style.padding = '0';
+            } else if (!allZero && (scoresEl.style.opacity === '0' || scoresEl.style.maxHeight === '0px')) {
+                scoresEl.style.maxHeight = scoresEl.scrollHeight + 'px';
+                scoresEl.style.padding = '';
+                scoresEl.style.opacity = '1';
+                setTimeout(function () { if (scoresEl) scoresEl.style.maxHeight = ''; }, 500);
+            }
         }
 
         // Fill in the running time

@@ -289,7 +289,8 @@
     justify-content: center;
     background-color: #daebe8;
     padding: 2px 0 4px;
-    transition: opacity 0.5s;
+    transition: opacity 0.5s, max-height 0.5s ease, padding 0.5s ease;
+    overflow: hidden;
 }
 
 .score_cell {
@@ -368,6 +369,8 @@
 .scoreboard-stack {
     display: inline-block;
     position: relative;
+    overflow: hidden;
+    transition: max-height 0.5s ease, opacity 0.5s;
 }
 
 .blank-clock {
