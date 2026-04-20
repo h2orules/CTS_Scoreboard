@@ -1,0 +1,32 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Scoreboard (Debug)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/CTS_Scoreboard.py",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "args": [],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "Scoreboard (Debug + Input File)",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/CTS_Scoreboard.py",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "args": ["--in", "${input:inputFile}"],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+    ],
+    "inputs": [
+        {
+            "id": "inputFile",
+            "type": "promptString",
+            "description": "Path to CTS input file to replay"
+        }
+    ]
+}
