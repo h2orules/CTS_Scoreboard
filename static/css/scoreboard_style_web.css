@@ -390,6 +390,10 @@
     line-height: 1;
 }
 
+.seed-time-italic {
+    font-style: italic;
+}
+
 .scoreboard_table {
     border-spacing: 0;
     table-layout: fixed;

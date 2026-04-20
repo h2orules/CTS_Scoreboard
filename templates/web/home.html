@@ -125,6 +125,7 @@
     var laneSeedTimes = {}; // lane -> seed time in seconds (number or "")
     var showPrTags = true;  // Whether to show PR tags
     var showConfetti = true; // Whether to show confetti on qualifications
+    var seedTimeLabel = 'Seed Time'; // 'Seed Time', 'Entry Time', or 'None'
     var CONFETTI_FADE_MS = 1200; // Duration for confetti particles to fade out
     var confettiFired = {};  // Track which lanes have already shown confetti
     var maxQtTagLen = 0;    // Longest tag string for space reservation
@@ -638,6 +639,61 @@
                 s["record_sets"] || []
             );
         }
+        updateSeedTimeDisplay(raceState);
+    }
+
+    // Format a seed time in seconds to an 8-char CTS-style display string
+    function formatSeedTime(seconds) {
+        if (seconds === "" || seconds === null || seconds === undefined || isNaN(seconds)) return "";
+        var s = parseFloat(seconds);
+        var m = Math.floor(s / 60);
+        var rem = s - m * 60;
+        if (m > 0) {
+            return (" " + m + ":" + ("0" + rem.toFixed(2)).slice(-5)).slice(-8);
+        } else {
+            return ("        " + rem.toFixed(2)).slice(-8);
+        }
+    }
+
+    // Show/hide seed times based on race state and settings
+    function updateSeedTimeDisplay(state) {
+        var timeColEl = document.getElementById('scoreboard_time_col');
+        var showSeed = (state === "PreRace") && (seedTimeLabel !== "None");
+
+        // Check if at least one lane has a numeric seed time
+        if (showSeed) {
+            var hasAnySeed = false;
+            for (var i = 1; i <= {{ num_lanes }}; i++) {
+                if (laneSeedTimes[i] !== "" && laneSeedTimes[i] !== undefined && !isNaN(laneSeedTimes[i])) {
+                    hasAnySeed = true;
+                    break;
+                }
+            }
+            if (!hasAnySeed) showSeed = false;
+        }
+
+        if (showSeed) {
+            if (timeColEl) {
+                timeColEl.textContent = seedTimeLabel;
+                timeColEl.classList.add('seed-time-italic');
+            }
+            for (var i = 1; i <= {{ num_lanes }}; i++) {
+                var el = document.getElementById('lane_time' + i);
+                if (el) {
+                    el.textContent = formatSeedTime(laneSeedTimes[i]);
+                    el.classList.add('seed-time-italic');
+                }
+            }
+        } else {
+            if (timeColEl) {
+                timeColEl.textContent = 'Time';
+                timeColEl.classList.remove('seed-time-italic');
+            }
+            for (var i = 1; i <= {{ num_lanes }}; i++) {
+                var el = document.getElementById('lane_time' + i);
+                if (el) el.classList.remove('seed-time-italic');
+            }
+        }
     }
 
     var socket = io.connect('http://' + document.domain + ':' + location.port + '/scoreboard');
@@ -697,6 +753,9 @@
                 raceState === "BlankPreRace" || raceState === "TotalBlankPreRace") {
                 onPreRaceEntry(s);
                 eventHeatChanged = true;
+            } else {
+                // Leaving PreRace — clear seed time display
+                updateSeedTimeDisplay(raceState);
             }
 
             // Update display mode for blank states
@@ -810,6 +869,10 @@
 
         if ("show_confetti" in s) {
             showConfetti = s["show_confetti"];
+        }
+
+        if ("seed_time_label" in s) {
+            seedTimeLabel = s["seed_time_label"];
         }
 
         // Evaluate all lanes for time standard qualifications (skip if event/heat just changed with stale times)
