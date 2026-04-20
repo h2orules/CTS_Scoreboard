@@ -33,6 +33,7 @@ settings = {
     'pool_course': 'SCY',
     'show_pr_tags': True,
     'show_confetti': True,
+    'seed_time_label': 'Seed Time',
     'team_home': '',
     'team_home_tag': '',
     'team_guest1': '',
@@ -631,6 +632,7 @@ def send_event_info():
 
     update["show_pr_tags"] = settings.get('show_pr_tags', True)
     update["show_confetti"] = settings.get('show_confetti', True)
+    update["seed_time_label"] = settings.get('seed_time_label', 'Seed Time')
     update["race_state"] = race_fsm.state_name
 
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
@@ -1153,6 +1155,7 @@ def route_settings():
                 ad_url=settings['ad_url'],
                 num_lanes=settings['num_lanes'],
                 pool_course=settings.get('pool_course', 'SCY'),
+                seed_time_label=settings.get('seed_time_label', 'Seed Time'),
                 schedule_loaded=schedule_loaded,
                 schedule_error=schedule_error,
                 schedule_filename=settings.get('schedule_filename', ''),

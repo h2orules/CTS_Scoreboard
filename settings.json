@@ -5,7 +5,9 @@
     "num_lanes": 4,
     "password": "password",
     "pool_course": "SCY",
+    "seed_time_label": "None",
     "serial_port": "/dev/ttyAMA0",
+    "show_confetti": true,
     "show_pr_tags": true,
     "std_desc_overrides": {
         "A": "Midlakes Champs",
