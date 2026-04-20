@@ -862,10 +862,16 @@ def ws_sim_step(d):
         race_fsm.evaluate_update(channel_running, update)
         update['race_state'] = race_fsm.state_name
         socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+        # Re-send event info so names/teams reappear on scoreboard
+        send_event_info()
 
     elif step == 'blank':
+        _sim_running = False
         update['current_event'] = '   '
         update['current_heat'] = '   '
+        for i in range(1, num_lanes + 1):
+            channel_running[i - 1] = False
+            update['lane_running%d' % i] = False
         # Lane 3 still shows clock
         for i in range(1, num_lanes + 1):
             if i == 3:
@@ -887,9 +893,12 @@ def ws_sim_step(d):
         socketio.emit('update_scoreboard', update, namespace='/scoreboard')
 
     elif step == 'total_blank':
+        _sim_running = False
         update['current_event'] = '   '
         update['current_heat'] = '   '
         for i in range(1, num_lanes + 1):
+            channel_running[i - 1] = False
+            update['lane_running%d' % i] = False
             update['lane_time%d' % i] = '        '
             update['lane_place%d' % i] = ' '
 

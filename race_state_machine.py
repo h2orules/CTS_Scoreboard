@@ -49,25 +49,33 @@ TRANSITIONS = [
     ['go_blank', 'Clear', 'Blank'],
     ['go_total_blank', 'Clear', 'TotalBlank'],
 
+    # ClearPreRace -> Blank/TotalBlank when event/heat disappears
+    ['go_blank', 'ClearPreRace', 'Blank'],
+    ['go_total_blank', 'ClearPreRace', 'TotalBlank'],
+
     # Blank transitions
     ['change_event', 'Blank', 'BlankPreRace'],
     ['start_running', 'Blank', 'Running'],
     ['show_lanes', 'Blank', 'PreRace'],
+    ['clear_lanes', 'Blank', 'Clear'],
     ['go_total_blank', 'Blank', 'TotalBlank'],
 
     # BlankPreRace transitions
     ['start_running', 'BlankPreRace', 'Running'],
     ['show_lanes', 'BlankPreRace', 'PreRace'],
+    ['clear_lanes', 'BlankPreRace', 'ClearPreRace'],
 
     # TotalBlank transitions
     ['change_event', 'TotalBlank', 'TotalBlankPreRace'],
     ['go_blank', 'TotalBlank', 'Blank'],
     ['show_lanes', 'TotalBlank', 'PreRace'],
+    ['clear_lanes', 'TotalBlank', 'Clear'],
     ['start_running', 'TotalBlank', 'Running'],
 
     # TotalBlankPreRace transitions
     ['start_running', 'TotalBlankPreRace', 'Running'],
     ['show_lanes', 'TotalBlankPreRace', 'PreRace'],
+    ['clear_lanes', 'TotalBlankPreRace', 'ClearPreRace'],
 
     # Running -> PreRace on event/heat change (unusual but possible)
     ['change_event', 'Running', 'PreRace'],
@@ -246,6 +254,9 @@ class RaceStateMachine:
                 self.trigger('go_blank')
             else:
                 self.trigger('go_total_blank')
+        elif current in (RaceState.Blank, RaceState.BlankPreRace,
+                        RaceState.TotalBlank, RaceState.TotalBlankPreRace) and other_lanes_blank and has_event_heat:
+            self.trigger('clear_lanes')
         elif current in (RaceState.Blank, RaceState.BlankPreRace) and not lane3_has_data and not scores_present:
             self.trigger('go_total_blank')
         elif current in (RaceState.TotalBlank, RaceState.TotalBlankPreRace) and lane3_has_data and other_lanes_blank:
