@@ -21,6 +21,8 @@ class RaceState(enum.Enum):
 TRANSITIONS = [
     # PreRace -> Running when any lane starts running
     ['start_running', 'PreRace', 'Running'],
+    ['go_blank', 'PreRace', 'Blank'],
+    ['go_total_blank', 'PreRace', 'TotalBlank'],
 
     # Running -> Finished when all active running lanes stop
     ['finish', 'Running', 'Finished'],
@@ -196,7 +198,8 @@ class RaceStateMachine:
         current = self.state
         if current in (RaceState.Finished, RaceState.Clear, RaceState.ClearPreRace,
                        RaceState.Blank, RaceState.BlankPreRace,
-                       RaceState.TotalBlank, RaceState.TotalBlankPreRace):
+                       RaceState.TotalBlank, RaceState.TotalBlankPreRace,
+                       RaceState.PreRace):
             self._evaluate_blank_state(channel_running, update, num_lanes)
 
     def _has_nonzero_scores(self):
@@ -238,7 +241,7 @@ class RaceStateMachine:
         current = self.state
         if current == RaceState.Finished and other_lanes_blank and has_event_heat:
             self.trigger('clear_lanes')
-        elif current in (RaceState.Clear, RaceState.ClearPreRace) and other_lanes_blank and not has_event_heat and not scores_present:
+        elif current in (RaceState.Clear, RaceState.ClearPreRace, RaceState.PreRace) and other_lanes_blank and not has_event_heat and not scores_present:
             if lane3_has_data:
                 self.trigger('go_blank')
             else:

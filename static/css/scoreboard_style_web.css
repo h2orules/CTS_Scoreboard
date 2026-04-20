@@ -365,15 +365,29 @@
     transition: opacity 0.5s;
 }
 
+.scoreboard-stack {
+    display: inline-block;
+    position: relative;
+}
+
 .blank-clock {
     font-family: 'Overpass Mono', monospace;
     font-size: 120px;
     color: #000000;
     text-align: center;
-    padding: 60px 0;
-    opacity: 0;
     display: none;
+    opacity: 0;
     transition: opacity 0.5s;
+    background-color: #b7d7e8;
+    box-sizing: border-box;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
 }
 
 .scoreboard_table {
