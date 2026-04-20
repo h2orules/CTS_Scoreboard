@@ -94,6 +94,15 @@
             <button type="button" onclick="changeHeat(1);">Heat ▶</button>
             <button type="button" onclick="socket.emit('next_heat', {});">Next (Sequential)</button>
         </div>
+        <div class="controls" style="top: 50px;">
+            <button type="button" onclick="socket.emit('sim_load_event', {});">Load Test Event</button>
+            <button type="button" onclick="socket.emit('sim_step', {step:'start'});">▶ Start</button>
+            <button type="button" onclick="socket.emit('sim_step', {step:'finish'});">🏁 Finish</button>
+            <button type="button" onclick="socket.emit('sim_step', {step:'clear'});">Clear</button>
+            <button type="button" onclick="socket.emit('sim_step', {step:'blank'});">Blank</button>
+            <button type="button" onclick="socket.emit('sim_step', {step:'total_blank'});">Total Blank</button>
+            <button type="button" onclick="runFullSequence();">▶▶ Full Sequence</button>
+        </div>
         {% endif %}
     </div>
     <div class="scoreboard_disclaimer">Scoreboard is unofficial. See results for official times.</div>
@@ -649,6 +658,25 @@
     function changeHeat(delta) {
         currentHeat = Math.max(1, currentHeat + delta);
         socket.emit('set_event_heat', { event: currentEvent, heat: currentHeat });
+    }
+
+    function runFullSequence() {
+        var steps = [
+            {event: 'sim_load_event', delay: 3000},
+            {event: 'sim_step', data: {step: 'start'}, delay: 5000},
+            {event: 'sim_step', data: {step: 'finish'}, delay: 4000},
+            {event: 'sim_step', data: {step: 'clear'}, delay: 3000},
+            {event: 'sim_step', data: {step: 'blank'}, delay: 3000},
+            {event: 'sim_step', data: {step: 'total_blank'}, delay: 3000},
+        ];
+        var i = 0;
+        function next() {
+            if (i >= steps.length) return;
+            var s = steps[i++];
+            socket.emit(s.event, s.data || {});
+            setTimeout(next, s.delay);
+        }
+        next();
     }
 
     socket.on('update_scoreboard', (new_s) => {

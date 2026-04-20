@@ -681,6 +681,249 @@ def ws_set_event_heat(d):
     race_fsm.notify_event_change()
     send_event_info()
 
+# ---------------------------------------------------------------------------
+# Test simulation handlers
+# ---------------------------------------------------------------------------
+_sim_running = False  # Whether the sim clock is ticking
+
+SIM_LANES = {
+    1: {'name': 'Timmy Splash',  'team': 'HOME', 'age_code': '8B', 'seed': 17.50, 'time': 15.23, 'place': '1'},
+    2: {'name': 'Sally Wave',    'team': 'AWAY', 'age_code': '8G', 'seed': 18.50, 'time': 16.89, 'place': '4'},
+    3: {'name': 'Xander Annika', 'team': 'HOME', 'age_code': '7B', 'seed': 17.22, 'time': 17.54, 'place': '5'},
+    4: {'name': 'Bobby Kick',    'team': 'HOME', 'age_code': '8B', 'seed': 19.00, 'time': 17.55, 'place': '5'},
+    5: {'name': 'Lily Stroke',   'team': 'AWAY', 'age_code': '8G', 'seed': 17.20, 'time': 15.87, 'place': '2'},
+    6: {'name': 'Max Dive',      'team': 'HOME', 'age_code': '8B', 'seed': 16.50, 'time': 18.50, 'place': '6'},
+}
+
+def _format_lane_time(seconds):
+    """Format seconds as ' M:SS.HH' (8-char CTS-style time string)."""
+    m = int(seconds) // 60
+    s = seconds - m * 60
+    if m > 0:
+        return ' %d:%05.2f' % (m, s)
+    else:
+        return '   %05.2f' % s
+
+@socketio.on('sim_load_event', namespace='/scoreboard')
+def ws_sim_load_event(d=None):
+    """Populate event_info, time_standards, and records with test data."""
+    global last_event_sent, time_standards, swim_record_sets
+
+    from hytek_st2_parser import St2File, St2Header, St2Event, CourseStandards, QualifyingTime, TimeStandard
+    from hytek_rec_parser import RecFile, RecHeader, SwimRecord
+    from datetime import date
+
+    ev_num = 99
+    heat_num = 1
+
+    # --- Populate event_info ---
+    event_info.event_names[ev_num] = "Mixed 8 & Under 25 Yard Freestyle"
+    event_info.events[(ev_num, heat_num)] = {}
+    event_info.teams[(ev_num, heat_num)] = {}
+    event_info.age_codes[(ev_num, heat_num)] = {}
+    event_info.seed_times[(ev_num, heat_num)] = {}
+
+    for lane, data in SIM_LANES.items():
+        event_info.events[(ev_num, heat_num)][lane] = data['name']
+        event_info.teams[(ev_num, heat_num)][lane] = data['team']
+        event_info.age_codes[(ev_num, heat_num)][lane] = data['age_code']
+        event_info.seed_times[(ev_num, heat_num)][lane] = data['seed']
+
+    # Lane 3 is clock channel — no swimmer
+    #for d_key in (event_info.events, event_info.teams, event_info.age_codes):
+    #    d_key.setdefault((ev_num, heat_num), {})[3] = ""
+    #event_info.seed_times.setdefault((ev_num, heat_num), {})[3] = None
+
+    event_info.event_meta[ev_num] = {
+        'stroke_code': 1,
+        'distance': 25,
+        'relay': False,
+        'age_min': None,
+        'age_max': 8,
+        'sex_codes': [1, 2],
+        'is_mixed': True,
+        'gender_age': GenderAge.BOY_S,
+    }
+    event_info.has_names = True
+
+    # --- Fake time standards: Boys A=16.00 B=18.00, Girls A=17.00 B=19.00 ---
+    std_a = TimeStandard(tag='A', description='A Time')
+    std_b = TimeStandard(tag='B', description='B Time')
+
+    def _make_st2_event(sex_code, a_secs, b_secs):
+        return St2Event(
+            event_number=0, sex='Male' if sex_code == 1 else 'Female',
+            sex_code=sex_code, stroke='Freestyle', stroke_code=1,
+            distance=25, age_group_min=None, age_group_max=8,
+            event_type='Individual',
+            courses=[CourseStandards(course='SCY', times=[
+                QualifyingTime(standard=std_a, time_seconds=a_secs, time_formatted=_format_lane_time(a_secs).strip()),
+                QualifyingTime(standard=std_b, time_seconds=b_secs, time_formatted=_format_lane_time(b_secs).strip()),
+            ])]
+        )
+
+    time_standards = St2File(
+        header=St2Header(record_count=2, export_date=date.today(), standards=[std_a, std_b]),
+        events=[_make_st2_event(1, 16.00, 18.00), _make_st2_event(2, 17.00, 19.00)]
+    )
+
+    # --- Fake records: Boys 15.50, Girls 16.00 ---
+    def _make_record(sex_code, secs, swimmer, team, year):
+        return SwimRecord(
+            sex='Male' if sex_code == 1 else 'Female', sex_code=sex_code,
+            stroke='Freestyle', stroke_code=1, distance=25,
+            age_group_min=None, age_group_max=8, event_type='Individual',
+            swimmer_name=swimmer, team=team, relay_names=None,
+            record_date=date(year, 1, 1), time_seconds=secs,
+            time_formatted=_format_lane_time(secs).strip(),
+            record_team=team, entry_type='A20'
+        )
+
+    swim_record_sets = [{
+        'rec_file': RecFile(
+            header=RecHeader(course='SCY', course_code='Y', record_set_name='Pool Records',
+                             software_version='SIM', record_count=2, export_date=date.today()),
+            records=[
+                _make_record(1, 15.50, 'Jimmy Fast', 'TEAM', 2024),
+                _make_record(2, 16.00, 'Sally Swift', 'TEAM', 2023),
+            ]
+        ),
+        'filename': 'sim_pool_records.rec',
+        'team_tag': 'ALL',
+        'set_id': 999,
+    }]
+
+    # --- Set scores ---
+    team_scores['score_home'] = ' 142'
+    team_scores['score_guest1'] = ' 138'
+    team_scores['score_guest2'] = ''
+    team_scores['score_guest3'] = ''
+
+    # --- Trigger PreRace ---
+    last_event_sent = (ev_num, heat_num)
+    race_fsm.notify_event_change()
+    send_event_info()
+    send_scores_info()
+
+
+@socketio.on('sim_step', namespace='/scoreboard')
+def ws_sim_step(d):
+    """Advance the simulation through race phases."""
+    global channel_running, running_time, _sim_running
+
+    step = d.get('step', '') if d else ''
+    update = {}
+    num_lanes = settings.get('num_lanes', 6)
+
+    if step == 'start':
+        _sim_running = True
+        running_time = ' 0:00.00'
+        update['running_time'] = running_time
+        update['current_event'] = str(last_event_sent[0])
+        update['current_heat'] = str(last_event_sent[1])
+        for i in range(1, num_lanes + 1):
+            channel_running[i - 1] = True
+            update['lane_running%d' % i] = True
+            update['lane_time%d' % i] = running_time
+            update['lane_place%d' % i] = ' '
+
+        race_fsm.evaluate_update(channel_running, update)
+        update['race_state'] = race_fsm.state_name
+        socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+
+        # Start background clock ticker
+        socketio.start_background_task(_sim_clock_tick)
+
+    elif step == 'finish':
+        _sim_running = False
+        update['current_event'] = str(last_event_sent[0])
+        update['current_heat'] = str(last_event_sent[1])
+        for i in range(1, num_lanes + 1):
+            channel_running[i - 1] = False
+            update['lane_running%d' % i] = False
+            if i in SIM_LANES:
+                update['lane_time%d' % i] = _format_lane_time(SIM_LANES[i]['time'])
+                update['lane_place%d' % i] = SIM_LANES[i]['place']
+            else:
+                update['lane_time%d' % i] = '        '
+                update['lane_place%d' % i] = ' '
+
+        race_fsm.evaluate_update(channel_running, update)
+        update['race_state'] = race_fsm.state_name
+        socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+
+    elif step == 'clear':
+        update['current_event'] = str(last_event_sent[0])
+        update['current_heat'] = str(last_event_sent[1])
+        for i in range(1, num_lanes + 1):
+            update['lane_time%d' % i] = '        '
+            update['lane_place%d' % i] = ' '
+
+        race_fsm.evaluate_update(channel_running, update)
+        update['race_state'] = race_fsm.state_name
+        socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+
+    elif step == 'blank':
+        update['current_event'] = '   '
+        update['current_heat'] = '   '
+        # Lane 3 still shows clock
+        for i in range(1, num_lanes + 1):
+            if i == 3:
+                update['lane_time%d' % i] = '    5:22'
+            else:
+                update['lane_time%d' % i] = '        '
+            update['lane_place%d' % i] = ' '
+
+        # Clear scores
+        for key in team_scores:
+            team_scores[key] = ''
+        update['score_home'] = ''
+        update['score_guest1'] = ''
+        update['score_guest2'] = ''
+        update['score_guest3'] = ''
+
+        race_fsm.evaluate_update(channel_running, update)
+        update['race_state'] = race_fsm.state_name
+        socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+
+    elif step == 'total_blank':
+        update['current_event'] = '   '
+        update['current_heat'] = '   '
+        for i in range(1, num_lanes + 1):
+            update['lane_time%d' % i] = '        '
+            update['lane_place%d' % i] = ' '
+
+        for key in team_scores:
+            team_scores[key] = ''
+        update['score_home'] = ''
+        update['score_guest1'] = ''
+        update['score_guest2'] = ''
+        update['score_guest3'] = ''
+
+        race_fsm.evaluate_update(channel_running, update)
+        update['race_state'] = race_fsm.state_name
+        socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+
+
+def _sim_clock_tick():
+    """Background task: increment running_time and emit to running lanes."""
+    global running_time
+    t = 0.0
+    while _sim_running:
+        socketio.sleep(0.1)
+        if not _sim_running:
+            break
+        t += 0.1
+        m = int(t) // 60
+        s = t - m * 60
+        running_time = ' %d:%05.2f' % (m, s)
+        tick_update = {'running_time': running_time}
+        num_lanes = settings.get('num_lanes', 6)
+        for i in range(1, num_lanes + 1):
+            if channel_running[i - 1]:
+                tick_update['lane_time%d' % i] = running_time
+        socketio.emit('update_scoreboard', tick_update, namespace='/scoreboard')
+
         
 # Scoreboard Templates
 @app.route('/overlay/<name>')
