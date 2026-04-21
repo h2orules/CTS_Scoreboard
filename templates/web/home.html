@@ -438,11 +438,10 @@
                     if (rr.qualifiers) colQual = true;
                 }
             }
-            var recCols = ["auto", "auto"]; // subheader, time
+            var recCols = ["auto", "auto", "auto"]; // set-subheader, qual-subheader, time
             if (colYear) recCols.push("auto");
             if (colTeam) recCols.push("auto");
             if (colName) recCols.push("auto");
-            if (colQual) recCols.push("auto");
             // Single grid for all sets so columns align across sets
             var grid = document.createElement("div");
             grid.className = "records-grid";
@@ -457,7 +456,7 @@
                     divider.className = "grid-divider";
                     grid.appendChild(divider);
                 }
-                buildRecordsRows(grid, setData, showSetSubheader, colYear, colTeam, colName, colQual);
+                buildRecordsRows(grid, setData, showSetSubheader, colYear, colTeam, colName);
                 firstSetRendered = true;
             }
             container.appendChild(recDiv);
@@ -532,11 +531,11 @@
     }
 
     // Append one record set's rows into a shared records grid
-    function buildRecordsRows(grid, setData, showSubheader, colYear, colTeam, colName, colQual) {
+    function buildRecordsRows(grid, setData, showSubheader, colYear, colTeam, colName) {
         var recList = setData.records;
         var isTeamSpecific = setData.set_team_tag && setData.set_team_tag !== 'ALL';
 
-        // Build subheader label if shown
+        // Build set subheader label if shown
         var showThisSubheader = showSubheader && setData.set_name;
         var subLabel = "";
         if (showThisSubheader) {
@@ -546,16 +545,31 @@
             }
         }
 
+        // Track which rows are first-of-qualifier-group so we render the
+        // qualifier as a sub-subheader only on that row.
+        var lastQual = null;
+
         for (var r = 0; r < recList.length; r++) {
             var rec = recList[r];
+            var thisQual = rec.qualifiers || "";
+            var isQualFirst = (thisQual !== lastQual);
+            lastQual = thisQual;
 
-            // Column 1: subheader on first row of set (when shown), else empty
-            var subCell = document.createElement("div");
+            // Column 1: set subheader on first row of set (when shown), else empty
+            var setSubCell = document.createElement("div");
             if (r === 0 && showThisSubheader) {
-                subCell.className = "grid-subheader";
-                subCell.textContent = subLabel;
+                setSubCell.className = "grid-subheader";
+                setSubCell.textContent = subLabel;
             }
-            grid.appendChild(subCell);
+            grid.appendChild(setSubCell);
+
+            // Column 2: qualifier sub-subheader on first row of each qualifier group
+            var qualSubCell = document.createElement("div");
+            if (isQualFirst && thisQual) {
+                qualSubCell.className = "grid-subheader";
+                qualSubCell.textContent = thisQual;
+            }
+            grid.appendChild(qualSubCell);
 
             var timeSpan = document.createElement("div");
             timeSpan.className = "rec_time " + rec.color_class;
@@ -582,13 +596,6 @@
                 nameSpan.textContent = rec.relay_names || rec.swimmer_name || "";
                 grid.appendChild(nameSpan);
             }
-
-            if (colQual) {
-                var qualSpan = document.createElement("div");
-                qualSpan.className = "rec_qualifiers " + rec.color_class;
-                qualSpan.textContent = rec.qualifiers || "";
-                grid.appendChild(qualSpan);
-            }
         }
     }
 
@@ -603,6 +610,20 @@
             var tagEl = document.getElementById("lane_qt_tag" + i);
             if (tagEl) tagEl.textContent = "";
         }
+    }
+
+    // Adjust .score_value min-width based on longest displayed score so 4+ digit scores don't get clipped
+    function updateScoreWidths() {
+        var scoresEl = document.querySelector('.content_scores');
+        if (!scoresEl) return;
+        var maxLen = 3;
+        scoresEl.querySelectorAll('.score_value').forEach(function (el) {
+            var t = (el.textContent || '').trim();
+            if (t.length > maxLen) maxLen = t.length;
+        });
+        scoresEl.querySelectorAll('.score_value').forEach(function (el) {
+            el.style.minWidth = maxLen + 'ch';
+        });
     }
 
     // Show/hide scoreboard elements based on blank states
@@ -852,6 +873,9 @@
                         val = (val && val.trim() !== "" && val.trim() !== "0") ? val.trim() : "0";
                     }
                     el.innerHTML = val;
+                    if (k.startsWith("score_")) {
+                        updateScoreWidths();
+                    }
                 }
             }
 
