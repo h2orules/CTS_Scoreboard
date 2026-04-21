@@ -573,8 +573,8 @@ table.scoreboard_table th {
 }
 
 .scoreboard_time_col {
-    width: 200px !important;
-    max-width: 200px !important;
+    width: 250px !important;
+    max-width: 250px !important;
 }
 
 .background {
