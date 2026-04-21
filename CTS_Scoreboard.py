@@ -781,19 +781,45 @@ def ws_sim_load_event(d=None):
             record_team=team, entry_type='A20'
         )
 
-    swim_record_sets = [{
-        'rec_file': RecFile(
-            header=RecHeader(course='SCY', course_code='Y', record_set_name='Pool Records',
-                             software_version='SIM', record_count=2, export_date=date.today()),
-            records=[
-                _make_record(1, 15.50, 'Jimmy Fast', 'TEAM', 2024),
-                _make_record(2, 16.00, 'Sally Swift', 'TEAM', 2023),
-            ]
-        ),
-        'filename': 'sim_pool_records.rec',
-        'team_tag': 'ALL',
-        'set_id': 999,
-    }]
+    swim_record_sets = [
+        {
+            'rec_file': RecFile(
+                header=RecHeader(course='SCY', course_code='Y', record_set_name='Midlakes Records',
+                                 software_version='SIM', record_count=2, export_date=date.today()),
+                records=[
+                    _make_record(1, 15.50, 'Jimmy Fast', 'MIDL', 2024),
+                    _make_record(2, 16.00, 'Sally Swift', 'MIDL', 2023),
+                ]
+            ),
+            'filename': 'sim_midlakes_records.rec',
+            'team_tag': 'ALL',
+            'set_id': 999,
+        },
+        {
+            'rec_file': RecFile(
+                header=RecHeader(course='SCY', course_code='Y', record_set_name='Home Team',
+                                 software_version='SIM', record_count=2, export_date=date.today()),
+                records=[
+                    _make_record(1, 15.75, 'Henry Home', 'HOME', 2022),
+                ]
+            ),
+            'filename': 'sim_home_records.rec',
+            'team_tag': 'HOME',
+            'set_id': 1000,
+        },
+        {
+            'rec_file': RecFile(
+                header=RecHeader(course='SCY', course_code='Y', record_set_name='Away Team',
+                                 software_version='SIM', record_count=2, export_date=date.today()),
+                records=[
+                    _make_record(2, 16.40, 'Amy Away', 'AWAY', 2024),
+                ]
+            ),
+            'filename': 'sim_away_records.rec',
+            'team_tag': 'AWAY',
+            'set_id': 1001,
+        },
+    ]
 
     # --- Set scores ---
     team_scores['score_home'] = ' 142'
