@@ -5,7 +5,7 @@
     "num_lanes": 6,
     "password": "password",
     "pool_course": "SCY",
-    "seed_time_label": "None",
+    "seed_time_label": "Entry Time",
     "serial_port": "/dev/ttyAMA0",
     "show_confetti": true,
     "show_pr_tags": true,

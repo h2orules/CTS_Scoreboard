@@ -697,14 +697,27 @@ SIM_LANES = {
     6: {'name': 'Max Dive',      'team': 'HOME', 'age_code': '8B', 'seed': 16.50, 'time': 18.50, 'place': '6'},
 }
 
-def _format_lane_time(seconds):
-    """Format seconds as ' M:SS.HH' (8-char CTS-style time string)."""
+def _format_lane_time(seconds, final=True):
+    """Format seconds CTS-style (8 chars, right-justified).
+
+    CTS behaviors reproduced here:
+    - Minutes are never zero-padded (shown as space when <10).
+    - The tens-of-seconds digit is not zero-padded (space when seconds<10).
+    - The ones-of-seconds digit is always shown.
+    - While the race is running CTS emits only one decimal digit (tenths);
+      the hundredths digit appears only when the time is final.
+    """
     m = int(seconds) // 60
     s = seconds - m * 60
-    if m > 0:
-        return ' %d:%05.2f' % (m, s)
+    if final:
+        secs_str = '%5.2f' % s   # e.g. '15.87' or ' 5.23'
     else:
-        return '   %05.2f' % s
+        secs_str = '%4.1f' % s   # e.g. '15.8' or ' 5.2'
+    if m > 0:
+        out = '%d:%s' % (m, secs_str)
+    else:
+        out = secs_str
+    return out.rjust(8)
 
 @socketio.on('sim_load_event', namespace='/scoreboard')
 def ws_sim_load_event(d=None):
@@ -848,7 +861,7 @@ def ws_sim_step(d):
 
     if step == 'start':
         _sim_running = True
-        running_time = ' 0:00.00'
+        running_time = _format_lane_time(0.0, final=False)
         update['running_time'] = running_time
         update['current_event'] = str(last_event_sent[0])
         update['current_heat'] = str(last_event_sent[1])
@@ -955,9 +968,7 @@ def _sim_clock_tick():
         if not _sim_running:
             break
         t += 0.1
-        m = int(t) // 60
-        s = t - m * 60
-        running_time = ' %d:%05.2f' % (m, s)
+        running_time = _format_lane_time(t, final=False)
         tick_update = {'running_time': running_time}
         num_lanes = settings.get('num_lanes', 6)
         for i in range(1, num_lanes + 1):
