@@ -1,4 +1,5 @@
-html, body {
+html,
+body {
     height: 100%;
     margin: 0;
 }
@@ -14,8 +15,15 @@ html, body {
     z-index: 100;
 }
 
+.scoreboard_group {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: fit-content;
+    max-width: 100%;
+}
+
 .content_title_block {
-    min-width: 1140px;
     margin-bottom: 25px;
     text-align: center;
 }
@@ -41,7 +49,7 @@ html, body {
     color: #333333;
     font-size: 20px;
     background-color: #d8d8d8;
-    padding: 0 10px;
+    padding: 0;
     text-align: left;
     white-space: nowrap;
 }
@@ -198,18 +206,28 @@ html, body {
 .standards-records-container {
     display: flex;
     flex-direction: row;
+    justify-content: center;
     gap: 3ch;
+    padding: 0 8px;
+    box-sizing: border-box;
+    width: 100%;
+    overflow: hidden;
 }
 
 .standards-column,
 .records-column {
-    flex: 1;
+    flex: 0 1 auto;
     min-width: 0;
+    overflow: hidden;
 }
 
 .records-column {
     border-left: 1px solid #bbb;
     padding-left: 1ch;
+}
+
+.standards-column {
+    padding-right: 1ch;
 }
 
 .standards-grid,
@@ -218,6 +236,7 @@ html, body {
     column-gap: 1ch;
     row-gap: 0;
     align-items: baseline;
+    justify-content: start;
 }
 
 .standards-grid {
@@ -233,6 +252,9 @@ html, body {
     font-size: 20px;
     padding-right: 1ch;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
 }
 
 .grid-divider {
@@ -252,6 +274,14 @@ html, body {
 .qt_qualifiers {
     text-decoration: none;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.rec_name,
+.qt_desc {
+    max-width: 24ch;
 }
 
 .rec_time,
