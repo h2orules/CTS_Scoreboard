@@ -250,7 +250,6 @@ body {
 .grid-subheader {
     font-style: italic;
     font-size: 20px;
-    padding-right: 1ch;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -259,6 +258,10 @@ body {
 
 .grid-divider {
     grid-column: 1 / -1;
+    height: 4px;
+}
+
+.records-set-divider {
     height: 4px;
 }
 
@@ -273,6 +276,11 @@ body {
 .qt_qualifiers {
     text-decoration: none;
     white-space: nowrap;
+}
+
+.rec_name,
+.qt_desc,
+.qt_tag {
     overflow: hidden;
     text-overflow: ellipsis;
     min-width: 0;
