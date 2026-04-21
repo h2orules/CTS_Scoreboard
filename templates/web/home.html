@@ -84,7 +84,7 @@
             </div>
             <div class="content_scoreboard_ad" id="content_scoreboard_ad">
                 {% if ad_url and (ad_url != '') %}
-                <img src="{{url_for('static', filename='ad/'+ad_url)}}" width="100%" />
+                <img src="{{url_for('static', filename='ad/'+ad_url)}}" />
                 {% endif %}
             </div>
         </div>
@@ -366,8 +366,12 @@
             maxQtTagLen = Math.max(maxQtTagLen, qtThresholds[q].tag.length);
         }
         var hasAnyRecords = false;
+        var recSetsWithData = 0;
         for (var rs = 0; rs < recSetList.length; rs++) {
-            if (recSetList[rs].records.length > 0) { hasAnyRecords = true; break; }
+            if (recSetList[rs].records.length > 0) {
+                hasAnyRecords = true;
+                recSetsWithData++;
+            }
         }
         if (hasAnyRecords) {
             // Combined tag: "{tag} REC" or just "REC"
@@ -401,6 +405,10 @@
         if (qtGroups.length > 0) {
             var stdDiv = document.createElement("div");
             stdDiv.className = "standards-column";
+            var stdHeader = document.createElement("div");
+            stdHeader.className = "rec_header";
+            stdHeader.textContent = "Time Standards";
+            stdDiv.appendChild(stdHeader);
             buildStandardsRows(stdDiv, qtGroups);
             container.appendChild(stdDiv);
         }
@@ -408,21 +416,47 @@
         if (hasAnyRecords) {
             var recDiv = document.createElement("div");
             recDiv.className = "records-column";
-            // "Records" header
-            var header = document.createElement("div");
-            header.className = "rec_header";
-            header.textContent = "Records";
-            recDiv.appendChild(header);
-            // Render each record set
+            var recHeader = document.createElement("div");
+            recHeader.className = "rec_header";
+            recHeader.textContent = "Records";
+            recDiv.appendChild(recHeader);
+            var showSetSubheader = (recSetsWithData > 1);
+            // Compute column presence across ALL sets so the shared grid has
+            // only the needed columns.
+            var colYear = false, colTeam = false, colName = false, colQual = false;
+            for (var rs = 0; rs < recSetList.length; rs++) {
+                var sd = recSetList[rs];
+                if (sd.records.length === 0) continue;
+                var tSpec = sd.set_team_tag && sd.set_team_tag !== 'ALL';
+                for (var r2 = 0; r2 < sd.records.length; r2++) {
+                    var rr = sd.records[r2];
+                    if (rr.record_year) colYear = true;
+                    if (!tSpec && rr.record_team) colTeam = true;
+                    if (rr.relay_names || rr.swimmer_name) colName = true;
+                    if (rr.qualifiers) colQual = true;
+                }
+            }
+            var recCols = ["auto", "auto"]; // subheader, time
+            if (colYear) recCols.push("auto");
+            if (colTeam) recCols.push("auto");
+            if (colName) recCols.push("auto");
+            if (colQual) recCols.push("auto");
+            // Single grid for all sets so columns align across sets
+            var grid = document.createElement("div");
+            grid.className = "records-grid";
+            grid.style.gridTemplateColumns = recCols.join(" ");
+            recDiv.appendChild(grid);
+            var firstSetRendered = false;
             for (var rs = 0; rs < recSetList.length; rs++) {
                 var setData = recSetList[rs];
                 if (setData.records.length === 0) continue;
-                if (rs > 0) {
+                if (firstSetRendered) {
                     var divider = document.createElement("div");
-                    divider.className = "rec_set_divider";
-                    recDiv.appendChild(divider);
+                    divider.className = "grid-divider";
+                    grid.appendChild(divider);
                 }
-                buildRecordsRows(recDiv, setData);
+                buildRecordsRows(grid, setData, showSetSubheader, colYear, colTeam, colName, colQual);
+                firstSetRendered = true;
             }
             container.appendChild(recDiv);
         }
@@ -432,149 +466,127 @@
         qtBody.appendChild(tr);
     }
 
-    // Build standards rows DOM inside a container div
+    // Build standards grid rows inside a column container div
     function buildStandardsRows(container, qtGroups) {
-        var header = document.createElement("div");
-        header.className = "rec_header";
-        header.textContent = "Time Standards";
-        container.appendChild(header);
-
-        // Compute max widths for alignment across all items
-        var maxTimeLen = 0, maxTagDispLen = 0, maxDescLen = 0;
+        // Determine columns: time, tag, desc (desc only if any item has one)
+        var hasDesc = false;
         for (var g = 0; g < qtGroups.length; g++) {
-            var items = qtGroups[g].items;
-            for (var i = 0; i < items.length; i++) {
-                maxTimeLen = Math.max(maxTimeLen, items[i].time.length);
-                maxTagDispLen = Math.max(maxTagDispLen, items[i].tag.length);
-                var desc = (items[i].description && items[i].description !== items[i].tag) ? items[i].description : "";
-                maxDescLen = Math.max(maxDescLen, desc.length);
+            for (var i = 0; i < qtGroups[g].items.length; i++) {
+                var it = qtGroups[g].items[i];
+                if (it.description && it.description !== it.tag) { hasDesc = true; break; }
             }
+            if (hasDesc) break;
         }
+
+        var grid = document.createElement("div");
+        grid.className = "standards-grid";
+        // Columns: [subheader] [time] [tag] [desc?]
+        grid.style.gridTemplateColumns = hasDesc
+            ? "auto auto auto auto"
+            : "auto auto auto";
+        container.appendChild(grid);
+
+        var showGroupSubheader = (qtGroups.length > 1);
 
         for (var g = 0; g < qtGroups.length; g++) {
             var group = qtGroups[g];
 
-            // Subheader for qualifier group (only when multiple groups)
-            if (qtGroups.length > 1 && group.qualifiers) {
-                if (g > 0) {
-                    var divider = document.createElement("div");
-                    divider.className = "rec_set_divider";
-                    container.appendChild(divider);
-                }
-                var subHeader = document.createElement("div");
-                subHeader.className = "rec_subheader";
-                subHeader.textContent = group.qualifiers;
-                container.appendChild(subHeader);
+            if (g > 0) {
+                var divider = document.createElement("div");
+                divider.className = "grid-divider";
+                grid.appendChild(divider);
             }
 
             for (var i = 0; i < group.items.length; i++) {
                 var qt = group.items[i];
-                var row = document.createElement("div");
 
-                var timeSpan = document.createElement("span");
-                timeSpan.className = "qt_time";
-                timeSpan.textContent = qt.time;
-                timeSpan.style.minWidth = maxTimeLen + "ch";
-                timeSpan.classList.add(qt.color_class);
-                row.appendChild(timeSpan);
-
-                var tagSpan = document.createElement("span");
-                tagSpan.className = "qt_tag";
-                tagSpan.textContent = qt.tag;
-                tagSpan.style.minWidth = maxTagDispLen + "ch";
-                tagSpan.classList.add(qt.color_class);
-                row.appendChild(tagSpan);
-
-                var desc = (qt.description && qt.description !== qt.tag) ? qt.description : "";
-                if (maxDescLen > 0) {
-                    var descSpan = document.createElement("span");
-                    descSpan.className = "qt_desc";
-                    descSpan.textContent = desc;
-                    descSpan.style.minWidth = maxDescLen + "ch";
-                    descSpan.classList.add(qt.color_class);
-                    row.appendChild(descSpan);
+                // Column 1: subheader on first row of group (when shown), else empty
+                var subCell = document.createElement("div");
+                if (i === 0 && showGroupSubheader && group.qualifiers) {
+                    subCell.className = "grid-subheader";
+                    subCell.textContent = group.qualifiers;
                 }
+                grid.appendChild(subCell);
 
-                container.appendChild(row);
+                var timeSpan = document.createElement("div");
+                timeSpan.className = "qt_time " + qt.color_class;
+                timeSpan.textContent = qt.time;
+                grid.appendChild(timeSpan);
+
+                var tagSpan = document.createElement("div");
+                tagSpan.className = "qt_tag " + qt.color_class;
+                tagSpan.textContent = qt.tag;
+                grid.appendChild(tagSpan);
+
+                if (hasDesc) {
+                    var descSpan = document.createElement("div");
+                    descSpan.className = "qt_desc " + qt.color_class;
+                    var desc = (qt.description && qt.description !== qt.tag) ? qt.description : "";
+                    descSpan.textContent = desc;
+                    grid.appendChild(descSpan);
+                }
             }
         }
     }
 
-    // Build records rows for one record set inside the records column
-    function buildRecordsRows(container, setData) {
-        // Sub-header with set name (and team tag if team-specific)
-        if (setData.set_name) {
-            var subHeader = document.createElement("div");
-            subHeader.className = "rec_subheader";
-            var label = setData.set_name;
-            if (setData.set_team_tag && setData.set_team_tag !== 'ALL') {
-                label += " (" + setData.set_team_tag + ")";
-            }
-            subHeader.textContent = label;
-            container.appendChild(subHeader);
-        }
-
+    // Append one record set's rows into a shared records grid
+    function buildRecordsRows(grid, setData, showSubheader, colYear, colTeam, colName, colQual) {
         var recList = setData.records;
-
-        // Compute max widths for alignment
         var isTeamSpecific = setData.set_team_tag && setData.set_team_tag !== 'ALL';
-        var maxTimeLen = 0, maxNameLen = 0, maxTeamLen = 0;
-        for (var r = 0; r < recList.length; r++) {
-            maxTimeLen = Math.max(maxTimeLen, recList[r].time.length);
-            var name = recList[r].relay_names || recList[r].swimmer_name || "";
-            maxNameLen = Math.min(25, Math.max(maxNameLen, name.length));
-            if (!isTeamSpecific) {
-                maxTeamLen = Math.max(maxTeamLen, (recList[r].record_team || "").length);
+
+        // Build subheader label if shown
+        var showThisSubheader = showSubheader && setData.set_name;
+        var subLabel = "";
+        if (showThisSubheader) {
+            subLabel = setData.set_name;
+            if (setData.set_team_tag && setData.set_team_tag !== 'ALL') {
+                subLabel += " (" + setData.set_team_tag + ")";
             }
         }
 
         for (var r = 0; r < recList.length; r++) {
             var rec = recList[r];
-            var row = document.createElement("div");
 
-            var timeSpan = document.createElement("span");
-            timeSpan.className = "rec_time";
+            // Column 1: subheader on first row of set (when shown), else empty
+            var subCell = document.createElement("div");
+            if (r === 0 && showThisSubheader) {
+                subCell.className = "grid-subheader";
+                subCell.textContent = subLabel;
+            }
+            grid.appendChild(subCell);
+
+            var timeSpan = document.createElement("div");
+            timeSpan.className = "rec_time " + rec.color_class;
             timeSpan.textContent = rec.time;
-            timeSpan.style.minWidth = maxTimeLen + "c";
-            timeSpan.classList.add(rec.color_class);
-            row.appendChild(timeSpan);
+            grid.appendChild(timeSpan);
 
-            if (rec.record_year) {
-                var yearSpan = document.createElement("span");
-                yearSpan.className = "rec_year";
-                yearSpan.textContent = rec.record_year;
-                yearSpan.classList.add(rec.color_class);
-                row.appendChild(yearSpan);
+            if (colYear) {
+                var yearSpan = document.createElement("div");
+                yearSpan.className = "rec_year " + rec.color_class;
+                yearSpan.textContent = rec.record_year || "";
+                grid.appendChild(yearSpan);
             }
 
-            if (!isTeamSpecific && maxTeamLen > 0) {
-                var teamSpan = document.createElement("span");
-                teamSpan.className = "rec_team";
-                teamSpan.textContent = rec.record_team || "";
-                teamSpan.style.minWidth = maxTeamLen + "c";
-                teamSpan.classList.add(rec.color_class);
-                row.appendChild(teamSpan);
+            if (colTeam) {
+                var teamSpan = document.createElement("div");
+                teamSpan.className = "rec_team " + rec.color_class;
+                teamSpan.textContent = isTeamSpecific ? "" : (rec.record_team || "");
+                grid.appendChild(teamSpan);
             }
 
-            var name = rec.relay_names || rec.swimmer_name || "";
-            if (maxNameLen > 0) {
-                var nameSpan = document.createElement("span");
-                nameSpan.className = "rec_name";
-                nameSpan.textContent = name;
-                nameSpan.style.minWidth = Math.min(maxNameLen, 20) + "c";
-                nameSpan.classList.add(rec.color_class);
-                row.appendChild(nameSpan);
+            if (colName) {
+                var nameSpan = document.createElement("div");
+                nameSpan.className = "rec_name " + rec.color_class;
+                nameSpan.textContent = rec.relay_names || rec.swimmer_name || "";
+                grid.appendChild(nameSpan);
             }
 
-            if (rec.qualifiers) {
-                var qualSpan = document.createElement("span");
-                qualSpan.className = "rec_qualifiers";
-                qualSpan.textContent = rec.qualifiers;
-                qualSpan.classList.add(rec.color_class);
-                row.appendChild(qualSpan);
+            if (colQual) {
+                var qualSpan = document.createElement("div");
+                qualSpan.className = "rec_qualifiers " + rec.color_class;
+                qualSpan.textContent = rec.qualifiers || "";
+                grid.appendChild(qualSpan);
             }
-
-            container.appendChild(row);
         }
     }
 
