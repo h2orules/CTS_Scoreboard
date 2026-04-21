@@ -423,40 +423,16 @@
             recHeader.textContent = "Records";
             recDiv.appendChild(recHeader);
             var showSetSubheader = (recSetsWithData > 1);
-            // Compute column presence across ALL sets so the shared grid has
-            // only the needed columns.
-            var colYear = false, colTeam = false, colName = false, colQual = false;
-            for (var rs = 0; rs < recSetList.length; rs++) {
-                var sd = recSetList[rs];
-                if (sd.records.length === 0) continue;
-                var tSpec = sd.set_team_tag && sd.set_team_tag !== 'ALL';
-                for (var r2 = 0; r2 < sd.records.length; r2++) {
-                    var rr = sd.records[r2];
-                    if (rr.record_year) colYear = true;
-                    if (!tSpec && rr.record_team) colTeam = true;
-                    if (rr.relay_names || rr.swimmer_name) colName = true;
-                    if (rr.qualifiers) colQual = true;
-                }
-            }
-            var recCols = ["auto", "auto", "auto"]; // set-subheader, qual-subheader, time
-            if (colYear) recCols.push("auto");
-            if (colTeam) recCols.push("auto");
-            if (colName) recCols.push("auto");
-            // Single grid for all sets so columns align across sets
-            var grid = document.createElement("div");
-            grid.className = "records-grid";
-            grid.style.gridTemplateColumns = recCols.join(" ");
-            recDiv.appendChild(grid);
             var firstSetRendered = false;
             for (var rs = 0; rs < recSetList.length; rs++) {
                 var setData = recSetList[rs];
                 if (setData.records.length === 0) continue;
                 if (firstSetRendered) {
                     var divider = document.createElement("div");
-                    divider.className = "grid-divider";
-                    grid.appendChild(divider);
+                    divider.className = "records-set-divider";
+                    recDiv.appendChild(divider);
                 }
-                buildRecordsRows(grid, setData, showSetSubheader, colYear, colTeam, colName);
+                buildRecordsRows(recDiv, setData, showSetSubheader);
                 firstSetRendered = true;
             }
             container.appendChild(recDiv);
@@ -481,13 +457,17 @@
 
         var grid = document.createElement("div");
         grid.className = "standards-grid";
-        // Columns: [subheader] [time] [tag] [desc?]
-        grid.style.gridTemplateColumns = hasDesc
-            ? "auto auto auto auto"
-            : "auto auto auto";
-        container.appendChild(grid);
-
         var showGroupSubheader = (qtGroups.length > 1);
+        // Columns: [subheader?] [time] [tag] [desc?]
+        var stdCols = [];
+        if (showGroupSubheader) stdCols.push("auto");
+        stdCols.push("auto"); // time
+        stdCols.push("auto"); // tag
+        if (hasDesc) stdCols.push("minmax(0, auto)");
+        // Ensure last column can shrink even when desc is absent
+        if (!hasDesc) stdCols[stdCols.length - 1] = "minmax(0, auto)";
+        grid.style.gridTemplateColumns = stdCols.join(" ");
+        container.appendChild(grid);
 
         for (var g = 0; g < qtGroups.length; g++) {
             var group = qtGroups[g];
@@ -501,13 +481,15 @@
             for (var i = 0; i < group.items.length; i++) {
                 var qt = group.items[i];
 
-                // Column 1: subheader on first row of group (when shown), else empty
-                var subCell = document.createElement("div");
-                if (i === 0 && showGroupSubheader && group.qualifiers) {
-                    subCell.className = "grid-subheader";
-                    subCell.textContent = group.qualifiers;
+                // Column 1 (optional): subheader on first row of group
+                if (showGroupSubheader) {
+                    var subCell = document.createElement("div");
+                    if (i === 0 && group.qualifiers) {
+                        subCell.className = "grid-subheader";
+                        subCell.textContent = group.qualifiers;
+                    }
+                    grid.appendChild(subCell);
                 }
-                grid.appendChild(subCell);
 
                 var timeSpan = document.createElement("div");
                 timeSpan.className = "qt_time " + qt.color_class;
@@ -530,46 +512,72 @@
         }
     }
 
-    // Append one record set's rows into a shared records grid
-    function buildRecordsRows(grid, setData, showSubheader, colYear, colTeam, colName) {
+    // Append one record set's rows as its own grid inside the records column
+    function buildRecordsRows(recDiv, setData, showSubheader) {
         var recList = setData.records;
         var isTeamSpecific = setData.set_team_tag && setData.set_team_tag !== 'ALL';
 
-        // Build set subheader label if shown
+        // Determine which columns this specific set needs
+        var colQual = false, colYear = false, colTeam = false, colName = false;
+        for (var r = 0; r < recList.length; r++) {
+            var rec = recList[r];
+            if (rec.qualifiers) colQual = true;
+            if (rec.record_year) colYear = true;
+            if (!isTeamSpecific && rec.record_team) colTeam = true;
+            if (rec.relay_names || rec.swimmer_name) colName = true;
+        }
+
+        // Build set subheader label if shown (cap set_name to 15 chars when
+        // appending a team tag so we don't overflow horizontally)
         var showThisSubheader = showSubheader && setData.set_name;
         var subLabel = "";
         if (showThisSubheader) {
-            subLabel = setData.set_name;
+            var sn = setData.set_name;
             if (setData.set_team_tag && setData.set_team_tag !== 'ALL') {
-                subLabel += " (" + setData.set_team_tag + ")";
+                if (sn.length > 15) sn = sn.slice(0, 14) + '\u2026';
+                subLabel = sn + " (" + setData.set_team_tag + ")";
+            } else {
+                subLabel = sn;
             }
         }
 
-        // Track which rows are first-of-qualifier-group so we render the
-        // qualifier as a sub-subheader only on that row.
-        var lastQual = null;
+        // Build per-set grid. Columns: [set-subheader]? [qual-subheader]? [time] [year]? [team]? [name]?
+        var grid = document.createElement("div");
+        grid.className = "records-grid";
+        var cols = [];
+        if (showThisSubheader) cols.push("auto");
+        if (colQual) cols.push("auto");
+        cols.push("auto"); // time
+        if (colYear) cols.push("auto");
+        if (colTeam) cols.push("auto");
+        if (colName) cols.push("minmax(0, auto)");
+        grid.style.gridTemplateColumns = cols.join(" ");
+        recDiv.appendChild(grid);
 
+        var lastQual = null;
         for (var r = 0; r < recList.length; r++) {
             var rec = recList[r];
             var thisQual = rec.qualifiers || "";
             var isQualFirst = (thisQual !== lastQual);
             lastQual = thisQual;
 
-            // Column 1: set subheader on first row of set (when shown), else empty
-            var setSubCell = document.createElement("div");
-            if (r === 0 && showThisSubheader) {
-                setSubCell.className = "grid-subheader";
-                setSubCell.textContent = subLabel;
+            if (showThisSubheader) {
+                var setSubCell = document.createElement("div");
+                if (r === 0) {
+                    setSubCell.className = "grid-subheader";
+                    setSubCell.textContent = subLabel;
+                }
+                grid.appendChild(setSubCell);
             }
-            grid.appendChild(setSubCell);
 
-            // Column 2: qualifier sub-subheader on first row of each qualifier group
-            var qualSubCell = document.createElement("div");
-            if (isQualFirst && thisQual) {
-                qualSubCell.className = "grid-subheader";
-                qualSubCell.textContent = thisQual;
+            if (colQual) {
+                var qualSubCell = document.createElement("div");
+                if (isQualFirst && thisQual) {
+                    qualSubCell.className = "grid-subheader";
+                    qualSubCell.textContent = thisQual;
+                }
+                grid.appendChild(qualSubCell);
             }
-            grid.appendChild(qualSubCell);
 
             var timeSpan = document.createElement("div");
             timeSpan.className = "rec_time " + rec.color_class;
@@ -586,7 +594,7 @@
             if (colTeam) {
                 var teamSpan = document.createElement("div");
                 teamSpan.className = "rec_team " + rec.color_class;
-                teamSpan.textContent = isTeamSpecific ? "" : (rec.record_team || "");
+                teamSpan.textContent = rec.record_team || "";
                 grid.appendChild(teamSpan);
             }
 

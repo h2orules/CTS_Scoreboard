@@ -812,6 +812,7 @@ def ws_sim_load_event(d=None):
                 header=RecHeader(course='SCY', course_code='Y', record_set_name='Away Team',
                                  software_version='SIM', record_count=2, export_date=date.today()),
                 records=[
+                    _make_record(1, 14.75, 'Andrew Away', 'AWAY', 2023),
                     _make_record(2, 16.40, 'Amy Away', 'AWAY', 2024),
                 ]
             ),
