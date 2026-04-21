@@ -10,8 +10,9 @@ body {
     align-items: center;
     padding: 25px;
     padding-bottom: 80px;
-    min-height: 100vh;
+    height: 100vh;
     box-sizing: border-box;
+    overflow: hidden;
     z-index: 100;
 }
 
@@ -30,7 +31,7 @@ body {
 
 .content_meet_title {
     font-family: 'Overpass Mono', monospace;
-    font-size: 30px;
+    font-size: 36px;
     color: #000000;
     background-color: #87bdd8;
     padding: 5px 30px 0 30px;
@@ -39,7 +40,7 @@ body {
 .content_event_name {
     font-family: 'Overpass Mono', monospace;
     color: #cfe0e8;
-    font-size: 24px;
+    font-size: 32px;
     background-color: #505050;
     padding: 0 30px;
 }
@@ -321,7 +322,7 @@ body {
 
 .content_meet_date {
     font-family: 'Overpass Mono', monospace;
-    font-size: 26px;
+    font-size: 31px;
     color: #000000;
     background-color: #daebe8;
     padding: 0 30px;
@@ -346,7 +347,7 @@ body {
 
 .score_team_name {
     font-family: 'Overpass Mono', monospace;
-    font-size: 20px;
+    font-size: 26px;
     color: #333333;
     flex: 1;
     white-space: nowrap;
@@ -357,7 +358,7 @@ body {
 
 .score_value {
     font-family: 'Overpass Mono', monospace;
-    font-size: 24px;
+    font-size: 30px;
     font-weight: bold;
     color: #000000;
     text-align: right;
@@ -367,7 +368,7 @@ body {
 
 .content_event_number {
     font-family: 'Overpass Mono', monospace;
-    font-size: 32px;
+    font-size: 42px;
     color: #000000;
     background-color: #9d238f;
     width: 370px;
@@ -377,7 +378,7 @@ body {
 
 .content_heat_number {
     font-family: 'Overpass Mono', monospace;
-    font-size: 32px;
+    font-size: 42px;
     color: #000000;
     background-color: #9d238f;
     width: 400px;
@@ -386,7 +387,7 @@ body {
 
 .content_scoreboard {
     font-family: 'Overpass Mono', monospace;
-    font-size: 32px;
+    font-size: 38px;
     color: #000000;
     opacity: 1 !important;
     display: block !important;
@@ -400,7 +401,7 @@ body {
     justify-content: center;
     align-items: flex-start;
     margin: 25px auto 0;
-    flex: 1 1 auto;
+    flex: 1 1 0;
     min-height: 0;
     overflow: hidden;
 }
@@ -440,7 +441,7 @@ body {
 
 .blank-clock {
     font-family: 'Overpass Mono', monospace;
-    font-size: 120px;
+    font-size: 144px;
     color: #000000;
     text-align: center;
     display: none;
@@ -482,7 +483,7 @@ table.scoreboard_table th {
 .scoreboard_title {
     font-family: 'Overpass Mono', monospace;
     color: #000000;
-    font-size: 24px;
+    font-size: 42px;
     background-color: #87bdd8;
     width: 100%;
     text-align: center;
@@ -491,21 +492,21 @@ table.scoreboard_table th {
 .scoreboard_header {
     font-family: 'Overpass Mono', monospace;
     color: #000000;
-    font-size: 24px;
+    font-size: 32px;
     background-color: #daebe8;
 }
 
 .scoreboard_row_odd {
     font-family: 'Overpass Mono', monospace;
     color: #000000;
-    font-size: 24px;
+    font-size: 32px;
     background-color: #b7d7e8;
 }
 
 .scoreboard_row_eve {
     font-family: 'Overpass Mono', monospace;
     color: #000000;
-    font-size: 24px;
+    font-size: 32px;
     background-color: #cfe0e8;
 }
 
@@ -567,8 +568,8 @@ table.scoreboard_table th {
 }
 
 .scoreboard_place_col {
-    width: 80px !important;
-    max-width: 80px !important;
+    width: 110px !important;
+    max-width: 110px !important;
 }
 
 .scoreboard_time_col {
@@ -607,6 +608,7 @@ table.scoreboard_table th {
     .content_outer {
         padding: 10px;
         padding-bottom: 10px;
+        height: auto;
         min-height: 0;
         width: 95%;
         overflow: hidden;
