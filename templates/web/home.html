@@ -27,6 +27,7 @@
 
 <body style="margin:0px" onload="init();">
     <div class="content_outer">
+        <div class="scoreboard_group">
         <div class="content_title_block">
             <div class="content_meet_title">{{ meet_title }}</div>
             <div class="content_meet_date"><span id="meet_datetime"></span></div>
@@ -82,11 +83,12 @@
                 </div>
                 <div id="blank_clock" class="blank-clock"></div>
             </div>
-            <div class="content_scoreboard_ad" id="content_scoreboard_ad">
-                {% if ad_url and (ad_url != '') %}
-                <img src="{{url_for('static', filename='ad/'+ad_url)}}" />
-                {% endif %}
-            </div>
+        </div>
+        </div>
+        <div class="content_scoreboard_ad" id="content_scoreboard_ad">
+            {% if ad_url and (ad_url != '') %}
+            <img src="{{url_for('static', filename='ad/'+ad_url)}}" />
+            {% endif %}
         </div>
         {% if test_background %}
         <div class="controls">
@@ -609,18 +611,10 @@
         var scoresEl = document.querySelector('.content_scores');
         var clockEl = document.getElementById('blank_clock');
         var stackEl = document.querySelector('.scoreboard-stack');
-        var titleEl = document.querySelector('.content_title_block');
 
         var isBlank = (state === "Blank" || state === "BlankPreRace");
         var isTotalBlank = (state === "TotalBlank" || state === "TotalBlankPreRace");
         var isHidden = isBlank || isTotalBlank;
-
-        // Lock title block width when entering blank/totalblank states
-        if (isHidden && titleEl && !titleEl.style.minWidth) {
-            titleEl.style.minWidth = titleEl.offsetWidth + 'px';
-        } else if (!isHidden && titleEl) {
-            titleEl.style.minWidth = '';
-        }
 
         if (isTotalBlank) {
             // Fade out and collapse scoreboard + scores
