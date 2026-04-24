@@ -31,7 +31,7 @@ body {
 
 .content_meet_title {
     font-family: 'Overpass Mono', monospace;
-    font-size: 36px;
+    font-size: 43px;
     color: #000000;
     background-color: #87bdd8;
     padding: 5px 30px 0 30px;
@@ -40,7 +40,7 @@ body {
 .content_event_name {
     font-family: 'Overpass Mono', monospace;
     color: #cfe0e8;
-    font-size: 32px;
+    font-size: 35px;
     background-color: #505050;
     padding: 0 30px;
 }
@@ -48,7 +48,7 @@ body {
 .qualifying_time_row td {
     font-family: 'Overpass Mono', monospace;
     color: #333333;
-    font-size: 20px;
+    font-size: 24px;
     background-color: #d8d8d8;
     padding: 0;
     text-align: left;
@@ -254,7 +254,7 @@ body.hide-time-decorations .qt-highlight {
 
 .grid-subheader {
     font-style: italic;
-    font-size: 20px;
+    font-size: 24px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -303,13 +303,13 @@ body.hide-time-decorations .qt-highlight {
 
 .rec_header {
     font-weight: bold;
-    font-size: 24px;
+    font-size: 29px;
     margin-bottom: 2px;
 }
 
 .rec_subheader {
     font-style: italic;
-    font-size: 20px;
+    font-size: 24px;
     margin-bottom: 2px;
 }
 
@@ -326,7 +326,7 @@ body.hide-time-decorations .qt-highlight {
 
 .content_meet_date {
     font-family: 'Overpass Mono', monospace;
-    font-size: 31px;
+    font-size: 37px;
     color: #000000;
     background-color: #daebe8;
     padding: 0 30px;
@@ -351,7 +351,7 @@ body.hide-time-decorations .qt-highlight {
 
 .score_team_name {
     font-family: 'Overpass Mono', monospace;
-    font-size: 26px;
+    font-size: 29px;
     color: #333333;
     flex: 1;
     white-space: nowrap;
@@ -362,7 +362,7 @@ body.hide-time-decorations .qt-highlight {
 
 .score_value {
     font-family: 'Overpass Mono', monospace;
-    font-size: 30px;
+    font-size: 35px;
     font-weight: bold;
     color: #000000;
     text-align: right;
@@ -372,7 +372,7 @@ body.hide-time-decorations .qt-highlight {
 
 .content_event_number {
     font-family: 'Overpass Mono', monospace;
-    font-size: 42px;
+    font-size: 50px;
     color: #000000;
     background-color: #9d238f;
     width: 370px;
@@ -382,7 +382,7 @@ body.hide-time-decorations .qt-highlight {
 
 .content_heat_number {
     font-family: 'Overpass Mono', monospace;
-    font-size: 42px;
+    font-size: 50px;
     color: #000000;
     background-color: #9d238f;
     width: 400px;
@@ -391,7 +391,7 @@ body.hide-time-decorations .qt-highlight {
 
 .content_scoreboard {
     font-family: 'Overpass Mono', monospace;
-    font-size: 38px;
+    font-size: 46px;
     color: #000000;
     opacity: 1 !important;
     display: block !important;
@@ -445,7 +445,7 @@ body.hide-time-decorations .qt-highlight {
 
 .blank-clock {
     font-family: 'Overpass Mono', monospace;
-    font-size: 144px;
+    font-size: 173px;
     color: #000000;
     text-align: center;
     display: none;
@@ -487,7 +487,7 @@ table.scoreboard_table th {
 .scoreboard_title {
     font-family: 'Overpass Mono', monospace;
     color: #000000;
-    font-size: 42px;
+    font-size: 50px;
     background-color: #87bdd8;
     width: 100%;
     text-align: center;
@@ -496,21 +496,21 @@ table.scoreboard_table th {
 .scoreboard_header {
     font-family: 'Overpass Mono', monospace;
     color: #000000;
-    font-size: 32px;
+    font-size: 38px;
     background-color: #daebe8;
 }
 
 .scoreboard_row_odd {
     font-family: 'Overpass Mono', monospace;
     color: #000000;
-    font-size: 32px;
+    font-size: 38px;
     background-color: #b7d7e8;
 }
 
 .scoreboard_row_eve {
     font-family: 'Overpass Mono', monospace;
     color: #000000;
-    font-size: 32px;
+    font-size: 38px;
     background-color: #cfe0e8;
 }
 
@@ -524,14 +524,14 @@ table.scoreboard_table th {
 }
 
 .scoreboard_name_col {
-    width: 780px !important;
-    max-width: 780px !important;
+    width: 1180px !important;
+    max-width: 1180px !important;
     display: none;
 }
 
 .lane_name {
-    width: 780px !important;
-    max-width: 780px !important;
+    width: 1180px !important;
+    max-width: 1180px !important;
     padding: 0 8px;
     display: none;
     white-space: nowrap;
@@ -572,13 +572,13 @@ table.scoreboard_table th {
 }
 
 .scoreboard_place_col {
-    width: 110px !important;
-    max-width: 110px !important;
+    width: 135px !important;
+    max-width: 135px !important;
 }
 
 .scoreboard_time_col {
-    width: 250px !important;
-    max-width: 250px !important;
+    width: 290px !important;
+    max-width: 290px !important;
 }
 
 .background {
