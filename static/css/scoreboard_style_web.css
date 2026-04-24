@@ -617,8 +617,10 @@ table.scoreboard_table td[id^="lane_place"] {
 
     .content_outer {
         padding: 10px;
-        padding-bottom: 10px;
-        height: auto;
+        /* Reserve space for the fixed disclaimer footer so content is
+           clipped at the footer cutoff rather than overlapping it. */
+        padding-bottom: 56px;
+        height: 100vh;
         min-height: 0;
         width: 100%;
         overflow: hidden;
@@ -705,9 +707,12 @@ table.scoreboard_table td[id^="lane_place"] {
         min-width: 5.5em;
     }
 
-    .scoreboard_title,
+    .scoreboard_title {
+        font-size: min(34px, 4.8vw);
+    }
+
     .content_event_name {
-        font-size: min(24px, 3.5vw);
+        font-size: min(28px, 4vw);
     }
 
     .scoreboard_header th {
@@ -716,6 +721,28 @@ table.scoreboard_table td[id^="lane_place"] {
 
     .qualifying_time_row td {
         padding: 0 4px;
+    }
+
+    /* Records / Time Standards sizing on mobile:
+       Rows, sub-headers and differentiators match the scoreboard row font
+       so they scale with the table. Section headers ("Records" /
+       "Time Standards") sit at the same size but heavy-weight so they
+       still visually separate. */
+    .rec_time, .rec_name, .rec_team, .rec_year, .rec_qualifiers,
+    .qt_time, .qt_tag, .qt_desc, .qt_qualifiers,
+    .grid-subheader, .rec_subheader {
+        font-size: min(24px, 3.5vw);
+    }
+
+    .rec_header {
+        font-size: min(24px, 3.5vw);
+        font-weight: 900;
+    }
+
+    /* Team scores: match other title rows rather than the large desktop size. */
+    .score_team_name,
+    .score_value {
+        font-size: min(24px, 3.5vw);
     }
 
     .standards-records-container {
@@ -746,10 +773,16 @@ table.scoreboard_table td[id^="lane_place"] {
     }
 
     .content_scoreboard_ad {
-        width: 60%;
-        max-width: none;
-        flex: 0 0 auto;
-        display: block;
+        /* Shrink to fit the space between the scoreboard table and the
+           footer cutoff, down to a minimum of 30% width. If the viewport
+           can't fit the image at that size, it will be clipped behind
+           the footer mask. */
+        width: auto;
+        min-width: 30%;
+        max-width: 60%;
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
     }
 
     .content_scores {
@@ -758,6 +791,13 @@ table.scoreboard_table td[id^="lane_place"] {
 
     .background {
         overflow: hidden;
+    }
+
+    /* Footer stays visible; content_outer clips anything behind it.
+       Background is transparent so the water image shows through. */
+    .scoreboard_disclaimer {
+        bottom: 0;
+        padding: 12px 0;
     }
 }
 
