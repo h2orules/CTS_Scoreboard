@@ -578,6 +578,10 @@ table.scoreboard_table th {
     max-width: 135px !important;
 }
 
+table.scoreboard_table td[id^="lane_place"] {
+    font-weight: bold;
+}
+
 .scoreboard_time_col {
     width: 290px !important;
     max-width: 290px !important;
