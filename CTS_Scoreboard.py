@@ -689,12 +689,12 @@ def ws_set_event_heat(d):
 _sim_running = False  # Whether the sim clock is ticking
 
 SIM_LANES = {
-    1: {'name': 'Timmy Splash',  'team': 'HOME', 'age_code': '8B', 'seed': 17.50, 'time': 15.23, 'place': '1'},
-    2: {'name': 'Sally Wave',    'team': 'AWAY', 'age_code': '8G', 'seed': 18.50, 'time': 16.89, 'place': '4'},
-    3: {'name': 'Xander Annika', 'team': 'HOME', 'age_code': '7B', 'seed': 17.22, 'time': 17.54, 'place': '5'},
-    4: {'name': 'Bobby Kick',    'team': 'HOME', 'age_code': '8B', 'seed': 19.00, 'time': 17.55, 'place': '5'},
-    5: {'name': 'Lily Stroke',   'team': 'AWAY', 'age_code': '8G', 'seed': 17.20, 'time': 15.87, 'place': '2'},
-    6: {'name': 'Max Dive',      'team': 'HOME', 'age_code': '8B', 'seed': 16.50, 'time': 18.50, 'place': '6'},
+    1: {'name': 'Timmy Splash',   'team': 'HOME', 'age_code': '8B', 'seed': 17.50, 'time': 15.23, 'place': '1'},
+    2: {'name': 'Sally Wave',     'team': 'AWAY', 'age_code': '8G', 'seed': 18.50, 'time': 16.89, 'place': '4'},
+    3: {'name': 'James Pullbuoy', 'team': 'HOME', 'age_code': '7B', 'seed': 17.22, 'time': 17.54, 'place': '5'},
+    4: {'name': 'Bobby Kick',     'team': 'HOME', 'age_code': '8B', 'seed': 19.00, 'time': 17.55, 'place': '5'},
+    5: {'name': 'Lily Laneline',  'team': 'AWAY', 'age_code': '8G', 'seed': 17.20, 'time': 15.87, 'place': '2'},
+    6: {'name': 'Max Dive',       'team': 'HOME', 'age_code': '8B', 'seed': 16.50, 'time': 18.50, 'place': '6'},
 }
 
 def _format_lane_time(seconds, final=True):
