@@ -892,6 +892,8 @@ def ws_sim_step(d):
         race_fsm.evaluate_update(channel_running, update)
         update['race_state'] = race_fsm.state_name
         socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+        # Re-send scores in case we were previously in a blank state
+        send_scores_info()
 
         # Start background clock ticker
         socketio.start_background_task(_sim_clock_tick)
@@ -913,6 +915,8 @@ def ws_sim_step(d):
         race_fsm.evaluate_update(channel_running, update)
         update['race_state'] = race_fsm.state_name
         socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+        # Re-send scores in case we were previously in a blank state
+        send_scores_info()
 
     elif step == 'clear':
         update['current_event'] = str(last_event_sent[0])
@@ -943,9 +947,8 @@ def ws_sim_step(d):
                 update['lane_time%d' % i] = '        '
             update['lane_place%d' % i] = ' '
 
-        # Clear scores
-        for key in team_scores:
-            team_scores[key] = ''
+        # CTS blanks team scores when going Blank; emit empty values but keep
+        # the server-side team_scores cache intact so we can restore on exit.
         update['score_home'] = ''
         update['score_guest1'] = ''
         update['score_guest2'] = ''
@@ -965,8 +968,8 @@ def ws_sim_step(d):
             update['lane_time%d' % i] = '        '
             update['lane_place%d' % i] = ' '
 
-        for key in team_scores:
-            team_scores[key] = ''
+        # CTS blanks team scores when going TotalBlank; emit empty values but
+        # keep the server-side team_scores cache intact for restoration.
         update['score_home'] = ''
         update['score_guest1'] = ''
         update['score_guest2'] = ''
@@ -1377,27 +1380,58 @@ def has_no_empty_params(rule):
 
 @app.route("/")
 def route_site_map():
-    links = []
+    # Collect all browsable routes (keyed by endpoint) so we can group them
+    all_links = {}
     for rule in app.url_map.iter_rules():
-        # Filter out rules we can't navigate to in a browser
-        # and rules that require parameters
         if "GET" in rule.methods and has_no_empty_params(rule):
             url = flask.url_for(rule.endpoint, **(rule.defaults or {}))
-            title = rule.endpoint.replace("_"," ")
+            title = rule.endpoint.replace("_", " ")
             if title.startswith('route '):
                 title = title[6:]
-            if title not in ['login','logout','site map']:
-                links.append((url, title.title()))
-                
-#   for file in glob.glob(os.path.join("templates", "overlay", "*.html")):
-#        links.append( (file[file.startswith("templates") and len("templates"):].rsplit('.',1)[0], "Overlay " + os.path.basename(file).rsplit('.',1)[0]) )
+            if title in ['login', 'logout', 'site map']:
+                continue
+            # Hide these action-style endpoints from the site map
+            if title in ['schedule clear', 'standards clear']:
+                continue
+            all_links[title] = (url, title.title())
 
+    # Discover web/ scoreboard templates
+    web_links = {}
     for file in glob.glob(os.path.join("templates", "web", "*.html")):
-        links.append( (file[file.startswith("templates") and len("templates"):].rsplit('.',1)[0], "Web " + os.path.basename(file).rsplit('.',1)[0]) )
+        name = os.path.basename(file).rsplit('.', 1)[0]
+        url = file[file.startswith("templates") and len("templates"):].rsplit('.', 1)[0]
+        web_links[name] = (url, "Web " + name)
 
-    # links is now a list of url, endpoint tuple
-    links.sort(key=lambda a: '_' if (a[1] == 'Site List') else a[1])
-    return flask.render_template('site_map.html', links=links)
+    def _pop(d, key):
+        return d.pop(key, None)
+
+    sections = []
+
+    # View Scoreboard: Web Home first, then any other web templates
+    view_items = []
+    home = _pop(web_links, 'home')
+    if home:
+        view_items.append(home)
+    for key in sorted(web_links.keys()):
+        view_items.append(web_links[key])
+    if view_items:
+        sections.append(("View Scoreboard", view_items))
+
+    # Settings section: Settings, Combine Events, Schedule Preview (in that order)
+    settings_items = []
+    for key in ['settings', 'combine events', 'schedule preview']:
+        link = _pop(all_links, key)
+        if link:
+            settings_items.append(link)
+    if settings_items:
+        sections.append(("Settings", settings_items))
+
+    # Everything else falls into "Other" so nothing disappears accidentally
+    other_items = [all_links[k] for k in sorted(all_links.keys())]
+    if other_items:
+        sections.append(("Other", other_items))
+
+    return flask.render_template('site_map.html', sections=sections)
     
 
 @app.context_processor
