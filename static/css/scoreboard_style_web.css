@@ -64,6 +64,10 @@ body {
     text-decoration-line: underline;
 }
 
+body.hide-time-decorations .qt-highlight {
+    text-decoration-line: none;
+}
+
 .qt-highlight.qt-std {
     text-decoration-style: solid;
 }

@@ -33,6 +33,7 @@ settings = {
     'pool_course': 'SCY',
     'show_pr_tags': True,
     'show_confetti': True,
+    'show_time_decorations': False,
     'seed_time_label': 'Seed Time',
     'team_home': '',
     'team_home_tag': '',
@@ -632,6 +633,7 @@ def send_event_info():
 
     update["show_pr_tags"] = settings.get('show_pr_tags', True)
     update["show_confetti"] = settings.get('show_confetti', True)
+    update["show_time_decorations"] = settings.get('show_time_decorations', False)
     update["seed_time_label"] = settings.get('seed_time_label', 'Seed Time')
     update["race_state"] = race_fsm.state_name
 
@@ -1153,6 +1155,12 @@ def route_settings():
             if settings.get('show_confetti') != new_val:
                 settings['show_confetti'] = new_val
                 modified = True
+
+        if 'show_time_decorations_form' in flask.request.form:
+            new_val = flask.request.form.get('show_time_decorations', 'Hide') == 'Show'
+            if settings.get('show_time_decorations') != new_val:
+                settings['show_time_decorations'] = new_val
+                modified = True
         
         if modified:
             with open(settings_file, "wt") as f:
@@ -1209,6 +1217,7 @@ def route_settings():
                 team_tag_options=team_tag_options,
                 show_pr_tags=settings.get('show_pr_tags', True),
                 show_confetti=settings.get('show_confetti', True),
+                show_time_decorations=settings.get('show_time_decorations', False),
                 team_home=settings.get('team_home', ''),
                 team_home_tag=settings.get('team_home_tag', ''),
                 team_guest1=settings.get('team_guest1', ''),

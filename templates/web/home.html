@@ -974,6 +974,14 @@
             showConfetti = s["show_confetti"];
         }
 
+        if ("show_time_decorations" in s) {
+            if (s["show_time_decorations"]) {
+                document.body.classList.remove('hide-time-decorations');
+            } else {
+                document.body.classList.add('hide-time-decorations');
+            }
+        }
+
         if ("seed_time_label" in s) {
             seedTimeLabel = s["seed_time_label"];
         }
