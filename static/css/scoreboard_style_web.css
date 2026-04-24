@@ -728,9 +728,17 @@ table.scoreboard_table td[id^="lane_place"] {
        so they scale with the table. Section headers ("Records" /
        "Time Standards") sit at the same size but heavy-weight so they
        still visually separate. */
-    .rec_time, .rec_name, .rec_team, .rec_year, .rec_qualifiers,
-    .qt_time, .qt_tag, .qt_desc, .qt_qualifiers,
-    .grid-subheader, .rec_subheader {
+    .rec_time,
+    .rec_name,
+    .rec_team,
+    .rec_year,
+    .rec_qualifiers,
+    .qt_time,
+    .qt_tag,
+    .qt_desc,
+    .qt_qualifiers,
+    .grid-subheader,
+    .rec_subheader {
         font-size: min(24px, 3.5vw);
     }
 
