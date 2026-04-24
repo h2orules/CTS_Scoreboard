@@ -423,6 +423,16 @@
             recHeader.textContent = "Records";
             recDiv.appendChild(recHeader);
             var showSetSubheader = (recSetsWithData > 1);
+            // If any set uses qualifier subheaders, reserve space for that
+            // column in every set so sets without qualifiers don't shift left.
+            var anyQual = false;
+            for (var rs0 = 0; rs0 < recSetList.length; rs0++) {
+                var sd = recSetList[rs0];
+                for (var ri = 0; ri < sd.records.length; ri++) {
+                    if (sd.records[ri].qualifiers) { anyQual = true; break; }
+                }
+                if (anyQual) break;
+            }
             var firstSetRendered = false;
             for (var rs = 0; rs < recSetList.length; rs++) {
                 var setData = recSetList[rs];
@@ -432,7 +442,7 @@
                     divider.className = "records-set-divider";
                     recDiv.appendChild(divider);
                 }
-                buildRecordsRows(recDiv, setData, showSetSubheader);
+                buildRecordsRows(recDiv, setData, showSetSubheader, anyQual);
                 firstSetRendered = true;
             }
             container.appendChild(recDiv);
@@ -513,12 +523,12 @@
     }
 
     // Append one record set's rows as its own grid inside the records column
-    function buildRecordsRows(recDiv, setData, showSubheader) {
+    function buildRecordsRows(recDiv, setData, showSubheader, reserveQualCol) {
         var recList = setData.records;
         var isTeamSpecific = setData.set_team_tag && setData.set_team_tag !== 'ALL';
 
         // Determine which columns this specific set needs
-        var colQual = false, colYear = false, colTeam = false, colName = false;
+        var colQual = !!reserveQualCol, colYear = false, colTeam = false, colName = false;
         for (var r = 0; r < recList.length; r++) {
             var rec = recList[r];
             if (rec.qualifiers) colQual = true;
@@ -546,7 +556,7 @@
         grid.className = "records-grid";
         var cols = [];
         if (showThisSubheader) cols.push("auto");
-        if (colQual) cols.push("auto");
+        if (colQual) cols.push("minmax(6ch, auto)");
         cols.push("auto"); // time
         if (colYear) cols.push("auto");
         if (colTeam) cols.push("auto");

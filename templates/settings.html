@@ -196,18 +196,12 @@
                 <form action="/settings" method="POST">
                     <input type="hidden" name="show_time_decorations_form" value="1">
                     <div class="input-group">
-                        <label for="show_time_decorations">Time Decorations (underline/wavy for PR, standards, records)</label>
-                        <span class="input-group-btn" style="display:flex;">
-                            <select id="show_time_decorations" name="show_time_decorations" class="form-control"
-                                oninput="document.getElementById('show_time_decorations_submit').disabled=false;">
-                                {% for opt in ['Show', 'Hide'] %}
-                                {% if (opt == 'Show') == show_time_decorations %}
-                                <option value="{{ opt }}" selected>{{ opt }}</option>
-                                {% else %}
-                                <option value="{{ opt }}">{{ opt }}</option>
-                                {% endif %}
-                                {% endfor %}
-                            </select>
+                        <label>
+                            <input type="checkbox" name="show_time_decorations" value="1" {% if show_time_decorations %}checked{% endif %}
+                                onchange="document.getElementById('show_time_decorations_submit').disabled=false;">
+                            Show time decorations (underline/wavy for PR, standards, records)
+                        </label>
+                        <span class="input-group-btn">
                             <button class="btn btn-default" type="submit" id="show_time_decorations_submit" disabled>Update</button>
                         </span>
                     </div>

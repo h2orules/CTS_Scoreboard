@@ -12,7 +12,8 @@ body {
     padding-bottom: 80px;
     height: 100vh;
     box-sizing: border-box;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: hidden;
     z-index: 100;
 }
 
@@ -21,6 +22,7 @@ body {
     flex-direction: column;
     align-items: stretch;
     width: fit-content;
+    min-width: 1000px;
     max-width: 100%;
 }
 
@@ -614,8 +616,12 @@ table.scoreboard_table th {
         padding-bottom: 10px;
         height: auto;
         min-height: 0;
-        width: 95%;
+        width: 100%;
         overflow: hidden;
+    }
+
+    .scoreboard_group {
+        min-width: 0;
     }
 
     .content_title_block {
@@ -705,7 +711,6 @@ table.scoreboard_table th {
     }
 
     .qualifying_time_row td {
-        font-size: min(20px, 3vw);
         padding: 0 4px;
     }
 

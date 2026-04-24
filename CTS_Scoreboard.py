@@ -417,6 +417,15 @@ def _get_qualifying_times(event_number):
     
     if not matches:
         return [], False
+
+    # Sort: girls/women (sex_code 2) before boys/men (1), youngest age first,
+    # then fastest first. Keeps standards-qualifier group ordering consistent
+    # with the records display.
+    def _std_sort_key(m):
+        sex_order = 0 if m['sex_code'] == 2 else 1
+        age_lo = m['age_min'] if m['age_min'] else 0
+        return (sex_order, age_lo, m['time_seconds'])
+    matches.sort(key=_std_sort_key)
     
     # Determine which qualifiers need to be shown
     unique_sex = len(set(m['sex_code'] for m in matches)) > 1
@@ -510,14 +519,18 @@ def _get_matching_records(event_number):
     all_set_results = []
     any_show_age = False
     color_idx = 0
-    
+
+    # First pass: collect matches for every set so we can compute qualifier
+    # visibility (unique_sex / unique_age) globally across sets. This way a
+    # set that only has one sex still gets the sex qualifier shown whenever
+    # any other set needs the sex distinction.
+    per_set_matches = []
     for rec_set in swim_record_sets:
         rec_file = rec_set['rec_file']
-        
-        # Check if records file course matches pool course
+
         if rec_file.header.course != pool_course:
             continue
-        
+
         matches = []
         for sex_code in sex_codes:
             for ar_min, ar_max in age_ranges:
@@ -530,21 +543,20 @@ def _get_matching_records(event_number):
                         continue
                     if rec.sex_code != sex_code:
                         continue
-                    
-                    # Age range overlap check
+
                     rec_min = rec.age_group_min
                     rec_max = rec.age_group_max
                     ev_min = ar_min if ar_min else 0
                     ev_max = ar_max if ar_max else 999
                     r_min = rec_min if rec_min else 0
                     r_max = rec_max if rec_max else 999
-                    
+
                     if ev_min > r_max or r_min > ev_max:
                         continue
-                    
+
                     from hytek_rec_parser import EPOCH
                     rec_year = rec.record_date.year if rec.record_date != EPOCH else None
-                    
+
                     matches.append({
                         'sex_code': sex_code,
                         'age_min': rec_min,
@@ -556,15 +568,19 @@ def _get_matching_records(event_number):
                         'record_year': str(rec_year) if rec_year else '',
                         'relay_names': rec.relay_names or '',
                     })
-        
-        if not matches:
-            continue
-        
-        unique_sex = len(set(m['sex_code'] for m in matches)) > 1
-        unique_age = len(set((m['age_min'], m['age_max']) for m in matches)) > 1
-        if unique_sex or unique_age:
-            any_show_age = True
-        
+
+        if matches:
+            per_set_matches.append((rec_set, rec_file, matches))
+
+    # Global qualifier flags: if any set would differentiate by sex/age, then
+    # every set should display that qualifier for visual consistency.
+    all_matches = [m for _, _, ms in per_set_matches for m in ms]
+    unique_sex = len(set(m['sex_code'] for m in all_matches)) > 1
+    unique_age = len(set((m['age_min'], m['age_max']) for m in all_matches)) > 1
+    if unique_sex or unique_age:
+        any_show_age = True
+
+    for rec_set, rec_file, matches in per_set_matches:
         # Sort: girls (2) before boys (1), youngest first, then fastest first
         def sort_key(m):
             sex_order = 0 if m['sex_code'] == 2 else 1
@@ -1157,7 +1173,7 @@ def route_settings():
                 modified = True
 
         if 'show_time_decorations_form' in flask.request.form:
-            new_val = flask.request.form.get('show_time_decorations', 'Hide') == 'Show'
+            new_val = 'show_time_decorations' in flask.request.form
             if settings.get('show_time_decorations') != new_val:
                 settings['show_time_decorations'] = new_val
                 modified = True
