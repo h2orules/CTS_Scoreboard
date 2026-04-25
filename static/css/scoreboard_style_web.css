@@ -463,6 +463,51 @@ body.hide-time-decorations .qt-highlight {
     align-items: center;
     justify-content: center;
     line-height: 1;
+    z-index: 1;
+}
+
+.blank-message {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    min-height: 100%;
+    background-color: #b7d7e8;
+    box-sizing: border-box;
+    display: none;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    flex-direction: column;
+    z-index: 2;
+}
+
+.blank-message-clock {
+    font-family: 'Overpass Mono', monospace;
+    color: #000;
+    text-align: center;
+    flex: 0 0 auto;
+    font-size: 100px;
+    line-height: 1;
+    padding: 0 16px 0 0;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.blank-message-body {
+    font-family: 'Overpass Mono', monospace;
+    color: #000;
+    flex: 1 1 auto;
+    margin: 0;
+    padding: 16px 32px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    white-space: pre;
+    overflow: hidden;
 }
 
 .seed-time-italic {

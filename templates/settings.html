@@ -83,6 +83,74 @@
         </div>
 
         <div class="row">
+            <div class="col-lg-8">
+                <style>
+                    .bm-details > summary::-webkit-details-marker { display: none; }
+                    .bm-details > summary { user-select: none; }
+                    .bm-details .bm-chevron { display: inline-block; transition: transform 0.15s ease; margin-right: 6px; }
+                    .bm-details[open] > summary .bm-chevron { transform: rotate(90deg); }
+                </style>
+                <details {% if blank_message %}open{% endif %} class="bm-details" style="margin-bottom:15px;">
+                    <summary style="cursor:pointer;font-weight:bold;list-style:none;">
+                        <span class="bm-chevron" aria-hidden="true">&#9656;</span>
+                        Blank-State Message Overlay
+                    </summary>
+                    <form action="/settings" method="POST" style="margin-top:10px;">
+                        <input type="hidden" name="blank_message_form" value="1">
+                        <div class="form-group">
+                            <label for="blank_message">Message (max 8 lines &times; 60 chars)</label>
+                            <textarea id="blank_message" name="blank_message" rows="8" cols="60" maxlength="488"
+                                class="form-control" style="font-family:'Overpass Mono',monospace;white-space:pre;overflow:auto;text-align:{{ blank_message_align }};"
+                                oninput="bmOnInput();">{{ blank_message }}</textarea>
+                        </div>
+                        <div class="form-group" style="margin-top:8px;">
+                            <label>Justify:</label>
+                            <label style="margin-left:10px;"><input type="radio" name="blank_message_align" value="left" {% if blank_message_align=='left' %}checked{% endif %} onchange="bmOnAlignChange(this.value);"> Left</label>
+                            <label style="margin-left:10px;"><input type="radio" name="blank_message_align" value="center" {% if blank_message_align=='center' %}checked{% endif %} onchange="bmOnAlignChange(this.value);"> Center</label>
+                            <label style="margin-left:10px;"><input type="radio" name="blank_message_align" value="right" {% if blank_message_align=='right' %}checked{% endif %} onchange="bmOnAlignChange(this.value);"> Right</label>
+                        </div>
+                        <div class="form-group" style="margin-top:8px;">
+                            <label>
+                                <input type="checkbox" id="blank_message_visible" name="blank_message_visible"
+                                    {% if blank_message_visible %}checked{% endif %}
+                                    {% if not blank_message.strip() %}disabled{% endif %}>
+                                Show message on blank screen
+                            </label>
+                        </div>
+                        <div class="form-group" style="margin-top:8px;">
+                            <button class="btn btn-default" type="submit">Update</button>
+                        </div>
+                    </form>
+                </details>
+                <script>
+                    (function(){
+                        var ta = document.getElementById('blank_message');
+                        var cb = document.getElementById('blank_message_visible');
+                        function enforce(){
+                            // Enforce 8 lines x 60 chars live
+                            var lines = ta.value.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+                            var changed = false;
+                            if (lines.length > 8) { lines = lines.slice(0,8); changed = true; }
+                            for (var i=0;i<lines.length;i++){
+                                if (lines[i].length > 60){ lines[i]=lines[i].slice(0,60); changed=true; }
+                            }
+                            if (changed) ta.value = lines.join('\n');
+                        }
+                        window.bmOnInput = function(){
+                            enforce();
+                            var hasText = ta.value.trim().length > 0;
+                            if (!hasText) { cb.checked = false; cb.disabled = true; }
+                            else { cb.disabled = false; }
+                        };
+                        window.bmOnAlignChange = function(val){
+                            ta.style.textAlign = val;
+                        };
+                    })();
+                </script>
+            </div>
+        </div>
+
+        <div class="row">
             <div class="col-lg-6">
                 <form action="/settings" method="POST">
                     <div class="input-group">
