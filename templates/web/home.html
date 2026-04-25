@@ -814,6 +814,8 @@
         var lines = blankMessageText.split('\n');
         var longest = lines.reduce(function (a, b) { return a.length >= b.length ? a : b; }, '');
         var padTotal = 64; // 32px left + right from CSS padding
+        var MIN_FONT_PX = 24; // Minimum legible message font; overlay grows to honor this.
+        var MAX_FONT_PX = 200;
         var availW = Math.max(50, (tableEl ? tableEl.getBoundingClientRect().width : overlay.clientWidth) - padTotal);
         var tableH = tableEl ? tableEl.getBoundingClientRect().height : overlay.clientHeight;
 
@@ -821,8 +823,6 @@
         var clockBandH = isBlank ? clockRegion.getBoundingClientRect().height : 0;
         var availH = Math.max(50, tableH - clockBandH - padTotal);
 
-        // Binary search font size (px) that fits both width and height.
-        var lo = 8, hi = 200, best = 8;
         // Use a measuring span that mirrors target styling.
         var measurer = document.createElement('span');
         measurer.style.position = 'absolute';
@@ -831,12 +831,19 @@
         measurer.style.fontFamily = "'Overpass Mono', monospace";
         measurer.style.lineHeight = '1.1';
         document.body.appendChild(measurer);
+
+        function widthAtFont(px) {
+            measurer.style.fontSize = px + 'px';
+            measurer.textContent = longest || ' ';
+            return measurer.getBoundingClientRect().width;
+        }
+
+        // Pass 1: largest font that fits both width and height inside the scoreboard.
+        var lo = 8, hi = MAX_FONT_PX, best = 8;
         try {
             while (lo <= hi) {
                 var mid = Math.floor((lo + hi) / 2);
-                measurer.style.fontSize = mid + 'px';
-                measurer.textContent = longest || ' ';
-                var w = measurer.getBoundingClientRect().width;
+                var w = widthAtFont(mid);
                 var h = mid * 1.1 * Math.max(1, lines.length);
                 if (w <= availW && h <= availH) {
                     best = mid;
@@ -844,6 +851,21 @@
                 } else {
                     hi = mid - 1;
                 }
+            }
+            // If forced below the minimum due to height, raise to MIN_FONT_PX (still respect width)
+            // and let the overlay grow taller.
+            if (best < MIN_FONT_PX) {
+                var loW = MIN_FONT_PX, hiW = MAX_FONT_PX, bestW = MIN_FONT_PX;
+                while (loW <= hiW) {
+                    var midW = Math.floor((loW + hiW) / 2);
+                    if (widthAtFont(midW) <= availW) {
+                        bestW = midW;
+                        loW = midW + 1;
+                    } else {
+                        hiW = midW - 1;
+                    }
+                }
+                best = Math.max(MIN_FONT_PX, bestW);
             }
         } finally {
             document.body.removeChild(measurer);
@@ -853,9 +875,20 @@
 
         // Clock font/size handled by CSS now.
 
-        // Allow overlay to grow taller than table if needed.
+        // Compute final overlay height: never shorter than table; grows when the
+        // message at MIN_FONT_PX needs more vertical room.
         var contentH = clockBandH + best * 1.1 * Math.max(1, lines.length) + padTotal;
-        overlay.style.minHeight = Math.max(tableH, contentH) + 'px';
+        var finalH = Math.max(tableH, contentH);
+        overlay.style.minHeight = finalH + 'px';
+
+        // Push the surrounding stack to grow with the overlay so the ad below
+        // animates down. Min-height transition is defined in CSS.
+        if (stackEl) {
+            stackEl.style.minHeight = finalH + 'px';
+            if (stackEl.style.maxHeight === '0px') {
+                stackEl.style.maxHeight = finalH + 'px';
+            }
+        }
 
         // Remove any in-flight confetti and disable new confetti while overlay shows.
         document.querySelectorAll('.confetti-particle').forEach(function (el) { el.remove(); });
