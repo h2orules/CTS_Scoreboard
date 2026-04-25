@@ -35,6 +35,9 @@ settings = {
     'show_confetti': True,
     'show_time_decorations': False,
     'seed_time_label': 'Seed Time',
+    'blank_message': '',
+    'blank_message_visible': False,
+    'blank_message_align': 'left',
     'team_home': '',
     'team_home_tag': '',
     'team_guest1': '',
@@ -651,6 +654,9 @@ def send_event_info():
     update["show_confetti"] = settings.get('show_confetti', True)
     update["show_time_decorations"] = settings.get('show_time_decorations', False)
     update["seed_time_label"] = settings.get('seed_time_label', 'Seed Time')
+    update["blank_message"] = settings.get('blank_message', '')
+    update["blank_message_visible"] = settings.get('blank_message_visible', False)
+    update["blank_message_align"] = settings.get('blank_message_align', 'left')
     update["race_state"] = race_fsm.state_name
 
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
@@ -662,6 +668,15 @@ def send_scores_info():
     update["score_guest2"] = team_scores['score_guest2']
     update["score_guest3"] = team_scores['score_guest3']
     update["race_state"] = race_fsm.state_name
+    socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+
+def send_blank_message():
+    """Broadcast just the blank-state message fields to scoreboard clients."""
+    update = {
+        'blank_message': settings.get('blank_message', ''),
+        'blank_message_visible': settings.get('blank_message_visible', False),
+        'blank_message_align': settings.get('blank_message_align', 'left'),
+    }
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
             
 @socketio.on('connect', namespace='/scoreboard')
@@ -1180,10 +1195,46 @@ def route_settings():
             if settings.get('show_time_decorations') != new_val:
                 settings['show_time_decorations'] = new_val
                 modified = True
-        
+
+        if 'blank_message_form' in flask.request.form:
+            raw = flask.request.form.get('blank_message', '')
+            # Normalize line endings and enforce 8 lines × 60 chars max
+            lines = raw.replace('\r\n', '\n').replace('\r', '\n').split('\n')[:8]
+            lines = [ln[:60] for ln in lines]
+            new_msg = '\n'.join(lines)
+            new_align = flask.request.form.get('blank_message_align', 'left')
+            if new_align not in ('left', 'center', 'right'):
+                new_align = 'left'
+            # Visible only when textarea has content (auto-flip to False if empty)
+            new_vis = ('blank_message_visible' in flask.request.form) and bool(new_msg.strip())
+
+            msg_changed = False
+            if settings.get('blank_message', '') != new_msg:
+                settings['blank_message'] = new_msg
+                modified = True
+                msg_changed = True
+            if settings.get('blank_message_align', 'left') != new_align:
+                settings['blank_message_align'] = new_align
+                modified = True
+                msg_changed = True
+            if bool(settings.get('blank_message_visible', False)) != new_vis:
+                settings['blank_message_visible'] = new_vis
+                modified = True
+                msg_changed = True
+            if msg_changed:
+                # Persisted below with `modified`; push live update to clients.
+                blank_message_needs_broadcast = True
+            else:
+                blank_message_needs_broadcast = False
+        else:
+            blank_message_needs_broadcast = False
+
         if modified:
             with open(settings_file, "wt") as f:
                 json.dump(settings, f, sort_keys=True, indent=4)
+
+        if blank_message_needs_broadcast:
+            send_blank_message()
                 
     comm_port_list = [(port, "%s: %s" % (port,desc)) for port, desc, id in serial.tools.list_ports.comports()]
     if settings['serial_port'] not in [port for port,desc in comm_port_list]:
@@ -1237,6 +1288,9 @@ def route_settings():
                 show_pr_tags=settings.get('show_pr_tags', True),
                 show_confetti=settings.get('show_confetti', True),
                 show_time_decorations=settings.get('show_time_decorations', False),
+                blank_message=settings.get('blank_message', ''),
+                blank_message_visible=settings.get('blank_message_visible', False),
+                blank_message_align=settings.get('blank_message_align', 'left'),
                 team_home=settings.get('team_home', ''),
                 team_home_tag=settings.get('team_home_tag', ''),
                 team_guest1=settings.get('team_guest1', ''),

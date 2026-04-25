@@ -82,6 +82,9 @@
                 </table>
                 </div>
                 <div id="blank_clock" class="blank-clock"></div>
+                <div id="blank_message_overlay" class="blank-message">
+                    <div class="blank-message-body"><div class="blank-message-clock" id="blank_message_clock"></div><span id="blank_message_text"></span></div>
+                </div>
             </div>
         </div>
         </div>
@@ -132,6 +135,9 @@
     var confettiFired = {};  // Track which lanes have already shown confetti
     var maxQtTagLen = 0;    // Longest tag string for space reservation
     var raceState = "TotalBlank"; // Current race state from server FSM
+    var blankMessageText = '';
+    var blankMessageVisible = false;
+    var blankMessageAlign = 'left';
 
     // Apply initial name column visibility
     document.querySelectorAll('.scoreboard_name_col, .lane_name').forEach(function (el) {
@@ -224,9 +230,16 @@
         return applicable;
     }
 
+    // Returns true when the blank-message overlay is currently active (text + visible).
+    function isBlankMessageOverlayActive() {
+        var hasText = blankMessageText && blankMessageText.replace(/\s+/g, '').length > 0;
+        return blankMessageVisible && hasText;
+    }
+
     // Spawn confetti particles from the center of a given element
     function spawnConfetti(lane, targetEl) {
         if (!showConfetti) return;
+        if (isBlankMessageOverlayActive()) return;
         if (raceState !== "Running" && raceState !== "Finished") return;
         if (confettiFired[lane]) return;
         confettiFired[lane] = true;
@@ -725,6 +738,141 @@
         }
     }
 
+    // Render the blank-state message overlay (sits above blank clock & scoreboard).
+    function renderBlankMessageOverlay() {
+        var overlay = document.getElementById('blank_message_overlay');
+        if (!overlay) return;
+        var tableEl = document.querySelector('.content_scoreboard_table');
+        var clockRegion = document.getElementById('blank_message_clock');
+        var bodyEl = overlay.querySelector('.blank-message-body');
+        var textSpan = document.getElementById('blank_message_text');
+
+        var isBlank = (raceState === "Blank" || raceState === "BlankPreRace");
+        var isTotalBlank = (raceState === "TotalBlank" || raceState === "TotalBlankPreRace");
+        var hasText = blankMessageText && blankMessageText.replace(/\s+/g, '').length > 0;
+        var show = blankMessageVisible && hasText;
+        var stackEl = document.querySelector('.scoreboard-stack');
+
+        if (!show) {
+            overlay.style.opacity = '0';
+            // Restore stack control to updateBlankDisplay
+            if (stackEl) {
+                stackEl.style.minHeight = '';
+                if (isTotalBlank) {
+                    // Re-collapse stack to match TotalBlank visual
+                    stackEl.style.maxHeight = '0';
+                }
+            }
+            setTimeout(function () {
+                if (overlay.style.opacity === '0') overlay.style.display = 'none';
+            }, 500);
+            return;
+        }
+
+        // Force scoreboard-stack to stay open so overlay is visible in TotalBlank too.
+        // We override updateBlankDisplay's collapse by setting min-height to the table's
+        // natural height and clearing any zero max-height.
+        if (stackEl && tableEl) {
+            var naturalH = tableEl.scrollHeight || tableEl.getBoundingClientRect().height;
+            stackEl.style.minHeight = naturalH + 'px';
+            if (stackEl.style.maxHeight === '0px') {
+                stackEl.style.maxHeight = naturalH + 'px';
+            }
+        }
+
+        // Size overlay to match scoreboard table width; allow vertical growth.
+        if (tableEl) {
+            var rect = tableEl.getBoundingClientRect();
+            overlay.style.width = rect.width + 'px';
+        }
+
+        // Clock region: hidden in TotalBlank states; CSS controls font/spacing/size.
+        if (isBlank) {
+            clockRegion.style.display = 'flex';
+        } else {
+            clockRegion.style.display = 'none';
+        }
+
+        // Body region grows to its content, centered as a group with the clock.
+        bodyEl.style.flex = '0 0 auto';
+
+        // Center clock+body together as a vertical group.
+        overlay.style.justifyContent = 'center';
+
+        // Set text + alignment
+        textSpan.textContent = blankMessageText;
+        textSpan.style.textAlign = blankMessageAlign;
+        textSpan.style.display = 'inline-block';
+        textSpan.style.width = '100%';
+        textSpan.style.whiteSpace = 'pre';
+
+        overlay.style.display = 'flex';
+        // Force reflow so opacity transition runs when going from display:none
+        void overlay.offsetHeight;
+
+        // Auto-fit font size via binary search.
+        var lines = blankMessageText.split('\n');
+        var longest = lines.reduce(function (a, b) { return a.length >= b.length ? a : b; }, '');
+        var padTotal = 64; // 32px left + right from CSS padding
+        var availW = Math.max(50, (tableEl ? tableEl.getBoundingClientRect().width : overlay.clientWidth) - padTotal);
+        var tableH = tableEl ? tableEl.getBoundingClientRect().height : overlay.clientHeight;
+
+        // Clock band height comes from CSS; measure it so the message can fit the rest.
+        var clockBandH = isBlank ? clockRegion.getBoundingClientRect().height : 0;
+        var availH = Math.max(50, tableH - clockBandH - padTotal);
+
+        // Binary search font size (px) that fits both width and height.
+        var lo = 8, hi = 200, best = 8;
+        // Use a measuring span that mirrors target styling.
+        var measurer = document.createElement('span');
+        measurer.style.position = 'absolute';
+        measurer.style.visibility = 'hidden';
+        measurer.style.whiteSpace = 'pre';
+        measurer.style.fontFamily = "'Overpass Mono', monospace";
+        measurer.style.lineHeight = '1.1';
+        document.body.appendChild(measurer);
+        try {
+            while (lo <= hi) {
+                var mid = Math.floor((lo + hi) / 2);
+                measurer.style.fontSize = mid + 'px';
+                measurer.textContent = longest || ' ';
+                var w = measurer.getBoundingClientRect().width;
+                var h = mid * 1.1 * Math.max(1, lines.length);
+                if (w <= availW && h <= availH) {
+                    best = mid;
+                    lo = mid + 1;
+                } else {
+                    hi = mid - 1;
+                }
+            }
+        } finally {
+            document.body.removeChild(measurer);
+        }
+        textSpan.style.fontSize = best + 'px';
+        textSpan.style.lineHeight = '1.1';
+
+        // Clock font/size handled by CSS now.
+
+        // Allow overlay to grow taller than table if needed.
+        var contentH = clockBandH + best * 1.1 * Math.max(1, lines.length) + padTotal;
+        overlay.style.minHeight = Math.max(tableH, contentH) + 'px';
+
+        // Remove any in-flight confetti and disable new confetti while overlay shows.
+        document.querySelectorAll('.confetti-particle').forEach(function (el) { el.remove(); });
+
+        // Fade in
+        requestAnimationFrame(function () { overlay.style.opacity = '1'; });
+    }
+
+    // Re-render overlay on window resize (debounced).
+    (function () {
+        var resizeTimer = null;
+        window.addEventListener('resize', function () {
+            if (resizeTimer) clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(renderBlankMessageOverlay, 100);
+        });
+    })();
+
     // Called on any *PreRace state entry (new event/heat arrived)
     function onPreRaceEntry(s) {
         resetLaneQualifications();
@@ -924,6 +1072,8 @@
                     (raceState === "Blank" || raceState === "BlankPreRace")) {
                     var clockEl = document.getElementById('blank_clock');
                     if (clockEl) clockEl.textContent = (s[k] || '').trim();
+                    var msgClockEl = document.getElementById('blank_message_clock');
+                    if (msgClockEl) msgClockEl.textContent = (s[k] || '').trim();
                 }
             }
             var seedMatch = k.match(/^lane_seed_time(\d+)$/);
@@ -994,6 +1144,14 @@
 
         if ("seed_time_label" in s) {
             seedTimeLabel = s["seed_time_label"];
+        }
+
+        var bmChanged = false;
+        if ("blank_message" in s) { blankMessageText = s["blank_message"] || ''; bmChanged = true; }
+        if ("blank_message_visible" in s) { blankMessageVisible = !!s["blank_message_visible"]; bmChanged = true; }
+        if ("blank_message_align" in s) { blankMessageAlign = s["blank_message_align"] || 'left'; bmChanged = true; }
+        if (bmChanged || ("race_state" in s)) {
+            renderBlankMessageOverlay();
         }
 
         // Evaluate all lanes for time standard qualifications (skip if event/heat just changed with stale times)
