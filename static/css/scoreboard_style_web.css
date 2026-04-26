@@ -676,6 +676,8 @@ table.scoreboard_table th {
     width: 1180px !important;
     max-width: 1180px !important;
     display: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .lane_name {
@@ -684,6 +686,8 @@ table.scoreboard_table th {
     padding: 0 8px;
     display: none;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .lane_name-inner {
@@ -713,11 +717,15 @@ table.scoreboard_table th {
     order: 1;
 }
 
+/* Always-visible tag slot: reserves space so the time column
+   never resizes when indicators appear. Content set by JS. */
 .lane_qt_tag {
-    display: none;
+    display: inline-block;
     font-size: 0.75em;
     text-align: left;
     margin-left: 0.5ch;
+    min-width: 6ch;
+    vertical-align: baseline;
 }
 
 .scoreboard_place_col {
@@ -730,8 +738,8 @@ table.scoreboard_table td[id^="lane_place"] {
 }
 
 .scoreboard_time_col {
-    width: 290px !important;
-    max-width: 290px !important;
+    width: 325px !important;
+    max-width: 325px !important;
 }
 
 .background {
@@ -819,7 +827,7 @@ table.scoreboard_table td[id^="lane_place"] {
         padding: 0 4px;
     }
 
-    /* Ensure Time column fits m:ss.ms */
+    /* Ensure Time column fits m:ss.ms + tag */
     .scoreboard_time_col {
         width: auto !important;
         max-width: none !important;
@@ -827,11 +835,14 @@ table.scoreboard_table td[id^="lane_place"] {
         white-space: nowrap;
     }
 
+    /* Name column: absorbs remaining space, truncates with ellipsis */
     .scoreboard_name_col,
     .lane_name {
         width: auto !important;
         max-width: none !important;
         white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     table.scoreboard_table td,
@@ -849,7 +860,7 @@ table.scoreboard_table td[id^="lane_place"] {
         padding: 0 4px;
     }
 
-    /* Time data cells: minimum width for m:ss.ms */
+    /* Time data cells: minimum width for m:ss.ms + tag */
     table.scoreboard_table td:last-child {
         min-width: 5.5em;
     }
