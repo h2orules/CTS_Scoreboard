@@ -21,10 +21,12 @@ To get the CTS serial stream, you need:
 Cut off one of the 1/4" female connectors. Solder the center conductor to pin 2 of the DB-9, and the shield to pin 5. Put it all together, connect it inline with the CTS cable, connect the DB-9 to the serial port, and you are done.
 
 ## Running the Program
-usage: StreamServer.py [-h] [--port PORT] [--in IN_FILE] [--out OUT]
-                       [--portlist]
+```
+usage: cts-scoreboard [-h] [--port PORT] [--in IN_FILE] [--out OUT]
+                      [--portlist] [--speed IN_SPEED] [--debug]
+```
 
-Provide HTML rendering of Coloado Timing System data.
+Provide HTML rendering of Colorado Timing System data.
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -33,6 +35,8 @@ optional arguments:
                         Input file to use instead of serial port
   --out OUT, -o OUT     Output file to dump data
   --portlist, -l        List of available serial ports
+  --speed IN_SPEED, -s  Speed to play input file at
+  --debug, -d           Display debug info at console
 
 ## Page Templates
 The HTML server is [Flask](http://flask.pocoo.org/), and the templates are based on [Jinja2](http://jinja.pocoo.org/docs/2.10/templates/). This makes it easy to make multiple displays based on need. At the moment there are two:
@@ -40,18 +44,28 @@ The HTML server is [Flask](http://flask.pocoo.org/), and the templates are based
  /       Scoreboard display suitable for screen overlay
  /test   Scoreboard display overlayed on a static image for testing.
  
-## Pips
+## Setup
+
+### Prerequisites
+
+Install [uv](https://docs.astral.sh/uv/getting-started/installation/), a fast Python package manager:
 ```
-pip install flask
-pip install flask_login
-pip install flask_socketio
-pip install PySerial
-pip install hytek_parser #see https://github.com/SwimComm/hytek-parser
-(eventlet or gevent and gevent-websocket)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
+
+### Install Dependencies
+```
+uv sync
+```
+
+This will create a `.venv` virtual environment and install all dependencies from the lockfile.
 
 ## Running
 ```
-source ~/.env/bin/activate
-python3 CTS_Scoreboard.py
+uv run cts-scoreboard
+```
+
+Or with arguments:
+```
+uv run cts-scoreboard --in recording.dat --speed 2.0
 ```

@@ -18,6 +18,7 @@ from hytek_st2_parser import parse_st2_file
 from hytek_rec_parser import parse_rec_file, format_record_date
 from race_state_machine import RaceStateMachine
 import ap
+import argparse
 
 DEBUG = False
 #DEBUG = True
@@ -1512,9 +1513,9 @@ def load_user(userid):
     return User(userid)
     
     
-if __name__ == '__main__':
-    import argparse
-    
+def main():
+    global in_file, out_file, in_speed, debug_console
+
     load_settings()
 
     parser = argparse.ArgumentParser(description='Provide HTML rendering of Coloado Timing System data.')
@@ -1549,4 +1550,8 @@ if __name__ == '__main__':
         traceback.print_exc()
     finally:
         input('Press enter to continue...')
+
+
+if __name__ == '__main__':
+    main()
         
