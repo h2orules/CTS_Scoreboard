@@ -33,11 +33,13 @@
             <h1>CTS Scoreboard</h1>
             <h2>Site Map</h2>
         </div>
-        {% for url, route in links %}
-            <div class="row"><div class="col-md-4">
-                <!-- <p><a href="{{ url}}">{{route}}</a></p> -->
-                <a class="btn btn-primary btn-lg btn-block" href="{{ url}}">{{route}}</a>
-            </div></div>
+        {% for section_title, items in sections %}
+            <h3>{{ section_title }}</h3>
+            {% for url, route in items %}
+                <div class="row"><div class="col-md-4">
+                    <a class="btn btn-primary btn-lg btn-block" href="{{ url }}">{{ route }}</a>
+                </div></div>
+            {% endfor %}
         {% endfor %}
     </div>
 </body>

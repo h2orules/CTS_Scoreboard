@@ -1,0 +1,951 @@
+html,
+body {
+    height: 100%;
+    margin: 0;
+}
+
+.content_outer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 25px;
+    padding-bottom: 80px;
+    height: 100vh;
+    box-sizing: border-box;
+    overflow-x: auto;
+    overflow-y: hidden;
+    z-index: 100;
+}
+
+.scoreboard_group {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: fit-content;
+    min-width: 1000px;
+    max-width: 100%;
+}
+
+.content_title_block {
+    margin-bottom: 25px;
+    text-align: center;
+}
+
+.content_meet_title {
+    font-family: 'Overpass Mono', monospace;
+    font-size: 43px;
+    color: #000000;
+    background-color: #87bdd8;
+    padding: 5px 30px 0 30px;
+}
+
+.content_event_name {
+    font-family: 'Overpass Mono', monospace;
+    color: #cfe0e8;
+    font-size: 35px;
+    background-color: #505050;
+    padding: 0 30px;
+}
+
+.qualifying_time_row td {
+    font-family: 'Overpass Mono', monospace;
+    color: #333333;
+    font-size: 24px;
+    background-color: #d8d8d8;
+    padding: 0;
+    text-align: left;
+    white-space: nowrap;
+}
+
+.qt_time {
+    text-align: right;
+}
+
+/* Common decoration for qualified times in lane display */
+.qt-highlight {
+    text-decoration-line: underline;
+}
+
+body.hide-time-decorations .qt-highlight {
+    text-decoration-line: none;
+}
+
+.qt-highlight.qt-std {
+    text-decoration-style: solid;
+}
+
+.qt-highlight.qt-rec {
+    text-decoration-style: wavy;
+}
+
+.qt-highlight.qt-std.qt-rec {
+    text-decoration-style: double;
+}
+
+.qt-highlight.qt-pr {
+    text-decoration-style: dotted;
+}
+
+/* Time standard tag color palette (~5:1 contrast vs #d8d8d8) */
+.qt-color-0 {
+    color: #8B0000;
+}
+
+/* crimson red */
+.qt-color-1 {
+    color: #00508A;
+}
+
+/* medium blue */
+.qt-color-2 {
+    color: #1A6B1A;
+}
+
+/* forest green */
+.qt-color-3 {
+    color: #8B008B;
+}
+
+/* medium magenta */
+.qt-color-4 {
+    color: #A04000;
+}
+
+/* burnt orange */
+.qt-color-5 {
+    color: #6A2CB0;
+}
+
+/* medium purple */
+.qt-color-6 {
+    color: #A0204A;
+}
+
+/* rose */
+.qt-color-7 {
+    color: #006888;
+}
+
+/* teal */
+.qt-color-8 {
+    color: #7A2080;
+}
+
+/* orchid */
+.qt-color-9 {
+    color: #6B3000;
+}
+
+/* brown */
+.qt-color-10 {
+    color: #882288;
+}
+
+/* plum */
+.qt-color-11 {
+    color: #2E4AA0;
+}
+
+/* royal blue */
+
+/* Record color palette (~5:1 contrast vs #d8d8d8) */
+.rec-color-0 {
+    color: #B03000;
+}
+
+/* rust */
+.rec-color-1 {
+    color: #005EA6;
+}
+
+/* sapphire */
+.rec-color-2 {
+    color: #307030;
+}
+
+/* kelly green */
+.rec-color-3 {
+    color: #9400D3;
+}
+
+/* dark violet */
+.rec-color-4 {
+    color: #B07000;
+}
+
+/* dark amber */
+.rec-color-5 {
+    color: #5B2C8B;
+}
+
+/* grape */
+.rec-color-6 {
+    color: #C02050;
+}
+
+/* crimson rose */
+.rec-color-7 {
+    color: #007050;
+}
+
+/* viridian */
+.rec-color-8 {
+    color: #802060;
+}
+
+/* boysenberry */
+.rec-color-9 {
+    color: #804000;
+}
+
+/* raw umber */
+.rec-color-10 {
+    color: #3040A0;
+}
+
+/* persian blue */
+.rec-color-11 {
+    color: #607020;
+}
+
+/* olive drab */
+
+.standards-records-container {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 0;
+    padding: 0 8px;
+    box-sizing: border-box;
+    width: 100%;
+    overflow: hidden;
+}
+
+.standards-column,
+.records-column {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.records-column {
+    border-left: 1px solid #bbb;
+    padding-left: 12px;
+}
+
+.standards-column {
+    padding-right: 12px;
+}
+
+.standards-grid,
+.records-grid {
+    display: grid;
+    column-gap: 1ch;
+    row-gap: 0;
+    align-items: baseline;
+    justify-content: start;
+}
+
+.standards-grid {
+    grid-template-columns: auto auto auto auto;
+}
+
+.records-grid {
+    grid-template-columns: auto auto auto auto auto auto;
+}
+
+.grid-subheader {
+    font-style: italic;
+    font-size: 24px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.grid-divider {
+    grid-column: 1 / -1;
+    height: 4px;
+}
+
+.records-set-divider {
+    height: 4px;
+}
+
+.rec_time,
+.rec_name,
+.rec_team,
+.rec_year,
+.rec_qualifiers,
+.qt_time,
+.qt_tag,
+.qt_desc,
+.qt_qualifiers {
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.rec_name,
+.qt_desc,
+.qt_tag {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.rec_name,
+.qt_desc {
+    max-width: 24ch;
+}
+
+.rec_time,
+.qt_time {
+    text-align: right;
+}
+
+.rec_header {
+    font-weight: bold;
+    font-size: 29px;
+    margin-bottom: 2px;
+}
+
+.rec_subheader {
+    font-style: italic;
+    font-size: 24px;
+    margin-bottom: 2px;
+}
+
+.rec_set_divider {
+    border-top: 1px solid #bbb;
+    margin: 4px 0;
+}
+
+.qt-pr {
+    color: #d602d6;
+}
+
+/* personal record */
+
+.content_meet_date {
+    font-family: 'Overpass Mono', monospace;
+    font-size: 37px;
+    color: #000000;
+    background-color: #daebe8;
+    padding: 0 30px;
+}
+
+.content_scores {
+    display: grid;
+    grid-template-columns: repeat(4, auto);
+    column-gap: 1.5ch;
+    justify-content: center;
+    background-color: #daebe8;
+    padding: 2px 8px 4px;
+    transition: opacity 0.5s, max-height 0.5s ease, padding 0.5s ease;
+    overflow: hidden;
+}
+
+.score_cell {
+    display: flex;
+    align-items: baseline;
+    gap: 1ch;
+}
+
+.score_team_name {
+    font-family: 'Overpass Mono', monospace;
+    font-size: 29px;
+    color: #333333;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.score_value {
+    font-family: 'Overpass Mono', monospace;
+    font-size: 35px;
+    font-weight: bold;
+    color: #000000;
+    text-align: right;
+    min-width: 3ch;
+    flex-shrink: 0;
+}
+
+.content_event_number {
+    font-family: 'Overpass Mono', monospace;
+    font-size: 50px;
+    color: #000000;
+    background-color: #9d238f;
+    width: 370px;
+    float: left;
+    padding-left: 30px;
+}
+
+.content_heat_number {
+    font-family: 'Overpass Mono', monospace;
+    font-size: 50px;
+    color: #000000;
+    background-color: #9d238f;
+    width: 400px;
+    float: left;
+}
+
+.content_scoreboard {
+    font-family: 'Overpass Mono', monospace;
+    font-size: 46px;
+    color: #000000;
+    opacity: 1 !important;
+    display: block !important;
+    text-align: center;
+}
+
+.content_scoreboard_ad {
+    max-width: 400px;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    margin: 25px auto 0;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.content_scoreboard_ad img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+}
+
+.scoreboard_disclaimer {
+    color: #404040;
+    font-family: Arial, Helvetica, sans-serif;
+    font-style: italic;
+    font-size: 20px;
+    text-align: center;
+    position: fixed;
+    bottom: 25px;
+    left: 0;
+    right: 0;
+    z-index: 100;
+}
+
+.content_scoreboard_table {
+    display: inline-block;
+    transition: opacity 0.5s;
+}
+
+.scoreboard-stack {
+    display: inline-block;
+    position: relative;
+    overflow: hidden;
+    transition: max-height 0.5s ease, min-height 0.5s ease, opacity 0.5s;
+}
+
+.blank-clock {
+    font-family: 'Overpass Mono', monospace;
+    font-size: 173px;
+    color: #000000;
+    text-align: center;
+    display: none;
+    opacity: 0;
+    transition: opacity 0.5s;
+    background-color: #b7d7e8;
+    box-sizing: border-box;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    z-index: 1;
+}
+
+.blank-message {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    min-height: 100%;
+    background-color: #b7d7e8;
+    box-sizing: border-box;
+    display: none;
+    opacity: 0;
+    transition: opacity 0.5s ease;
+    flex-direction: column;
+    z-index: 2;
+}
+
+.blank-message-clock {
+    font-family: 'Overpass Mono', monospace;
+    color: #000;
+    text-align: center;
+    flex: 0 0 auto;
+    font-size: 100px;
+    line-height: 1;
+    padding: 0 16px 0 0;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    max-height: 200px;
+    opacity: 1;
+    transition: max-height 0.5s ease, opacity 0.5s ease, padding 0.5s ease;
+}
+
+.blank-message-body {
+    font-family: 'Overpass Mono', monospace;
+    color: #000;
+    flex: 1 1 auto;
+    margin: 0;
+    padding: 16px 32px;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    white-space: normal;
+    overflow: hidden;
+}
+
+#blank_message_text {
+    transition: font-size 0.5s ease;
+}
+
+/* Collapsible spacer emitted for blank source lines. Adds a small gap that
+   naturally precedes headers (or any element) following a blank line. */
+.blank-message-body .md-blank {
+    height: 0.5em;
+    width: 100%;
+}
+
+/* Markdown elements rendered inside the blank-state message overlay.
+   Keep margins minimal so auto-fit math fits within the 8-line budget. */
+.blank-message-body h1,
+.blank-message-body h2,
+.blank-message-body h3,
+.blank-message-body h4 {
+    font-family: inherit;
+    color: inherit;
+    font-weight: bold;
+    margin: 24px 0 0 0;
+    padding: 0;
+    line-height: 1.1;
+}
+
+.blank-message-body h1:first-child,
+.blank-message-body h2:first-child,
+.blank-message-body h3:first-child,
+.blank-message-body h4:first-child {
+    margin-top: 0;
+}
+
+.blank-message-body h1 {
+    font-size: 1.4em;
+}
+
+.blank-message-body h2 {
+    font-size: 1.25em;
+}
+
+.blank-message-body h3 {
+    font-size: 1.1em;
+}
+
+.blank-message-body h4 {
+    font-size: 1em;
+}
+
+.blank-message-body ul,
+.blank-message-body ol {
+    margin: 0;
+    padding-left: 1.5em;
+    list-style-position: inside;
+}
+
+.blank-message-body li {
+    margin: 0;
+    padding: 0;
+}
+
+.blank-message-body code {
+    font-family: inherit;
+    background-color: rgba(0, 0, 0, 0.08);
+    border-radius: 3px;
+    padding: 0 0.25em;
+}
+
+.blank-message-body strong {
+    font-weight: bold;
+}
+
+.blank-message-body em {
+    font-style: italic;
+}
+
+.blank-message-body u {
+    text-decoration: underline;
+}
+
+.blank-message-body s {
+    text-decoration: line-through;
+}
+
+.seed-time-italic {
+    font-style: italic;
+}
+
+.scoreboard_table {
+    border-spacing: 0;
+    table-layout: fixed;
+}
+
+table.scoreboard_table td {
+    overflow: hidden;
+    white-space: pre;
+    max-width: 0px;
+    width: 0px;
+}
+
+table.scoreboard_table th {
+    overflow: hidden;
+    white-space: nowrap;
+}
+
+.scoreboard_title {
+    font-family: 'Overpass Mono', monospace;
+    color: #000000;
+    font-size: 50px;
+    background-color: #87bdd8;
+    width: 100%;
+    text-align: center;
+}
+
+.scoreboard_header {
+    font-family: 'Overpass Mono', monospace;
+    color: #000000;
+    font-size: 38px;
+    background-color: #daebe8;
+}
+
+.scoreboard_row_odd {
+    font-family: 'Overpass Mono', monospace;
+    color: #000000;
+    font-size: 38px;
+    background-color: #b7d7e8;
+}
+
+.scoreboard_row_eve {
+    font-family: 'Overpass Mono', monospace;
+    color: #000000;
+    font-size: 38px;
+    background-color: #cfe0e8;
+}
+
+.anim {
+    transition: width 0.5s, max-width 0.5s;
+}
+
+/* Header label toggle - full by default, short hidden */
+.header-short {
+    display: none;
+}
+
+.scoreboard_name_col {
+    width: 1180px !important;
+    max-width: 1180px !important;
+    display: none;
+}
+
+.lane_name {
+    width: 1180px !important;
+    max-width: 1180px !important;
+    padding: 0 8px;
+    display: none;
+    white-space: nowrap;
+}
+
+.lane_name-inner {
+    display: flex;
+    flex-direction: row;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.lane_team_code {
+    text-align: right;
+    font-weight: bold;
+    flex-shrink: 0;
+    order: 3;
+}
+
+.lane_age_code {
+    text-align: right;
+    flex-shrink: 0;
+    order: 2;
+    margin-left: auto;
+}
+
+.lane_swimmer_name {
+    text-align: left;
+    flex-shrink: 1;
+    order: 1;
+}
+
+.lane_qt_tag {
+    display: none;
+    font-size: 0.75em;
+    text-align: left;
+    margin-left: 0.5ch;
+}
+
+.scoreboard_place_col {
+    width: 135px !important;
+    max-width: 135px !important;
+}
+
+table.scoreboard_table td[id^="lane_place"] {
+    font-weight: bold;
+}
+
+.scoreboard_time_col {
+    width: 290px !important;
+    max-width: 290px !important;
+}
+
+.background {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #999999;
+    background-size: cover;
+    background-position: center;
+    z-index: -1;
+}
+
+.controls {
+    position: fixed;
+    top: 10;
+    left: 10;
+}
+
+/* Mobile devices */
+@media screen and (max-width: 768px) {
+
+    html,
+    body {
+        overflow: hidden;
+        height: 100%;
+        margin: 0;
+    }
+
+    .content_outer {
+        padding: 10px;
+        /* Reserve space for the fixed disclaimer footer so content is
+           clipped at the footer cutoff rather than overlapping it. */
+        padding-bottom: 56px;
+        height: 100vh;
+        min-height: 0;
+        width: 100%;
+        overflow: hidden;
+    }
+
+    .scoreboard_group {
+        min-width: 0;
+    }
+
+    .content_title_block {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .content_scoreboard {
+        width: 100%;
+    }
+
+    .content_scoreboard_table {
+        width: 100%;
+    }
+
+    .scoreboard_table {
+        width: 100%;
+        table-layout: auto;
+    }
+
+    /* Swap header labels */
+    .header-full {
+        display: none;
+    }
+
+    .header-short {
+        display: inline;
+    }
+
+    /* Minimize Lane and Place columns */
+    #scoreboard_lane_col {
+        width: 1px !important;
+        max-width: none !important;
+        white-space: nowrap;
+        padding: 0 4px;
+    }
+
+    .scoreboard_place_col {
+        width: 1px !important;
+        max-width: none !important;
+        white-space: nowrap;
+        padding: 0 4px;
+    }
+
+    /* Ensure Time column fits m:ss.ms */
+    .scoreboard_time_col {
+        width: auto !important;
+        max-width: none !important;
+        min-width: 5.5em;
+        white-space: nowrap;
+    }
+
+    .scoreboard_name_col,
+    .lane_name {
+        width: auto !important;
+        max-width: none !important;
+        white-space: nowrap;
+    }
+
+    table.scoreboard_table td,
+    table.scoreboard_table th {
+        max-width: none;
+        width: auto;
+        white-space: nowrap;
+        font-size: min(24px, 3.5vw);
+    }
+
+    /* Lane/Place data cells: minimal width */
+    table.scoreboard_table td:first-child,
+    table.scoreboard_table td:nth-child(2) {
+        width: 1px;
+        padding: 0 4px;
+    }
+
+    /* Time data cells: minimum width for m:ss.ms */
+    table.scoreboard_table td:last-child {
+        min-width: 5.5em;
+    }
+
+    .scoreboard_title {
+        font-size: min(34px, 4.8vw);
+    }
+
+    .content_event_name {
+        font-size: min(28px, 4vw);
+    }
+
+    .scoreboard_header th {
+        font-size: min(24px, 3.5vw);
+    }
+
+    .qualifying_time_row td {
+        padding: 0 4px;
+    }
+
+    /* Records / Time Standards sizing on mobile:
+       Rows, sub-headers and differentiators match the scoreboard row font
+       so they scale with the table. Section headers ("Records" /
+       "Time Standards") sit at the same size but heavy-weight so they
+       still visually separate. */
+    .rec_time,
+    .rec_name,
+    .rec_team,
+    .rec_year,
+    .rec_qualifiers,
+    .qt_time,
+    .qt_tag,
+    .qt_desc,
+    .qt_qualifiers,
+    .grid-subheader,
+    .rec_subheader {
+        font-size: min(24px, 3.5vw);
+    }
+
+    .rec_header {
+        font-size: min(24px, 3.5vw);
+        font-weight: 900;
+    }
+
+    /* Team scores: match other title rows rather than the large desktop size. */
+    .score_team_name,
+    .score_value {
+        font-size: min(24px, 3.5vw);
+    }
+
+    .standards-records-container {
+        flex-direction: column-reverse;
+        gap: 12px;
+    }
+
+    .standards-column,
+    .records-column {
+        flex: 0 0 auto;
+        padding-right: 0;
+    }
+
+    .records-column {
+        border-left: none;
+        padding-left: 0;
+        border-bottom: 1px solid #bbb;
+        padding-bottom: 4px;
+        margin-bottom: 4px;
+    }
+
+    .content_meet_title {
+        font-size: min(30px, 4.5vw);
+    }
+
+    .content_meet_date {
+        font-size: min(26px, 4vw);
+    }
+
+    .content_scoreboard_ad {
+        /* Shrink to fit the space between the scoreboard table and the
+           footer cutoff, down to a minimum of 30% width. If the viewport
+           can't fit the image at that size, it will be clipped behind
+           the footer mask. */
+        width: auto;
+        min-width: 30%;
+        max-width: 60%;
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+    }
+
+    .content_scores {
+        grid-template-columns: repeat(2, auto);
+    }
+
+    .background {
+        overflow: hidden;
+    }
+
+    /* Footer stays visible; content_outer clips anything behind it.
+       Background is transparent so the water image shows through. */
+    .scoreboard_disclaimer {
+        bottom: 0;
+        padding: 12px 0;
+    }
+}
+
+/* Confetti particles */
+.confetti-particle {
+    position: fixed;
+    z-index: 9999;
+    pointer-events: none;
+    width: 6px;
+    height: 6px;
+}

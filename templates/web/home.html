@@ -1,0 +1,1264 @@
+<html>
+
+<head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <link href="https://fonts.googleapis.com/css?family=Overpass+Mono" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="{{url_for('static', filename='css/scoreboard_style_web.css')}}">
+</head>
+
+<script>
+    var lane_running = {};
+
+    function on_timer() {
+        var months = { 0: "January", 1: "February", 2: "March", 3: "April", 4: "May", 5: "June", 6: "July", 7: "August", 8: "September", 9: "October", 10: "November", 11: "December" };
+
+        // Update current time
+        var d = new Date();
+        var hoursAmPm = (d.getHours() % 12);
+        hoursAmPm = (hoursAmPm != 0) ? hoursAmPm : 12;
+        document.getElementById("meet_datetime").innerHTML = months[d.getMonth()] + " " + d.getDate() + ", " + d.getFullYear() + " " + hoursAmPm + ":" + ("0" + d.getMinutes()).slice(-2);
+    }
+
+    function init() {
+        on_timer();
+        window.setInterval(on_timer, 30000);
+    }
+</script>
+
+<body style="margin:0px" onload="init();">
+    <div class="content_outer">
+        <div class="scoreboard_group">
+        <div class="content_title_block">
+            <div class="content_meet_title">{{ meet_title }}</div>
+            <div class="content_meet_date"><span id="meet_datetime"></span></div>
+            {% set active_teams = team_names | selectattr('1') | list %}
+            {% if active_teams %}
+            <div class="content_scores">
+                {% for score_key, team_name in active_teams %}
+                <div class="score_cell">
+                    <span class="score_team_name">{{ team_name }}</span>
+                    <span class="score_value" id="{{ score_key }}"></span>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        <div class="content_scoreboard" id="scoreboard">
+            <div class="scoreboard-stack">
+                <div class="content_scoreboard_table">
+                    <table class="scoreboard_table">
+                    <thead>
+                        <tr>
+                            <th colspan="4" class="scoreboard_title">Event: <span id="current_event"></span> Heat: <span
+                                    id="current_heat"></span></th>
+                        </tr>
+
+                        <tr>
+                            <th colspan="4" class="content_event_name"><span id="event_name" class="anim"></span></th>
+                        </tr>
+
+                    </thead>
+                    <tbody id="qualifying_times_body">
+                    </tbody>
+                    <thead>
+
+                        <tr class="scoreboard_header">
+                            <th align="center" id="scoreboard_lane_col" style="width: 110px;max-width: 110px;"><span
+                                    class="header-full">Lane</span><span class="header-short">Ln</span></th>
+                            <th align="center" id="scoreboard_place_col" class="scoreboard_place_col anim"><span
+                                    class="header-full">Place</span><span class="header-short">Pl</span></th>
+                            <th align="center" id="scoreboard_name_col" class="scoreboard_name_col anim">Name</th>
+                            <th align="center" id="scoreboard_time_col" class="scoreboard_time_col anim">Time</th>
+                        </tr>
+                    </thead>
+                    {% for i in range(1, num_lanes + 1) %}
+                    <tr class="{{ 'scoreboard_row_odd' if i % 2 == 1 else 'scoreboard_row_eve' }}">
+                        <td align="center">{{ i }}</td>
+                        <td id="lane_place{{ i }}" align="center"></td>
+                        <td id="lane_name{{ i }}" class="lane_name"><div class="lane_name-inner"><span class="lane_swimmer_name" id="lane_swimmer_name{{ i }}">&nbsp;</span><span class="lane_age_code" id="lane_age_code{{ i }}"></span><span class="lane_team_code" id="lane_team{{ i }}"></span></div></td>
+                        <td align="right"><span id="lane_time{{ i }}"></span><span class="lane_qt_tag" id="lane_qt_tag{{ i }}"></span>&nbsp;</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+                </div>
+                <div id="blank_clock" class="blank-clock"></div>
+                <div id="blank_message_overlay" class="blank-message">
+                    <div class="blank-message-body"><div class="blank-message-clock" id="blank_message_clock"></div><span id="blank_message_text"></span></div>
+                </div>
+            </div>
+        </div>
+        </div>
+        <div class="content_scoreboard_ad" id="content_scoreboard_ad">
+            {% if ad_url and (ad_url != '') %}
+            <img src="{{url_for('static', filename='ad/'+ad_url)}}" />
+            {% endif %}
+        </div>
+        {% if test_background %}
+        <div class="controls">
+            <button type="button" onclick="changeEvent(-1);">◀ Event</button>
+            <button type="button" onclick="changeEvent(1);">Event ▶</button>
+            <button type="button" onclick="changeHeat(-1);">◀ Heat</button>
+            <button type="button" onclick="changeHeat(1);">Heat ▶</button>
+            <button type="button" onclick="socket.emit('next_heat', {});">Next (Sequential)</button>
+        </div>
+        <div class="controls" style="top: 50px;">
+            <button type="button" onclick="socket.emit('sim_load_event', {});">Load Test Event</button>
+            <button type="button" onclick="socket.emit('sim_step', {step:'start'});">▶ Start</button>
+            <button type="button" onclick="socket.emit('sim_step', {step:'finish'});">🏁 Finish</button>
+            <button type="button" onclick="socket.emit('sim_step', {step:'clear'});">Clear</button>
+            <button type="button" onclick="socket.emit('sim_step', {step:'blank'});">Blank</button>
+            <button type="button" onclick="socket.emit('sim_step', {step:'total_blank'});">Total Blank</button>
+            <button type="button" onclick="runFullSequence();">▶▶ Full Sequence</button>
+        </div>
+        {% endif %}
+    </div>
+    <div class="scoreboard_disclaimer">Scoreboard is unofficial. See results for official times.</div>
+    <div class="background" style="background-image: url('{{url_for('static', filename='pool.jpg')}}');"></div>
+
+</body>
+
+<script type="text/javascript" src="{{url_for('static', filename='socket.io.4.8.3.min.js')}}"
+    integrity="sha384-kzavj5fiMwLKzzD1f8S7TeoVIEi7uKHvbTA3ueZkrzYq75pNQUiUi6Dy98Q3fxb0"></script>
+<script type="text/javascript" charset="utf-8">
+    var s = {}
+    var schedule_has_names = {{ 'true' if schedule_has_names else 'false' }};
+    var qtThresholds = [];  // Current event's qualifying time thresholds
+    var recSets = [];       // Current event's record sets [{set_name, set_team_tag, records:[...]}, ...]
+    var laneAgeCodes = {};  // lane -> age_code string (e.g. "8B", "12G")
+    var laneTeamCodes = {}; // lane -> team code string
+    var laneTimes = {};    // lane -> display time string from last update
+    var laneSeedTimes = {}; // lane -> seed time in seconds (number or "")
+    var showPrTags = true;  // Whether to show PR tags
+    var showConfetti = true; // Whether to show confetti on qualifications
+    var seedTimeLabel = 'Seed Time'; // 'Seed Time', 'Entry Time', or 'None'
+    var CONFETTI_FADE_MS = 1200; // Duration for confetti particles to fade out
+    var confettiFired = {};  // Track which lanes have already shown confetti
+    var maxQtTagLen = 0;    // Longest tag string for space reservation
+    var raceState = "TotalBlank"; // Current race state from server FSM
+    var blankMessageText = '';
+    var blankMessageVisible = false;
+    var blankMessageAlign = 'left';
+
+    // Apply initial name column visibility
+    document.querySelectorAll('.scoreboard_name_col, .lane_name').forEach(function (el) {
+        el.style.display = schedule_has_names ? 'table-cell' : 'none';
+    });
+
+    // Parse a display time string like "  1:23.45" or "   23.45" into seconds
+    function parseTimeToSeconds(timeStr) {
+        if (!timeStr) return null;
+        var t = timeStr.replace(/\s/g, '');
+        if (!t || t === '') return null;
+        var parts = t.split(':');
+        var minutes = 0, secMs;
+        if (parts.length === 2) {
+            minutes = parseInt(parts[0]) || 0;
+            secMs = parseFloat(parts[1]);
+        } else {
+            secMs = parseFloat(parts[0]);
+        }
+        if (isNaN(secMs)) return null;
+        return minutes * 60 + secMs;
+    }
+
+    // Get applicable QT thresholds for a given lane based on its age code
+    function getThresholdsForLane(lane) {
+        if (qtThresholds.length === 0) return [];
+        var ageCode = laneAgeCodes[lane] || "";
+        var laneAge = null, laneSexCode = null;
+        if (ageCode) {
+            var m = ageCode.match(/^(\d+)([BGMW])$/);
+            if (m) {
+                laneAge = parseInt(m[1]);
+                var letterMap = {'B': 1, 'M': 1, 'G': 2, 'W': 2};
+                laneSexCode = letterMap[m[2]];
+            }
+        }
+        var applicable = [];
+        for (var i = 0; i < qtThresholds.length; i++) {
+            var qt = qtThresholds[i];
+            // If no age code info, all thresholds apply
+            if (laneAge === null || laneSexCode === null) {
+                applicable.push(qt);
+                continue;
+            }
+            // Check sex match
+            if (qt.sex_code !== laneSexCode) continue;
+            // Check age overlap
+            var qMin = qt.age_min || 0;
+            var qMax = qt.age_max || 999;
+            if (laneAge < qMin || laneAge > qMax) continue;
+            applicable.push(qt);
+        }
+        return applicable;
+    }
+
+    // Get applicable record thresholds for a given lane based on age code and team
+    function getRecordsForLane(lane) {
+        if (recSets.length === 0) return [];
+        var ageCode = laneAgeCodes[lane] || "";
+        var laneTeam = (laneTeamCodes[lane] || "").toUpperCase();
+        var laneAge = null, laneSexCode = null;
+        if (ageCode) {
+            var m = ageCode.match(/^(\d+)([BGMW])$/);
+            if (m) {
+                laneAge = parseInt(m[1]);
+                var letterMap = {'B': 1, 'M': 1, 'G': 2, 'W': 2};
+                laneSexCode = letterMap[m[2]];
+            }
+        }
+        var applicable = [];
+        for (var s = 0; s < recSets.length; s++) {
+            var set = recSets[s];
+            // Team filtering: if set is mapped to a specific team, only match that team
+            if (set.set_team_tag !== 'ALL') {
+                if (laneTeam !== set.set_team_tag.toUpperCase()) continue;
+            }
+            for (var i = 0; i < set.records.length; i++) {
+                var rec = set.records[i];
+                if (laneAge === null || laneSexCode === null) {
+                    applicable.push(rec);
+                    continue;
+                }
+                if (rec.sex_code !== laneSexCode) continue;
+                var rMin = rec.age_min || 0;
+                var rMax = rec.age_max || 999;
+                if (laneAge < rMin || laneAge > rMax) continue;
+                applicable.push(rec);
+            }
+        }
+        return applicable;
+    }
+
+    // Returns true when the blank-message overlay is currently active (text + visible).
+    function isBlankMessageOverlayActive() {
+        var hasText = blankMessageText && blankMessageText.replace(/\s+/g, '').length > 0;
+        return blankMessageVisible && hasText;
+    }
+
+    // Spawn confetti particles from the center of a given element
+    function spawnConfetti(lane, targetEl) {
+        if (!showConfetti) return;
+        if (isBlankMessageOverlayActive()) return;
+        if (raceState !== "Running" && raceState !== "Finished") return;
+        if (confettiFired[lane]) return;
+        confettiFired[lane] = true;
+        var rect = targetEl.getBoundingClientRect();
+        var cx = rect.left + rect.width / 2;
+        var cy = rect.top + rect.height / 2;
+        var colors = ['#ff0', '#f0f', '#0ff', '#f00', '#0f0', '#00f', '#ff8800', '#ff44aa'];
+        var count = 40;
+        for (var i = 0; i < count; i++) {
+            var particle = document.createElement('div');
+            particle.className = 'confetti-particle';
+            particle.style.left = cx + 'px';
+            particle.style.top = cy + 'px';
+            particle.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
+            var size = 4 + Math.random() * 6;
+            particle.style.width = size + 'px';
+            particle.style.height = size + 'px';
+            if (Math.random() > 0.5) particle.style.borderRadius = '50%';
+            document.body.appendChild(particle);
+            animateParticle(particle, cx, cy);
+        }
+    }
+
+    function animateParticle(el, startX, startY) {
+        var angle = Math.random() * 2 * Math.PI;
+        var speed = 80 + Math.random() * 180;
+        var vx = Math.cos(angle) * speed;
+        var vy = Math.sin(angle) * speed - 120; // upward bias
+        var gravity = 320;
+        var x = 0, y = 0;
+        var start = null;
+        var duration = CONFETTI_FADE_MS;
+        var spin = (Math.random() - 0.5) * 720;
+
+        function frame(ts) {
+            if (!start) start = ts;
+            var t = (ts - start) / 1000; // seconds
+            var progress = (ts - start) / duration;
+            if (progress >= 1) {
+                el.remove();
+                return;
+            }
+            x = vx * t;
+            y = vy * t + 0.5 * gravity * t * t;
+            var opacity = 1 - progress;
+            el.style.transform = 'translate(' + x + 'px,' + y + 'px) rotate(' + (spin * t) + 'deg)';
+            el.style.opacity = opacity;
+            requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+    }
+
+    // Evaluate a lane's time against standards and records
+    function evaluateLaneTime(lane, timeText, isRunning) {
+        var timeEl = document.getElementById("lane_time" + lane);
+        if (!timeEl) return;
+
+        // Reset to default
+        timeEl.className = timeEl.className.replace(/\b(qt-color|rec-color)-\d+\b/g, '').trim();
+        timeEl.classList.remove('qt-pr', 'qt-highlight', 'qt-std', 'qt-rec');
+        var tagEl = document.getElementById("lane_qt_tag" + lane);
+        if (tagEl) tagEl.textContent = "";
+
+        if (isRunning) return;
+
+        var seconds = parseTimeToSeconds(timeText);
+        if (seconds === null || seconds <= 0) return;
+
+        // Check qualifying time standards (<=)
+        var bestStd = null;
+        if (qtThresholds.length > 0) {
+            var thresholds = getThresholdsForLane(lane);
+            for (var i = 0; i < thresholds.length; i++) {
+                var qt = thresholds[i];
+                if (seconds <= qt.time_seconds) {
+                    if (bestStd === null || qt.time_seconds < bestStd.time_seconds) {
+                        bestStd = qt;
+                    }
+                }
+            }
+        }
+
+        // Check records (strict <, tie does not break)
+        var bestRec = null;
+        if (recSets.length > 0) {
+            var records = getRecordsForLane(lane);
+            for (var i = 0; i < records.length; i++) {
+                var rec = records[i];
+                if (seconds < rec.time_seconds) {
+                    if (bestRec === null || rec.time_seconds < bestRec.time_seconds) {
+                        bestRec = rec;
+                    }
+                }
+            }
+        }
+
+        if (bestStd && bestRec) {
+            // Both standard met and record broken → double underline, standard color
+            timeEl.classList.add('qt-highlight', 'qt-std', 'qt-rec', bestStd.color_class);
+            if (tagEl) tagEl.textContent = bestStd.tag + " REC";
+            spawnConfetti(lane, timeEl.parentElement);
+        } else if (bestStd) {
+            // Standard met only → solid underline, standard color
+            timeEl.classList.add('qt-highlight', 'qt-std', bestStd.color_class);
+            if (tagEl) tagEl.textContent = bestStd.tag;
+            spawnConfetti(lane, timeEl.parentElement);
+        } else if (bestRec) {
+            // Record broken only → wavy underline, record color
+            timeEl.classList.add('qt-highlight', 'qt-rec', bestRec.color_class);
+            if (tagEl) tagEl.textContent = "REC";
+            spawnConfetti(lane, timeEl.parentElement);
+        } else if (showPrTags) {
+            // No qualifying standard or record — check for personal record
+            var seed = laneSeedTimes[lane];
+            if (typeof seed === 'number' && seed > 0 && seconds < seed) {
+                timeEl.classList.add('qt-highlight', 'qt-pr');
+                if (tagEl) tagEl.textContent = "PR";
+                spawnConfetti(lane, timeEl.parentElement);
+            }
+        }
+    }
+
+    // Render qualifying times and records into two-column layout
+    function renderQualifyingInfo(qtGroups, recSetList) {
+        // Flatten groups into a single array for lane threshold evaluation
+        qtThresholds = [];
+        for (var g = 0; g < qtGroups.length; g++) {
+            for (var i = 0; i < qtGroups[g].items.length; i++) {
+                qtThresholds.push(qtGroups[g].items[i]);
+            }
+        }
+        recSets = recSetList;
+        var qtBody = document.getElementById("qualifying_times_body");
+        qtBody.innerHTML = "";
+
+        // Compute max tag length for space reservation in time cells
+        maxQtTagLen = 0;
+        for (var q = 0; q < qtThresholds.length; q++) {
+            maxQtTagLen = Math.max(maxQtTagLen, qtThresholds[q].tag.length);
+        }
+        var hasAnyRecords = false;
+        var recSetsWithData = 0;
+        for (var rs = 0; rs < recSetList.length; rs++) {
+            if (recSetList[rs].records.length > 0) {
+                hasAnyRecords = true;
+                recSetsWithData++;
+            }
+        }
+        if (hasAnyRecords) {
+            // Combined tag: "{tag} REC" or just "REC"
+            var recTagLen = 3; // "REC"
+            if (maxQtTagLen > 0) {
+                recTagLen = maxQtTagLen + 4; // "TAG REC"
+            }
+            maxQtTagLen = Math.max(maxQtTagLen, recTagLen);
+        }
+
+        // Update tag placeholder widths
+        for (var i = 1; i <= {{ num_lanes }}; i++) {
+            var tagEl = document.getElementById("lane_qt_tag" + i);
+            if (tagEl) {
+                tagEl.style.display = maxQtTagLen > 0 ? "inline-block" : "none";
+                tagEl.style.minWidth = maxQtTagLen > 0 ? maxQtTagLen + "ch" : "0";
+            }
+        }
+
+        if (qtThresholds.length === 0 && !hasAnyRecords) return;
+
+        // Create container row
+        var tr = document.createElement("tr");
+        tr.className = "qualifying_time_row";
+        var td = document.createElement("td");
+        td.setAttribute("colspan", "4");
+
+        var container = document.createElement("div");
+        container.className = "standards-records-container";
+
+        if (qtGroups.length > 0) {
+            var stdDiv = document.createElement("div");
+            stdDiv.className = "standards-column";
+            var stdHeader = document.createElement("div");
+            stdHeader.className = "rec_header";
+            stdHeader.textContent = "Time Standards";
+            stdDiv.appendChild(stdHeader);
+            buildStandardsRows(stdDiv, qtGroups);
+            container.appendChild(stdDiv);
+        }
+
+        if (hasAnyRecords) {
+            var recDiv = document.createElement("div");
+            recDiv.className = "records-column";
+            var recHeader = document.createElement("div");
+            recHeader.className = "rec_header";
+            recHeader.textContent = "Records";
+            recDiv.appendChild(recHeader);
+            var showSetSubheader = (recSetsWithData > 1);
+            // If any set uses qualifier subheaders, reserve space for that
+            // column in every set so sets without qualifiers don't shift left.
+            var anyQual = false;
+            for (var rs0 = 0; rs0 < recSetList.length; rs0++) {
+                var sd = recSetList[rs0];
+                for (var ri = 0; ri < sd.records.length; ri++) {
+                    if (sd.records[ri].qualifiers) { anyQual = true; break; }
+                }
+                if (anyQual) break;
+            }
+            var firstSetRendered = false;
+            for (var rs = 0; rs < recSetList.length; rs++) {
+                var setData = recSetList[rs];
+                if (setData.records.length === 0) continue;
+                if (firstSetRendered) {
+                    var divider = document.createElement("div");
+                    divider.className = "records-set-divider";
+                    recDiv.appendChild(divider);
+                }
+                buildRecordsRows(recDiv, setData, showSetSubheader, anyQual);
+                firstSetRendered = true;
+            }
+            container.appendChild(recDiv);
+        }
+
+        td.appendChild(container);
+        tr.appendChild(td);
+        qtBody.appendChild(tr);
+    }
+
+    // Build standards grid rows inside a column container div
+    function buildStandardsRows(container, qtGroups) {
+        // Determine columns: time, tag, desc (desc only if any item has one)
+        var hasDesc = false;
+        for (var g = 0; g < qtGroups.length; g++) {
+            for (var i = 0; i < qtGroups[g].items.length; i++) {
+                var it = qtGroups[g].items[i];
+                if (it.description && it.description !== it.tag) { hasDesc = true; break; }
+            }
+            if (hasDesc) break;
+        }
+
+        var grid = document.createElement("div");
+        grid.className = "standards-grid";
+        var showGroupSubheader = (qtGroups.length > 1);
+        // Columns: [subheader?] [time] [tag] [desc?]
+        var stdCols = [];
+        if (showGroupSubheader) stdCols.push("auto");
+        stdCols.push("auto"); // time
+        stdCols.push("auto"); // tag
+        if (hasDesc) stdCols.push("minmax(0, auto)");
+        // Ensure last column can shrink even when desc is absent
+        if (!hasDesc) stdCols[stdCols.length - 1] = "minmax(0, auto)";
+        grid.style.gridTemplateColumns = stdCols.join(" ");
+        container.appendChild(grid);
+
+        for (var g = 0; g < qtGroups.length; g++) {
+            var group = qtGroups[g];
+
+            if (g > 0) {
+                var divider = document.createElement("div");
+                divider.className = "grid-divider";
+                grid.appendChild(divider);
+            }
+
+            for (var i = 0; i < group.items.length; i++) {
+                var qt = group.items[i];
+
+                // Column 1 (optional): subheader on first row of group
+                if (showGroupSubheader) {
+                    var subCell = document.createElement("div");
+                    if (i === 0 && group.qualifiers) {
+                        subCell.className = "grid-subheader";
+                        subCell.textContent = group.qualifiers;
+                    }
+                    grid.appendChild(subCell);
+                }
+
+                var timeSpan = document.createElement("div");
+                timeSpan.className = "qt_time " + qt.color_class;
+                timeSpan.textContent = qt.time;
+                grid.appendChild(timeSpan);
+
+                var tagSpan = document.createElement("div");
+                tagSpan.className = "qt_tag " + qt.color_class;
+                tagSpan.textContent = qt.tag;
+                grid.appendChild(tagSpan);
+
+                if (hasDesc) {
+                    var descSpan = document.createElement("div");
+                    descSpan.className = "qt_desc " + qt.color_class;
+                    var desc = (qt.description && qt.description !== qt.tag) ? qt.description : "";
+                    descSpan.textContent = desc;
+                    grid.appendChild(descSpan);
+                }
+            }
+        }
+    }
+
+    // Append one record set's rows as its own grid inside the records column
+    function buildRecordsRows(recDiv, setData, showSubheader, reserveQualCol) {
+        var recList = setData.records;
+        var isTeamSpecific = setData.set_team_tag && setData.set_team_tag !== 'ALL';
+
+        // Determine which columns this specific set needs
+        var colQual = !!reserveQualCol, colYear = false, colTeam = false, colName = false;
+        for (var r = 0; r < recList.length; r++) {
+            var rec = recList[r];
+            if (rec.qualifiers) colQual = true;
+            if (rec.record_year) colYear = true;
+            if (!isTeamSpecific && rec.record_team) colTeam = true;
+            if (rec.relay_names || rec.swimmer_name) colName = true;
+        }
+
+        // Build set subheader label if shown (cap set_name to 15 chars when
+        // appending a team tag so we don't overflow horizontally)
+        var showThisSubheader = showSubheader && setData.set_name;
+        var subLabel = "";
+        if (showThisSubheader) {
+            var sn = setData.set_name;
+            if (setData.set_team_tag && setData.set_team_tag !== 'ALL') {
+                if (sn.length > 15) sn = sn.slice(0, 14) + '\u2026';
+                subLabel = sn + " (" + setData.set_team_tag + ")";
+            } else {
+                subLabel = sn;
+            }
+        }
+
+        // Build per-set grid. Columns: [set-subheader]? [qual-subheader]? [time] [year]? [team]? [name]?
+        var grid = document.createElement("div");
+        grid.className = "records-grid";
+        var cols = [];
+        if (showThisSubheader) cols.push("auto");
+        if (colQual) cols.push("minmax(6ch, auto)");
+        cols.push("auto"); // time
+        if (colYear) cols.push("auto");
+        if (colTeam) cols.push("auto");
+        if (colName) cols.push("minmax(0, auto)");
+        grid.style.gridTemplateColumns = cols.join(" ");
+        recDiv.appendChild(grid);
+
+        var lastQual = null;
+        for (var r = 0; r < recList.length; r++) {
+            var rec = recList[r];
+            var thisQual = rec.qualifiers || "";
+            var isQualFirst = (thisQual !== lastQual);
+            lastQual = thisQual;
+
+            if (showThisSubheader) {
+                var setSubCell = document.createElement("div");
+                if (r === 0) {
+                    setSubCell.className = "grid-subheader";
+                    setSubCell.textContent = subLabel;
+                }
+                grid.appendChild(setSubCell);
+            }
+
+            if (colQual) {
+                var qualSubCell = document.createElement("div");
+                if (isQualFirst && thisQual) {
+                    qualSubCell.className = "grid-subheader";
+                    qualSubCell.textContent = thisQual;
+                }
+                grid.appendChild(qualSubCell);
+            }
+
+            var timeSpan = document.createElement("div");
+            timeSpan.className = "rec_time " + rec.color_class;
+            timeSpan.textContent = rec.time;
+            grid.appendChild(timeSpan);
+
+            if (colYear) {
+                var yearSpan = document.createElement("div");
+                yearSpan.className = "rec_year " + rec.color_class;
+                yearSpan.textContent = rec.record_year || "";
+                grid.appendChild(yearSpan);
+            }
+
+            if (colTeam) {
+                var teamSpan = document.createElement("div");
+                teamSpan.className = "rec_team " + rec.color_class;
+                teamSpan.textContent = rec.record_team || "";
+                grid.appendChild(teamSpan);
+            }
+
+            if (colName) {
+                var nameSpan = document.createElement("div");
+                nameSpan.className = "rec_name " + rec.color_class;
+                nameSpan.textContent = rec.relay_names || rec.swimmer_name || "";
+                grid.appendChild(nameSpan);
+            }
+        }
+    }
+
+    // Reset all lane time colors and tags
+    function resetLaneQualifications() {
+        for (var i = 1; i <= {{ num_lanes }}; i++) {
+            var timeEl = document.getElementById("lane_time" + i);
+            if (timeEl) {
+                timeEl.className = timeEl.className.replace(/\b(qt-color|rec-color)-\d+\b/g, '').trim();
+                timeEl.classList.remove('qt-pr', 'qt-highlight', 'qt-std', 'qt-rec');
+            }
+            var tagEl = document.getElementById("lane_qt_tag" + i);
+            if (tagEl) tagEl.textContent = "";
+        }
+    }
+
+    // Adjust .score_value min-width based on longest displayed score so 4+ digit scores don't get clipped
+    function updateScoreWidths() {
+        var scoresEl = document.querySelector('.content_scores');
+        if (!scoresEl) return;
+        var maxLen = 3;
+        scoresEl.querySelectorAll('.score_value').forEach(function (el) {
+            var t = (el.textContent || '').trim();
+            if (t.length > maxLen) maxLen = t.length;
+        });
+        scoresEl.querySelectorAll('.score_value').forEach(function (el) {
+            el.style.minWidth = maxLen + 'ch';
+        });
+    }
+
+    // Show/hide scoreboard elements based on blank states
+    function updateBlankDisplay(state) {
+        var tableEl = document.querySelector('.content_scoreboard_table');
+        var scoresEl = document.querySelector('.content_scores');
+        var clockEl = document.getElementById('blank_clock');
+        var stackEl = document.querySelector('.scoreboard-stack');
+
+        var isBlank = (state === "Blank" || state === "BlankPreRace");
+        var isTotalBlank = (state === "TotalBlank" || state === "TotalBlankPreRace");
+        var isHidden = isBlank || isTotalBlank;
+
+        if (isTotalBlank) {
+            // Fade out and collapse scoreboard + scores
+            if (tableEl) tableEl.style.opacity = '0';
+            if (scoresEl) {
+                scoresEl.style.opacity = '0';
+                scoresEl.style.maxHeight = scoresEl.scrollHeight + 'px';
+                void scoresEl.offsetHeight;
+                scoresEl.style.maxHeight = '0';
+                scoresEl.style.padding = '0';
+            }
+            if (stackEl) {
+                // Set explicit max-height from current size so transition animates
+                stackEl.style.maxHeight = stackEl.scrollHeight + 'px';
+                // Force reflow before collapsing
+                void stackEl.offsetHeight;
+                stackEl.style.maxHeight = '0';
+            }
+        } else if (isBlank) {
+            // Fade out table and scores, expand stack for clock overlay
+            if (tableEl) tableEl.style.opacity = '0';
+            if (scoresEl) {
+                scoresEl.style.opacity = '0';
+                scoresEl.style.maxHeight = scoresEl.scrollHeight + 'px';
+                void scoresEl.offsetHeight;
+                scoresEl.style.maxHeight = '0';
+                scoresEl.style.padding = '0';
+            }
+            if (stackEl && stackEl.style.maxHeight === '0px') {
+                // Expanding from collapsed (TotalBlank → Blank): animate to full height
+                var tbl = stackEl.querySelector('.scoreboard_table');
+                stackEl.style.maxHeight = (tbl ? tbl.scrollHeight : stackEl.scrollHeight) + 'px';
+                setTimeout(function () { if (stackEl) stackEl.style.maxHeight = ''; }, 500);
+            } else if (stackEl) {
+                stackEl.style.maxHeight = '';
+            }
+        } else {
+            // Restore scoreboard table, scores, and stack height
+            if (stackEl) {
+                // Expand: set max-height to scroll height for animation, then clear it
+                stackEl.style.maxHeight = stackEl.scrollHeight + 'px';
+                setTimeout(function () { if (stackEl) stackEl.style.maxHeight = ''; }, 500);
+            }
+            if (tableEl) { tableEl.style.opacity = '1'; }
+            if (scoresEl) {
+                // Only restore scores if they have non-zero values
+                var hasScores = Array.from(scoresEl.querySelectorAll('.score_value')).some(function (el) {
+                    var v = (el.textContent || '').trim();
+                    return v !== '' && v !== '0';
+                });
+                if (hasScores) {
+                    scoresEl.style.padding = '';
+                    scoresEl.style.maxHeight = scoresEl.scrollHeight + 'px';
+                    scoresEl.style.opacity = '1';
+                    setTimeout(function () { if (scoresEl) scoresEl.style.maxHeight = ''; }, 500);
+                }
+            }
+        }
+
+        if (isBlank) {
+            // Crossfade: show clock overlay
+            if (clockEl) { clockEl.style.display = 'flex'; clockEl.style.opacity = '1'; }
+        } else {
+            // Crossfade: hide clock overlay
+            if (clockEl) clockEl.style.opacity = '0';
+            setTimeout(function () {
+                if (clockEl && clockEl.style.opacity === '0') clockEl.style.display = 'none';
+            }, 500);
+        }
+    }
+
+    // Render simple GitHub-flavored markdown (subset) for the blank-state message.
+    // Supports: # .. #### headers, **bold**, *italic*, _underline_ (extension),
+    // ~~strike~~, `code`, ordered (1.) and unordered (-,*) lists.
+    // Input is HTML-escaped first; tokens used to protect inline code from
+    // further inline replacements.
+    function renderBlankMessageMarkdown(text) {
+        if (text == null) return '';
+        // 1) HTML-escape
+        var esc = String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        // 2) Split into lines and classify; group consecutive list items.
+        var lines = esc.split('\n');
+        var out = [];
+        var listType = null; // 'ul' | 'ol' | null
+
+        function closeList() {
+            if (listType) { out.push('</' + listType + '>'); listType = null; }
+        }
+
+        function inline(s) {
+            // Protect inline code spans first.
+            var codes = [];
+            s = s.replace(/`([^`\n]+)`/g, function (_, c) {
+                codes.push(c);
+                return '\u0001' + (codes.length - 1) + '\u0001';
+            });
+            // Bold (**...**) before italic (*...*).
+            s = s.replace(/\*\*([^\*\n]+)\*\*/g, '<strong>$1</strong>');
+            // Strikethrough.
+            s = s.replace(/~~([^~\n]+)~~/g, '<s>$1</s>');
+            // Italic: single * not adjacent to another *.
+            s = s.replace(/(^|[^\*])\*([^\*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+            // Underline (project extension): _text_.
+            s = s.replace(/(^|[^_])_([^_\n]+)_(?!_)/g, '$1<u>$2</u>');
+            // Restore code spans.
+            s = s.replace(/\u0001(\d+)\u0001/g, function (_, i) {
+                return '<code>' + codes[+i] + '</code>';
+            });
+            return s;
+        }
+
+        for (var i = 0; i < lines.length; i++) {
+            var ln = lines[i];
+            var m;
+            if ((m = ln.match(/^\s*(#{1,4})\s+(.*)$/))) {
+                closeList();
+                var lvl = m[1].length;
+                out.push('<h' + lvl + '>' + inline(m[2]) + '</h' + lvl + '>');
+            } else if ((m = ln.match(/^\s*\d+\.\s+(.*)$/))) {
+                if (listType !== 'ol') { closeList(); out.push('<ol>'); listType = 'ol'; }
+                out.push('<li>' + inline(m[1]) + '</li>');
+            } else if ((m = ln.match(/^\s*[-\*]\s+(.*)$/))) {
+                if (listType !== 'ul') { closeList(); out.push('<ul>'); listType = 'ul'; }
+                out.push('<li>' + inline(m[1]) + '</li>');
+            } else {
+                closeList();
+                if (ln.length === 0) {
+                    // Blank line: a small collapsible spacer (also creates the
+                    // collapsible gap before the next header / paragraph).
+                    out.push('<div class="md-blank"></div>');
+                } else {
+                    out.push(inline(ln) + '<br>');
+                }
+            }
+        }
+        closeList();
+        // Trim trailing <br> for cleaner sizing.
+        while (out.length && out[out.length - 1] === '<br>') out.pop();
+        return out.join('');
+    }
+
+    // Render the blank-state message overlay (sits above blank clock & scoreboard).
+    function renderBlankMessageOverlay() {
+        var overlay = document.getElementById('blank_message_overlay');
+        if (!overlay) return;
+        var tableEl = document.querySelector('.content_scoreboard_table');
+        var clockRegion = document.getElementById('blank_message_clock');
+        var bodyEl = overlay.querySelector('.blank-message-body');
+        var textSpan = document.getElementById('blank_message_text');
+
+        var isBlank = (raceState === "Blank" || raceState === "BlankPreRace");
+        var isTotalBlank = (raceState === "TotalBlank" || raceState === "TotalBlankPreRace");
+        var hasText = blankMessageText && blankMessageText.replace(/\s+/g, '').length > 0;
+        var show = blankMessageVisible && hasText;
+        var stackEl = document.querySelector('.scoreboard-stack');
+
+        if (!show) {
+            overlay.style.opacity = '0';
+            // Restore stack control to updateBlankDisplay
+            if (stackEl) {
+                stackEl.style.minHeight = '';
+                if (isTotalBlank) {
+                    // Re-collapse stack to match TotalBlank visual
+                    stackEl.style.maxHeight = '0';
+                }
+            }
+            setTimeout(function () {
+                if (overlay.style.opacity === '0') overlay.style.display = 'none';
+            }, 500);
+            return;
+        }
+
+        // Force scoreboard-stack to stay open so overlay is visible in TotalBlank too.
+        // We override updateBlankDisplay's collapse by setting min-height to the table's
+        // natural height and clearing any zero max-height.
+        if (stackEl && tableEl) {
+            var naturalH = tableEl.scrollHeight || tableEl.getBoundingClientRect().height;
+            stackEl.style.minHeight = naturalH + 'px';
+            if (stackEl.style.maxHeight === '0px') {
+                stackEl.style.maxHeight = naturalH + 'px';
+            }
+        }
+
+        // Size overlay to match scoreboard table width; allow vertical growth.
+        if (tableEl) {
+            var rect = tableEl.getBoundingClientRect();
+            overlay.style.width = rect.width + 'px';
+        }
+
+        // Clock region: hidden in TotalBlank states via opacity+max-height so
+        // the transition can animate when the state changes.
+        if (isBlank) {
+            clockRegion.style.maxHeight = '';
+            clockRegion.style.opacity = '';
+        } else {
+            clockRegion.style.maxHeight = '0px';
+            clockRegion.style.opacity = '0';
+        }
+
+        // Body region: flex sizing decided after we know if content overflows
+        // (set further below).
+
+        // Center clock+body together as a vertical group.
+        overlay.style.justifyContent = 'center';
+
+        // Set rendered markdown + alignment
+        textSpan.innerHTML = renderBlankMessageMarkdown(blankMessageText);
+        textSpan.style.textAlign = blankMessageAlign;
+        textSpan.style.display = 'inline-block';
+        textSpan.style.width = '100%';
+        textSpan.style.whiteSpace = 'normal';
+
+        overlay.style.display = 'flex';
+        // Force reflow so opacity transition runs when going from display:none
+        void overlay.offsetHeight;
+
+        // Fixed font-size approach (much simpler): non-header text is 36px,
+        // shrinking down to 18px only if a line is too wide. Headers scale via
+        // CSS em ratios (h1=1.4em → 50.4px max, capped well under 52px).
+        var BASE_FONT_PX = 36;
+        var MIN_FONT_PX = 18;
+        var padHorizontal = 64; // 32px left + right from CSS padding
+        var availW = Math.max(50, (tableEl ? tableEl.getBoundingClientRect().width : overlay.clientWidth) - padHorizontal);
+        var tableH = tableEl ? tableEl.getBoundingClientRect().height : overlay.clientHeight;
+
+        // Hidden measurer at fixed width to find the smallest font that avoids
+        // horizontal overflow.
+        var measurer = document.createElement('div');
+        measurer.className = 'blank-message-body';
+        measurer.style.position = 'absolute';
+        measurer.style.left = '-99999px';
+        measurer.style.top = '0';
+        measurer.style.visibility = 'hidden';
+        measurer.style.width = availW + 'px';
+        measurer.style.fontFamily = "'Overpass Mono', monospace";
+        measurer.style.lineHeight = '1.1';
+        measurer.style.textAlign = blankMessageAlign;
+        measurer.style.whiteSpace = 'normal';
+        measurer.innerHTML = textSpan.innerHTML;
+        document.body.appendChild(measurer);
+
+        var chosen = BASE_FONT_PX;
+        var renderedH = 0;
+        try {
+            measurer.style.fontSize = BASE_FONT_PX + 'px';
+            if (measurer.scrollWidth > availW) {
+                // Step down by 2px until it fits or we hit MIN_FONT_PX.
+                for (var px = BASE_FONT_PX - 2; px >= MIN_FONT_PX; px -= 2) {
+                    measurer.style.fontSize = px + 'px';
+                    if (measurer.scrollWidth <= availW) {
+                        chosen = px;
+                        break;
+                    }
+                    chosen = px;
+                }
+            }
+            measurer.style.fontSize = chosen + 'px';
+            renderedH = measurer.scrollHeight;
+        } finally {
+            document.body.removeChild(measurer);
+        }
+        textSpan.style.fontSize = chosen + 'px';
+        textSpan.style.lineHeight = '1.1';
+
+        // Overlay height: always match the table. The clock is inside the body
+        // flex container, so it shares space with the text — no extra height
+        // needed for it. Only grow if text alone exceeds the table height.
+        var finalH = Math.max(tableH, renderedH);
+        overlay.style.minHeight = finalH + 'px';
+        if (finalH > tableH) {
+            bodyEl.style.flex = '0 0 auto';
+        } else {
+            bodyEl.style.flex = '';
+        }
+        if (stackEl) {
+            stackEl.style.minHeight = finalH + 'px';
+            if (stackEl.style.maxHeight === '0px') {
+                stackEl.style.maxHeight = finalH + 'px';
+            }
+        }
+
+        // Remove any in-flight confetti and disable new confetti while overlay shows.
+        document.querySelectorAll('.confetti-particle').forEach(function (el) { el.remove(); });
+
+        // Fade in
+        requestAnimationFrame(function () { overlay.style.opacity = '1'; });
+    }
+
+    // Re-render overlay on window resize (debounced).
+    (function () {
+        var resizeTimer = null;
+        window.addEventListener('resize', function () {
+            if (resizeTimer) clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(renderBlankMessageOverlay, 100);
+        });
+    })();
+
+    // Called on any *PreRace state entry (new event/heat arrived)
+    function onPreRaceEntry(s) {
+        resetLaneQualifications();
+        confettiFired = {};
+        laneTimes = {};
+        // Only re-render qualifying info when full event data is present
+        // (send_event_info includes these; parse_line serial updates do not)
+        if ("qualifying_times" in s || "record_sets" in s) {
+            renderQualifyingInfo(
+                s["qualifying_times"] || [],
+                s["record_sets"] || []
+            );
+        }
+        updateSeedTimeDisplay(raceState);
+    }
+
+    // Format a seed time in seconds to an 8-char CTS-style display string
+    function formatSeedTime(seconds) {
+        if (seconds === "" || seconds === null || seconds === undefined || isNaN(seconds)) return "";
+        var s = parseFloat(seconds);
+        var m = Math.floor(s / 60);
+        var rem = s - m * 60;
+        if (m > 0) {
+            return (" " + m + ":" + ("0" + rem.toFixed(2)).slice(-5)).slice(-8);
+        } else {
+            return ("        " + rem.toFixed(2)).slice(-8);
+        }
+    }
+
+    // Show/hide seed times based on race state and settings
+    function updateSeedTimeDisplay(state) {
+        var timeColEl = document.getElementById('scoreboard_time_col');
+        var showSeed = (state === "PreRace") && (seedTimeLabel !== "None");
+
+        // Check if at least one lane has a numeric seed time
+        if (showSeed) {
+            var hasAnySeed = false;
+            for (var i = 1; i <= {{ num_lanes }}; i++) {
+                if (laneSeedTimes[i] !== "" && laneSeedTimes[i] !== undefined && !isNaN(laneSeedTimes[i])) {
+                    hasAnySeed = true;
+                    break;
+                }
+            }
+            if (!hasAnySeed) showSeed = false;
+        }
+
+        if (showSeed) {
+            if (timeColEl) {
+                timeColEl.textContent = seedTimeLabel;
+                timeColEl.classList.add('seed-time-italic');
+            }
+            for (var i = 1; i <= {{ num_lanes }}; i++) {
+                var el = document.getElementById('lane_time' + i);
+                if (el) {
+                    el.textContent = formatSeedTime(laneSeedTimes[i]);
+                    el.classList.add('seed-time-italic');
+                }
+            }
+        } else {
+            if (timeColEl) {
+                timeColEl.textContent = 'Time';
+                timeColEl.classList.remove('seed-time-italic');
+            }
+            for (var i = 1; i <= {{ num_lanes }}; i++) {
+                var el = document.getElementById('lane_time' + i);
+                if (el) el.classList.remove('seed-time-italic');
+            }
+        }
+    }
+
+    var socket = io.connect('http://' + document.domain + ':' + location.port + '/scoreboard');
+    socket.on('connect', function () {
+        {% if test_event %}
+        socket.emit('set_event_heat', { event: {{ test_event }}, heat: {{ test_heat or 1 }}});
+    {% endif %}
+    });
+
+    var currentEvent = {{ test_event or 1 }};
+    var currentHeat = {{ test_heat or 1 }};
+
+    function changeEvent(delta) {
+        currentEvent = Math.max(1, currentEvent + delta);
+        currentHeat = 1;
+        socket.emit('set_event_heat', { event: currentEvent, heat: currentHeat });
+    }
+
+    function changeHeat(delta) {
+        currentHeat = Math.max(1, currentHeat + delta);
+        socket.emit('set_event_heat', { event: currentEvent, heat: currentHeat });
+    }
+
+    function runFullSequence() {
+        var steps = [
+            {event: 'sim_load_event', delay: 3000},
+            {event: 'sim_step', data: {step: 'start'}, delay: 5000},
+            {event: 'sim_step', data: {step: 'finish'}, delay: 4000},
+            {event: 'sim_step', data: {step: 'clear'}, delay: 3000},
+            {event: 'sim_step', data: {step: 'blank'}, delay: 3000},
+            {event: 'sim_step', data: {step: 'total_blank'}, delay: 3000},
+        ];
+        var i = 0;
+        function next() {
+            if (i >= steps.length) return;
+            var s = steps[i++];
+            socket.emit(s.event, s.data || {});
+            setTimeout(next, s.delay);
+        }
+        next();
+    }
+
+    socket.on('update_scoreboard', (new_s) => {
+        for (k in new_s) {
+            s[k] = new_s[k];
+        }
+
+        // Track race state from server FSM and handle transitions
+        var eventHeatChanged = false;
+        if ("race_state" in s && s["race_state"] !== raceState) {
+            var prevState = raceState;
+            raceState = s["race_state"];
+            console.log("Race state:", prevState, "→", raceState);
+
+            // All *PreRace states trigger the same reset
+            if (raceState === "PreRace" || raceState === "ClearPreRace" ||
+                raceState === "BlankPreRace" || raceState === "TotalBlankPreRace") {
+                onPreRaceEntry(s);
+                eventHeatChanged = true;
+            } else {
+                // Leaving PreRace — clear seed time display
+                updateSeedTimeDisplay(raceState);
+            }
+
+            // Update display mode for blank states
+            updateBlankDisplay(raceState);
+        }
+
+        // Track current event/heat for test controls
+        if ("current_event" in s) currentEvent = parseInt(s["current_event"]) || currentEvent;
+        if ("current_heat" in s) currentHeat = parseInt(s["current_heat"]) || currentHeat;
+
+        var valid_fields = [
+            "content_meet_title",
+            "current_event",
+            "current_heat",
+            "event_name",
+            "score_home",
+            "score_guest1",
+            "score_guest2",
+            "score_guest3",
+            {% for i in range(1, num_lanes + 1) %}
+            "lane_place{{ i }}",
+        "lane_time{{ i }}",
+        {% endfor %}
+        ];
+
+        var message_keys = Object.keys(s);
+
+        message_keys.forEach((k) => {
+            if (valid_fields.indexOf(k) > 0) {
+                var el = document.getElementById(k);
+                if (el) {
+                    var val = s[k];
+                    if (k.startsWith("score_")) {
+                        val = (val && val.trim() !== "" && val.trim() !== "0") ? val.trim() : "0";
+                    }
+                    el.innerHTML = val;
+                    if (k.startsWith("score_")) {
+                        updateScoreWidths();
+                    }
+                }
+            }
+
+            // Map lane_name to swimmer name span, lane_team to team code span
+            var nameMatch = k.match(/^lane_name(\d+)$/);
+            if (nameMatch) {
+                var el = document.getElementById("lane_swimmer_name" + nameMatch[1]);
+                if (el) el.textContent = (s[k] || '').trimEnd() || '\u00A0';
+            }
+            var teamMatch = k.match(/^lane_team(\d+)$/);
+            if (teamMatch) {
+                var el = document.getElementById("lane_team" + teamMatch[1]);
+                if (el) el.textContent = (s[k] || '').trimEnd();
+                laneTeamCodes[teamMatch[1]] = (s[k] || '').trim();
+            }
+            var ageCodeMatch = k.match(/^lane_age_code(\d+)$/);
+            if (ageCodeMatch) {
+                var laneNum = ageCodeMatch[1];
+                var el = document.getElementById("lane_age_code" + laneNum);
+                if (el) el.textContent = (s[k] || '').trimEnd();
+                laneAgeCodes[laneNum] = (s[k] || '').trim();
+            }
+            var laneTimeMatch = k.match(/^lane_time(\d+)$/);
+            if (laneTimeMatch) {
+                laneTimes[laneTimeMatch[1]] = s[k] || "";
+                // Feed lane 3 time to blank clock when in Blank state
+                if (laneTimeMatch[1] === "3" &&
+                    (raceState === "Blank" || raceState === "BlankPreRace")) {
+                    var clockEl = document.getElementById('blank_clock');
+                    if (clockEl) clockEl.textContent = (s[k] || '').trim();
+                    var msgClockEl = document.getElementById('blank_message_clock');
+                    if (msgClockEl) msgClockEl.textContent = (s[k] || '').trim();
+                }
+            }
+            var seedMatch = k.match(/^lane_seed_time(\d+)$/);
+            if (seedMatch) {
+                laneSeedTimes[seedMatch[1]] = s[k];
+            }
+
+            // Check and update lane running
+            if (k.startsWith("lane_running")) {
+                lane_running[k.replace("lane_running", "")] = s[k];
+            }
+
+        })
+
+        // Hide scores row when all scores are 0 or empty
+        var scoresEl = document.querySelector('.content_scores');
+        if (scoresEl) {
+            var allZero = Array.from(scoresEl.querySelectorAll('.score_value')).every(function (el) {
+                var v = (el.textContent || '').trim();
+                return v === '' || v === '0';
+            });
+            if (allZero && scoresEl.style.opacity !== '0') {
+                scoresEl.style.opacity = '0';
+                scoresEl.style.maxHeight = scoresEl.scrollHeight + 'px';
+                void scoresEl.offsetHeight;
+                scoresEl.style.maxHeight = '0';
+                scoresEl.style.padding = '0';
+            } else if (!allZero && (scoresEl.style.opacity === '0' || scoresEl.style.maxHeight === '0px')) {
+                scoresEl.style.maxHeight = scoresEl.scrollHeight + 'px';
+                scoresEl.style.padding = '';
+                scoresEl.style.opacity = '1';
+                setTimeout(function () { if (scoresEl) scoresEl.style.maxHeight = ''; }, 500);
+            }
+        }
+
+        // Fill in the running time
+        if ("running_time" in s) {
+            for (var i = 1; i <= {{ num_lanes }}; i++) {
+                if (lane_running[i] || false) {
+                    document.getElementById("lane_time" + i).innerHTML = s["running_time"];
+                }
+            }
+        }
+
+        // Show/hide name column based on server-cached schedule_has_names flag
+        if ("schedule_has_names" in s) {
+            schedule_has_names = s["schedule_has_names"];
+            document.querySelectorAll('.scoreboard_name_col, .lane_name').forEach(function (el) {
+                el.style.display = schedule_has_names ? 'table-cell' : 'none';
+            });
+        }
+
+        if ("show_pr_tags" in s) {
+            showPrTags = s["show_pr_tags"];
+        }
+
+        if ("show_confetti" in s) {
+            showConfetti = s["show_confetti"];
+        }
+
+        if ("show_time_decorations" in s) {
+            if (s["show_time_decorations"]) {
+                document.body.classList.remove('hide-time-decorations');
+            } else {
+                document.body.classList.add('hide-time-decorations');
+            }
+        }
+
+        if ("seed_time_label" in s) {
+            seedTimeLabel = s["seed_time_label"];
+        }
+
+        var bmChanged = false;
+        if ("blank_message" in s) { blankMessageText = s["blank_message"] || ''; bmChanged = true; }
+        if ("blank_message_visible" in s) { blankMessageVisible = !!s["blank_message_visible"]; bmChanged = true; }
+        if ("blank_message_align" in s) { blankMessageAlign = s["blank_message_align"] || 'left'; bmChanged = true; }
+        if (bmChanged || ("race_state" in s)) {
+            renderBlankMessageOverlay();
+        }
+
+        // Evaluate all lanes for time standard qualifications (skip if event/heat just changed with stale times)
+        if (!eventHeatChanged) {
+            for (var i = 1; i <= {{ num_lanes }}; i++) {
+                evaluateLaneTime(i, laneTimes[i] || "", lane_running[i] || false);
+            }
+        }
+
+        s = {};
+    });
+
+</script>
+
+</html>
