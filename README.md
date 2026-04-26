@@ -1,6 +1,8 @@
 # CTS_Scoreboard
 HTML display of CTS scoreboard.
 
+A fork of [CTS_Scoreboard](https://github.com/STU940652/CTS_Scoreboard) by [STU940652](https://github.com/STU940652), customized for running on an Raspberry Pi5, and updated for Meet Manager 8 formats. 
+
 This is a command line utility to snoop the serial link between a Colorado Time Systems controller and scoreboard. It will then render the scoreboard to HTML using Javascript and a Websocket connection. Example use cases are creating an overlay for video streaming using OBS studio, secondary scoreboard, or scoreboard replacement. This project is in no way associated with CTS, etc. etc.
 
 ## Protocol
@@ -39,11 +41,14 @@ The HTML server is [Flask](http://flask.pocoo.org/), and the templates are based
  /test   Scoreboard display overlayed on a static image for testing.
  
 ## Pips
+```
 pip install flask
 pip install flask_login
 pip install flask_socketio
 pip install PySerial
+pip install hytek_parser #see https://github.com/SwimComm/hytek-parser
 (eventlet or gevent and gevent-websocket)
+```
 
 ## Running
 ```
