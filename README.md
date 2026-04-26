@@ -49,3 +49,9 @@ pip install PySerial
 pip install hytek_parser #see https://github.com/SwimComm/hytek-parser
 (eventlet or gevent and gevent-websocket)
 ```
+
+## Running
+```
+source ~/.env/bin/activate
+python3 CTS_Scoreboard.py
+```
