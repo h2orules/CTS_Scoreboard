@@ -19,6 +19,7 @@ from hytek_rec_parser import parse_rec_file, format_record_date
 from race_state_machine import RaceStateMachine
 import ap
 import argparse
+import hashlib
 
 DEBUG = False
 #DEBUG = True
@@ -92,6 +93,23 @@ score_info = {0x14: [' ',' ',' ',' ',' ',' ',' ',' '],
               0x15: [' ',' ',' ',' ',' ',' ',' ',' ']}
 team_scores = {'score_home': '', 'score_guest1': '', 'score_guest2': '', 'score_guest3': ''}
 race_fsm = RaceStateMachine()
+
+# Content cache for server-rendered HTML fragments.
+# Structure: { resource_name: { 'key': str, 'html': str } }
+_content_cache = {}
+
+def _cache_put(resource, html):
+    """Store rendered HTML in the content cache. Returns the content key."""
+    key = hashlib.sha256(html.encode('utf-8')).hexdigest()[:12]
+    _content_cache[resource] = {'key': key, 'html': html}
+    return key
+
+def _cache_get(resource):
+    """Return (key, html) for a cached resource, or (None, None) if missing."""
+    entry = _content_cache.get(resource)
+    if entry:
+        return entry['key'], entry['html']
+    return None, None
 
 def load_settings():
     global settings, time_standards, swim_record_sets, _next_rec_set_id
@@ -632,6 +650,107 @@ def _get_matching_records(event_number):
     
     return all_set_results, any_show_age
 
+
+def _render_blank_message_html(text):
+    """Render a simple markdown subset to HTML for the blank-state message.
+
+    Supports: # .. #### headers, **bold**, *italic*, _underline_ (extension),
+    ~~strike~~, `code`, ordered (1.) and unordered (-,*) lists.
+    Input is HTML-escaped first.
+    """
+    if text is None:
+        return ''
+    # HTML-escape
+    esc = str(text).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+    lines = esc.split('\n')
+    out = []
+    list_type = None  # 'ul' | 'ol' | None
+
+    def close_list():
+        nonlocal list_type
+        if list_type:
+            out.append('</' + list_type + '>')
+            list_type = None
+
+    def inline(s):
+        # Protect inline code spans first.
+        codes = []
+        def _code_repl(m):
+            codes.append(m.group(1))
+            return '\x01' + str(len(codes) - 1) + '\x01'
+        s = re.sub(r'`([^`\n]+)`', _code_repl, s)
+        # Bold (**...**) before italic (*...*).
+        s = re.sub(r'\*\*([^\*\n]+)\*\*', r'<strong>\1</strong>', s)
+        # Strikethrough.
+        s = re.sub(r'~~([^~\n]+)~~', r'<s>\1</s>', s)
+        # Italic: single * not adjacent to another *.
+        s = re.sub(r'(^|[^\*])\*([^\*\n]+)\*(?!\*)', r'\1<em>\2</em>', s)
+        # Underline (project extension): _text_.
+        s = re.sub(r'(^|[^_])_([^_\n]+)_(?!_)', r'\1<u>\2</u>', s)
+        # Restore code spans.
+        def _code_restore(m):
+            return '<code>' + codes[int(m.group(1))] + '</code>'
+        s = re.sub(r'\x01(\d+)\x01', _code_restore, s)
+        return s
+
+    for ln in lines:
+        m = re.match(r'^\s*(#{1,4})\s+(.*)$', ln)
+        if m:
+            close_list()
+            lvl = len(m.group(1))
+            out.append('<h%d>%s</h%d>' % (lvl, inline(m.group(2)), lvl))
+            continue
+        m = re.match(r'^\s*\d+\.\s+(.*)$', ln)
+        if m:
+            if list_type != 'ol':
+                close_list()
+                out.append('<ol>')
+                list_type = 'ol'
+            out.append('<li>' + inline(m.group(1)) + '</li>')
+            continue
+        m = re.match(r'^\s*[-\*]\s+(.*)$', ln)
+        if m:
+            if list_type != 'ul':
+                close_list()
+                out.append('<ul>')
+                list_type = 'ul'
+            out.append('<li>' + inline(m.group(1)) + '</li>')
+            continue
+        close_list()
+        if len(ln) == 0:
+            out.append('<div class="md-blank"></div>')
+        else:
+            out.append(inline(ln) + '<br>')
+
+    close_list()
+    # Trim trailing <br>
+    while out and out[-1] == '<br>':
+        out.pop()
+    return ''.join(out)
+
+
+def _render_qualifying_html(qt_groups, rec_set_list):
+    """Render qualifying times + records into an HTML fragment and cache it.
+
+    Returns the content key (hash).
+    """
+    html = flask.render_template('partials/_qualifying_info.html',
+                                 qt_groups=qt_groups,
+                                 rec_set_list=rec_set_list)
+    return _cache_put('qualifying_info', html)
+
+
+def _render_and_cache_blank_message():
+    """Render the current blank message to HTML and cache it.
+
+    Returns the content key (hash).
+    """
+    text = settings.get('blank_message', '')
+    html = _render_blank_message_html(text)
+    return _cache_put('blank_message', html)
+
+
 def send_event_info():            
     update={}
     update["current_event"] = str(last_event_sent[0])
@@ -643,6 +762,7 @@ def send_event_info():
     show_age_codes = qt_show_age or rec_show_age
     update["qualifying_times"] = qt_results
     update["record_sets"] = rec_set_results
+    update["qualifying_times_key"] = _render_qualifying_html(qt_results, rec_set_results)
     
     for i in range(1,11):
         update["lane_name%i" % i] = event_info.get_display_string(last_event_sent[0], last_event_sent[1], i)
@@ -658,6 +778,7 @@ def send_event_info():
     update["blank_message"] = settings.get('blank_message', '')
     update["blank_message_visible"] = settings.get('blank_message_visible', False)
     update["blank_message_align"] = settings.get('blank_message_align', 'left')
+    update["blank_message_key"] = _render_and_cache_blank_message()
     update["race_state"] = race_fsm.state_name
 
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
@@ -677,6 +798,7 @@ def send_blank_message():
         'blank_message': settings.get('blank_message', ''),
         'blank_message_visible': settings.get('blank_message_visible', False),
         'blank_message_align': settings.get('blank_message_align', 'left'),
+        'blank_message_key': _render_and_cache_blank_message(),
     }
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
             
@@ -1013,6 +1135,34 @@ def _sim_clock_tick():
                 tick_update['lane_time%d' % i] = running_time
         socketio.emit('update_scoreboard', tick_update, namespace='/scoreboard')
 
+
+# REST API endpoints for cached HTML fragments
+@app.route('/api/qualifying-info')
+def api_qualifying_info():
+    key, html = _cache_get('qualifying_info')
+    if key is None:
+        return flask.Response('', status=200, content_type='text/html; charset=utf-8')
+    etag = '"' + key + '"'
+    if flask.request.headers.get('If-None-Match') == etag:
+        return flask.Response('', status=304)
+    resp = flask.Response(html, status=200, content_type='text/html; charset=utf-8')
+    resp.headers['ETag'] = etag
+    resp.headers['Cache-Control'] = 'public, max-age=60'
+    return resp
+
+@app.route('/api/blank-message')
+def api_blank_message():
+    key, html = _cache_get('blank_message')
+    if key is None:
+        return flask.Response('', status=200, content_type='text/html; charset=utf-8')
+    etag = '"' + key + '"'
+    if flask.request.headers.get('If-None-Match') == etag:
+        return flask.Response('', status=304)
+    resp = flask.Response(html, status=200, content_type='text/html; charset=utf-8')
+    resp.headers['ETag'] = etag
+    resp.headers['Cache-Control'] = 'public, max-age=60'
+    return resp
+
         
 # Scoreboard Templates
 @app.route('/overlay/<name>')
@@ -1025,7 +1175,62 @@ def route_web(name):
     web_name = "web/" + name + '.html'
     test_event = flask.request.args.get('event', None)
     test_heat = flask.request.args.get('heat', None)
-    return flask.render_template(web_name, meet_title=settings['meet_title'], test_background='test' in flask.request.args.keys(), num_lanes=settings['num_lanes'], test_event=test_event, test_heat=test_heat, ad_url=settings['ad_url'], schedule_has_names=event_info.has_names, team_names=[('score_home', settings.get('team_home', '')), ('score_guest1', settings.get('team_guest1', '')), ('score_guest2', settings.get('team_guest2', '')), ('score_guest3', settings.get('team_guest3', ''))])
+
+    # Pre-populate initial page state so content appears immediately
+    ev = last_event_sent[0]
+    ht = last_event_sent[1]
+    qt_results, qt_show_age = _get_qualifying_times(ev)
+    rec_set_results, rec_show_age = _get_matching_records(ev)
+    show_age_codes = qt_show_age or rec_show_age
+    qt_key = _render_qualifying_html(qt_results, rec_set_results)
+    bm_key = _render_and_cache_blank_message()
+    _, qt_html = _cache_get('qualifying_info')
+    num_lanes = settings['num_lanes']
+
+    initial_lanes = {}
+    for i in range(1, num_lanes + 1):
+        initial_lanes[i] = {
+            'name': event_info.get_display_string(ev, ht, i),
+            'team': event_info.get_team_code(ev, ht, i),
+            'age_code': event_info.get_age_code(ev, ht, i) if show_age_codes else '',
+            'seed_time': event_info.get_seed_time(ev, ht, i),
+        }
+
+    return flask.render_template(web_name,
+        meet_title=settings['meet_title'],
+        test_background='test' in flask.request.args.keys(),
+        num_lanes=num_lanes,
+        test_event=test_event,
+        test_heat=test_heat,
+        ad_url=settings['ad_url'],
+        schedule_has_names=event_info.has_names,
+        team_names=[
+            ('score_home', settings.get('team_home', '')),
+            ('score_guest1', settings.get('team_guest1', '')),
+            ('score_guest2', settings.get('team_guest2', '')),
+            ('score_guest3', settings.get('team_guest3', '')),
+        ],
+        initial_event=str(ev),
+        initial_heat=str(ht),
+        initial_event_name=event_info.get_event_name(ev),
+        initial_qt_groups=qt_results,
+        initial_rec_sets=rec_set_results,
+        initial_qt_key=qt_key,
+        initial_qt_html=qt_html or '',
+        initial_bm_key=bm_key,
+        initial_lanes=initial_lanes,
+        initial_scores=team_scores,
+        initial_race_state=race_fsm.state_name,
+        initial_settings={
+            'show_pr_tags': settings.get('show_pr_tags', True),
+            'show_confetti': settings.get('show_confetti', True),
+            'show_time_decorations': settings.get('show_time_decorations', False),
+            'seed_time_label': settings.get('seed_time_label', 'Seed Time'),
+            'blank_message': settings.get('blank_message', ''),
+            'blank_message_visible': settings.get('blank_message_visible', False),
+            'blank_message_align': settings.get('blank_message_align', 'left'),
+        },
+    )
 
 @app.route('/settings', methods=['POST', 'GET'])
 @flask_login.login_required

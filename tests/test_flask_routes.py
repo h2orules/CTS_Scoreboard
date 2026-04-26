@@ -38,6 +38,18 @@ class TestPublicRoutes:
         resp = client.get("/web/home")
         assert resp.status_code == 200
 
+    def test_web_home_prepopulated(self, client):
+        """Page should contain pre-populated JS variables and content keys."""
+        resp = client.get("/web/home")
+        html = resp.data.decode()
+        # Should have initial content keys
+        assert 'qualifyingTimesKey' in html
+        assert 'blankMessageKey' in html
+        # Should have pre-populated race state
+        assert 'raceState' in html
+        # Should have the fetchFragment helper
+        assert 'fetchFragment' in html
+
 
 class TestProtectedRoutes:
     def test_settings_requires_login(self, client):
