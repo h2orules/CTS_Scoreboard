@@ -797,9 +797,10 @@
                 out.push('<li>' + inline(m[1]) + '</li>');
             } else {
                 closeList();
-                // Preserve blank lines as <br>; otherwise plain line + <br>.
                 if (ln.length === 0) {
-                    out.push('<br>');
+                    // Blank line: a small collapsible spacer (also creates the
+                    // collapsible gap before the next header / paragraph).
+                    out.push('<div class="md-blank"></div>');
                 } else {
                     out.push(inline(ln) + '<br>');
                 }
@@ -859,11 +860,14 @@
             overlay.style.width = rect.width + 'px';
         }
 
-        // Clock region: hidden in TotalBlank states; CSS controls font/spacing/size.
+        // Clock region: hidden in TotalBlank states via opacity+max-height so
+        // the transition can animate when the state changes.
         if (isBlank) {
-            clockRegion.style.display = 'flex';
+            clockRegion.style.maxHeight = '';
+            clockRegion.style.opacity = '';
         } else {
-            clockRegion.style.display = 'none';
+            clockRegion.style.maxHeight = '0px';
+            clockRegion.style.opacity = '0';
         }
 
         // Body region grows to its content, centered as a group with the clock.
@@ -883,20 +887,31 @@
         // Force reflow so opacity transition runs when going from display:none
         void overlay.offsetHeight;
 
-        // Auto-fit font size via binary search on a hidden block measurer that
-        // mirrors the rendered markdown content at a fixed width.
-        var lines = blankMessageText.split('\n');
-        var padTotal = 64; // 32px left + right from CSS padding
-        var MIN_FONT_PX = 24; // Minimum legible message font; overlay grows to honor this.
-        var MAX_FONT_PX = 200;
-        var availW = Math.max(50, (tableEl ? tableEl.getBoundingClientRect().width : overlay.clientWidth) - padTotal);
+        // Fixed font-size approach (much simpler): non-header text is 36px,
+        // shrinking down to 18px only if a line is too wide. Headers scale via
+        // CSS em ratios (h1=1.4em → 50.4px max, capped well under 52px).
+        var BASE_FONT_PX = 36;
+        var MIN_FONT_PX = 18;
+        var padHorizontal = 64; // 32px left + right from CSS padding
+        var availW = Math.max(50, (tableEl ? tableEl.getBoundingClientRect().width : overlay.clientWidth) - padHorizontal);
         var tableH = tableEl ? tableEl.getBoundingClientRect().height : overlay.clientHeight;
 
-        // Clock band height comes from CSS; measure it so the message can fit the rest.
-        var clockBandH = isBlank ? clockRegion.getBoundingClientRect().height : 0;
-        var availH = Math.max(50, tableH - clockBandH - padTotal);
+        // Clock band height: measure naturally even when its max-height is in flight.
+        var clockBandH = 0;
+        if (isBlank) {
+            var savedMax = clockRegion.style.maxHeight;
+            var savedOp = clockRegion.style.opacity;
+            clockRegion.style.maxHeight = 'none';
+            clockRegion.style.opacity = '0';
+            clockRegion.style.visibility = 'hidden';
+            clockBandH = clockRegion.getBoundingClientRect().height;
+            clockRegion.style.maxHeight = savedMax;
+            clockRegion.style.opacity = savedOp;
+            clockRegion.style.visibility = '';
+        }
 
-        // Hidden block-level measurer mirrors textSpan styling at width=availW.
+        // Hidden measurer at fixed width to find the smallest font that avoids
+        // horizontal overflow.
         var measurer = document.createElement('div');
         measurer.className = 'blank-message-body';
         measurer.style.position = 'absolute';
@@ -911,56 +926,33 @@
         measurer.innerHTML = textSpan.innerHTML;
         document.body.appendChild(measurer);
 
-        function fitsAtFont(px) {
-            measurer.style.fontSize = px + 'px';
-            return measurer.scrollWidth <= availW && measurer.scrollHeight <= availH;
-        }
-        function widthFitsAtFont(px) {
-            measurer.style.fontSize = px + 'px';
-            return measurer.scrollWidth <= availW;
-        }
-
-        // Pass 1: largest font that fits both width and height inside the scoreboard.
-        var lo = 8, hi = MAX_FONT_PX, best = 8;
+        var chosen = BASE_FONT_PX;
+        var renderedH = 0;
         try {
-            while (lo <= hi) {
-                var mid = Math.floor((lo + hi) / 2);
-                if (fitsAtFont(mid)) {
-                    best = mid;
-                    lo = mid + 1;
-                } else {
-                    hi = mid - 1;
-                }
-            }
-            // If forced below the minimum due to height, raise to MIN_FONT_PX (still respect width)
-            // and let the overlay grow taller.
-            if (best < MIN_FONT_PX) {
-                var loW = MIN_FONT_PX, hiW = MAX_FONT_PX, bestW = MIN_FONT_PX;
-                while (loW <= hiW) {
-                    var midW = Math.floor((loW + hiW) / 2);
-                    if (widthFitsAtFont(midW)) {
-                        bestW = midW;
-                        loW = midW + 1;
-                    } else {
-                        hiW = midW - 1;
+            measurer.style.fontSize = BASE_FONT_PX + 'px';
+            if (measurer.scrollWidth > availW) {
+                // Step down by 2px until it fits or we hit MIN_FONT_PX.
+                for (var px = BASE_FONT_PX - 2; px >= MIN_FONT_PX; px -= 2) {
+                    measurer.style.fontSize = px + 'px';
+                    if (measurer.scrollWidth <= availW) {
+                        chosen = px;
+                        break;
                     }
+                    chosen = px;
                 }
-                best = Math.max(MIN_FONT_PX, bestW);
             }
-            // Final measure of rendered height at chosen font for overlay sizing.
-            measurer.style.fontSize = best + 'px';
-            var renderedH = measurer.scrollHeight;
+            measurer.style.fontSize = chosen + 'px';
+            renderedH = measurer.scrollHeight;
         } finally {
             document.body.removeChild(measurer);
         }
-        textSpan.style.fontSize = best + 'px';
+        textSpan.style.fontSize = chosen + 'px';
         textSpan.style.lineHeight = '1.1';
 
-        // Clock font/size handled by CSS now.
-
-        // Compute final overlay height: never shorter than table; grows when the
-        // message at MIN_FONT_PX needs more vertical room.
-        var contentH = clockBandH + renderedH + padTotal;
+        // Compute final overlay height: never shorter than table; grow if needed.
+        // renderedH already includes the body's 16+16 padding (measurer uses
+        // class blank-message-body), so no extra vertical padding is added.
+        var contentH = clockBandH + renderedH;
         var finalH = Math.max(tableH, contentH);
         overlay.style.minHeight = finalH + 'px';
 

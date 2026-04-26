@@ -493,6 +493,10 @@ body.hide-time-decorations .qt-highlight {
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
+    max-height: 200px;
+    opacity: 1;
+    transition: max-height 0.5s ease, opacity 0.5s ease, padding 0.5s ease;
 }
 
 .blank-message-body {
@@ -510,6 +514,17 @@ body.hide-time-decorations .qt-highlight {
     overflow: hidden;
 }
 
+#blank_message_text {
+    transition: font-size 0.5s ease;
+}
+
+/* Collapsible spacer emitted for blank source lines. Adds a small gap that
+   naturally precedes headers (or any element) following a blank line. */
+.blank-message-body .md-blank {
+    height: 0.5em;
+    width: 100%;
+}
+
 /* Markdown elements rendered inside the blank-state message overlay.
    Keep margins minimal so auto-fit math fits within the 8-line budget. */
 .blank-message-body h1,
@@ -519,34 +534,68 @@ body.hide-time-decorations .qt-highlight {
     font-family: inherit;
     color: inherit;
     font-weight: bold;
-    margin: 0;
+    margin: 24px 0 0 0;
     padding: 0;
     line-height: 1.1;
 }
-.blank-message-body h1 { font-size: 1.4em; }
-.blank-message-body h2 { font-size: 1.25em; }
-.blank-message-body h3 { font-size: 1.1em; }
-.blank-message-body h4 { font-size: 1em; }
+
+.blank-message-body h1:first-child,
+.blank-message-body h2:first-child,
+.blank-message-body h3:first-child,
+.blank-message-body h4:first-child {
+    margin-top: 0;
+}
+
+.blank-message-body h1 {
+    font-size: 1.4em;
+}
+
+.blank-message-body h2 {
+    font-size: 1.25em;
+}
+
+.blank-message-body h3 {
+    font-size: 1.1em;
+}
+
+.blank-message-body h4 {
+    font-size: 1em;
+}
+
 .blank-message-body ul,
 .blank-message-body ol {
     margin: 0;
     padding-left: 1.5em;
     list-style-position: inside;
 }
+
 .blank-message-body li {
     margin: 0;
     padding: 0;
 }
+
 .blank-message-body code {
     font-family: inherit;
     background-color: rgba(0, 0, 0, 0.08);
     border-radius: 3px;
     padding: 0 0.25em;
 }
-.blank-message-body strong { font-weight: bold; }
-.blank-message-body em { font-style: italic; }
-.blank-message-body u { text-decoration: underline; }
-.blank-message-body s { text-decoration: line-through; }
+
+.blank-message-body strong {
+    font-weight: bold;
+}
+
+.blank-message-body em {
+    font-style: italic;
+}
+
+.blank-message-body u {
+    text-decoration: underline;
+}
+
+.blank-message-body s {
+    text-decoration: line-through;
+}
 
 .seed-time-italic {
     font-style: italic;

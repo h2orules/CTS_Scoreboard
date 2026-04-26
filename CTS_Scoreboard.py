@@ -1198,10 +1198,24 @@ def route_settings():
 
         if 'blank_message_form' in flask.request.form:
             raw = flask.request.form.get('blank_message', '')
-            # Normalize line endings and enforce 8 lines × 60 chars max
-            lines = raw.replace('\r\n', '\n').replace('\r', '\n').split('\n')[:8]
-            lines = [ln[:60] for ln in lines]
-            new_msg = '\n'.join(lines)
+            # Normalize line endings and enforce 10 lines × 60 *visible* chars
+            # (markdown markers don't count toward the limit).
+            def _visible_len(line):
+                s = re.sub(r'^\s*#{1,4}\s+', '', line)
+                s = re.sub(r'^\s*(\d+\.|[-*])\s+', '', s)
+                s = re.sub(r'`([^`\n]+)`', r'\1', s)
+                s = re.sub(r'\*\*([^*\n]+)\*\*', r'\1', s)
+                s = re.sub(r'~~([^~\n]+)~~', r'\1', s)
+                s = re.sub(r'(^|[^*])\*([^*\n]+)\*(?!\*)', r'\1\2', s)
+                s = re.sub(r'(^|[^_])_([^_\n]+)_(?!_)', r'\1\2', s)
+                return len(s)
+            lines = raw.replace('\r\n', '\n').replace('\r', '\n').split('\n')[:10]
+            trimmed = []
+            for ln in lines:
+                while _visible_len(ln) > 60:
+                    ln = ln[:-1]
+                trimmed.append(ln)
+            new_msg = '\n'.join(trimmed)
             new_align = flask.request.form.get('blank_message_align', 'left')
             if new_align not in ('left', 'center', 'right'):
                 new_align = 'left'
