@@ -438,7 +438,7 @@ body.hide-time-decorations .qt-highlight {
     font-size: 20px;
     text-align: center;
     position: fixed;
-    bottom: 25px;
+    bottom: 12px;
     left: 0;
     right: 0;
     z-index: 100;
@@ -728,9 +728,15 @@ table.scoreboard_table th {
     vertical-align: baseline;
 }
 
+/* Lane column: override inline style to match Place width */
+#scoreboard_lane_col {
+    width: 140px !important;
+    max-width: 140px !important;
+}
+
 .scoreboard_place_col {
-    width: 135px !important;
-    max-width: 135px !important;
+    width: 160px !important;
+    max-width: 160px !important;
 }
 
 table.scoreboard_table td[id^="lane_place"] {
@@ -738,8 +744,9 @@ table.scoreboard_table td[id^="lane_place"] {
 }
 
 .scoreboard_time_col {
-    width: 325px !important;
-    max-width: 325px !important;
+    width: 405px !important;
+    max-width: 405px !important;
+    min-width: 300px !important;
 }
 
 .background {
@@ -761,7 +768,7 @@ table.scoreboard_table td[id^="lane_place"] {
 }
 
 /* Mobile devices */
-@media screen and (max-width: 768px) {
+@media screen and (max-width: 1024px) {
 
     html,
     body {
@@ -827,11 +834,11 @@ table.scoreboard_table td[id^="lane_place"] {
         padding: 0 4px;
     }
 
-    /* Ensure Time column fits m:ss.ms + tag */
+    /* Time column: auto-sized from content, minimum for m:ss.ms */
     .scoreboard_time_col {
         width: auto !important;
         max-width: none !important;
-        min-width: 5.5em;
+        min-width: 2em !important;
         white-space: nowrap;
     }
 
@@ -860,9 +867,9 @@ table.scoreboard_table td[id^="lane_place"] {
         padding: 0 4px;
     }
 
-    /* Time data cells: minimum width for m:ss.ms + tag */
+    /* Time data cell: auto-sized, nowrap */
     table.scoreboard_table td:last-child {
-        min-width: 5.5em;
+        white-space: nowrap;
     }
 
     .scoreboard_title {
