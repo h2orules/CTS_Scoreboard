@@ -103,8 +103,8 @@
                     <form action="/settings" method="POST" style="margin-top:10px;">
                         <input type="hidden" name="blank_message_form" value="1">
                         <div class="form-group">
-                            <label for="blank_message">Message (max 8 lines &times; 60 chars)</label>
-                            <textarea id="blank_message" name="blank_message" rows="8" cols="60" maxlength="488"
+                            <label for="blank_message">Message (max 10 lines &times; 60 visible chars)</label>
+                            <textarea id="blank_message" name="blank_message" rows="10" cols="60" maxlength="2000"
                                 class="form-control" style="font-family:'Overpass Mono',monospace;white-space:pre;overflow:auto;text-align:{{ blank_message_align }};"
                                 oninput="bmOnInput();">{{ blank_message }}</textarea>
                             <small class="bm-md-legend">
@@ -145,13 +145,29 @@
                     (function(){
                         var ta = document.getElementById('blank_message');
                         var cb = document.getElementById('blank_message_visible');
+                        // Strip markdown syntax to count rendered (visible) length, so users
+                        // can use the full width without the markers eating their space.
+                        function visibleLen(line){
+                            var s = line
+                                .replace(/^\s*#{1,4}\s+/, '')
+                                .replace(/^\s*(\d+\.|[-\*])\s+/, '')
+                                .replace(/`([^`\n]+)`/g, '$1')
+                                .replace(/\*\*([^\*\n]+)\*\*/g, '$1')
+                                .replace(/~~([^~\n]+)~~/g, '$1')
+                                .replace(/(^|[^\*])\*([^\*\n]+)\*(?!\*)/g, '$1$2')
+                                .replace(/(^|[^_])_([^_\n]+)_(?!_)/g, '$1$2');
+                            return s.length;
+                        }
                         function enforce(){
-                            // Enforce 8 lines x 60 chars live
+                            // Enforce 10 lines x 60 visible chars live
                             var lines = ta.value.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
                             var changed = false;
-                            if (lines.length > 8) { lines = lines.slice(0,8); changed = true; }
+                            if (lines.length > 10) { lines = lines.slice(0,10); changed = true; }
                             for (var i=0;i<lines.length;i++){
-                                if (lines[i].length > 60){ lines[i]=lines[i].slice(0,60); changed=true; }
+                                while (visibleLen(lines[i]) > 60){
+                                    lines[i] = lines[i].slice(0, -1);
+                                    changed = true;
+                                }
                             }
                             if (changed) ta.value = lines.join('\n');
                         }
