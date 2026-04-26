@@ -19,6 +19,12 @@ cts-scoreboard = "CTS_Scoreboard:main"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[dependency-groups]
+test = ["pytest", "pytest-cov"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
 [tool.hatch.build.targets.wheel]
 packages = ["."]
 only-include = [
