@@ -89,6 +89,11 @@
                     .bm-details > summary { user-select: none; }
                     .bm-details .bm-chevron { display: inline-block; transition: transform 0.15s ease; margin-right: 6px; }
                     .bm-details[open] > summary .bm-chevron { transform: rotate(90deg); }
+                    .bm-md-legend { display: block; margin-top: 4px; font-size: 0.8em; color: #666; line-height: 1.5; }
+                    .bm-md-legend code { font-family: 'Overpass Mono', monospace; background: #f2f2f2; color: #555; padding: 0 2px; border-radius: 2px; font-size: 0.95em; }
+                    .bm-md-legend .sep { color: #bbb; margin: 0 4px; }
+                    .bm-md-legend u { text-decoration: underline; }
+                    .bm-md-legend s { text-decoration: line-through; }
                 </style>
                 <details {% if blank_message %}open{% endif %} class="bm-details" style="margin-bottom:15px;">
                     <summary style="cursor:pointer;font-weight:bold;list-style:none;">
@@ -102,6 +107,20 @@
                             <textarea id="blank_message" name="blank_message" rows="8" cols="60" maxlength="488"
                                 class="form-control" style="font-family:'Overpass Mono',monospace;white-space:pre;overflow:auto;text-align:{{ blank_message_align }};"
                                 oninput="bmOnInput();">{{ blank_message }}</textarea>
+                            <small class="bm-md-legend">
+                                Markdown:
+                                <code>#</code><h1 style="display:inline;font-size:1em;margin:0;">Header1</h1><span class="sep">·</span>
+                                <code>##</code><h2 style="display:inline;font-size:1em;margin:0;">Header2</h2><span class="sep">·</span>
+                                <code>###</code><h3 style="display:inline;font-size:1em;margin:0;">Header3</h3><span class="sep">·</span>
+                                <code>####</code><h4 style="display:inline;font-size:1em;margin:0;">Header4</h4><span class="sep">·</span>
+                                <code>**</code><strong>Bold</strong><code>**</code><span class="sep">·</span>
+                                <code>*</code><em>Italic</em><code>*</code><span class="sep">·</span>
+                                <code>_</code><u>Underline</u><code>_</code><span class="sep">·</span>
+                                <code>~~</code><s>Strike</s><code>~~</code><span class="sep">·</span>
+                                <code>`</code><code>Code</code><code>`</code><span class="sep">·</span>
+                                <code>1.</code> Numbered<span class="sep">·</span>
+                                <code>-</code> Bulleted
+                            </small>
                         </div>
                         <div class="form-group" style="margin-top:8px;">
                             <label>Justify:</label>

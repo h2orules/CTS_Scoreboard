@@ -738,6 +738,79 @@
         }
     }
 
+    // Render simple GitHub-flavored markdown (subset) for the blank-state message.
+    // Supports: # .. #### headers, **bold**, *italic*, _underline_ (extension),
+    // ~~strike~~, `code`, ordered (1.) and unordered (-,*) lists.
+    // Input is HTML-escaped first; tokens used to protect inline code from
+    // further inline replacements.
+    function renderBlankMessageMarkdown(text) {
+        if (text == null) return '';
+        // 1) HTML-escape
+        var esc = String(text)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        // 2) Split into lines and classify; group consecutive list items.
+        var lines = esc.split('\n');
+        var out = [];
+        var listType = null; // 'ul' | 'ol' | null
+
+        function closeList() {
+            if (listType) { out.push('</' + listType + '>'); listType = null; }
+        }
+
+        function inline(s) {
+            // Protect inline code spans first.
+            var codes = [];
+            s = s.replace(/`([^`\n]+)`/g, function (_, c) {
+                codes.push(c);
+                return '\u0001' + (codes.length - 1) + '\u0001';
+            });
+            // Bold (**...**) before italic (*...*).
+            s = s.replace(/\*\*([^\*\n]+)\*\*/g, '<strong>$1</strong>');
+            // Strikethrough.
+            s = s.replace(/~~([^~\n]+)~~/g, '<s>$1</s>');
+            // Italic: single * not adjacent to another *.
+            s = s.replace(/(^|[^\*])\*([^\*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
+            // Underline (project extension): _text_.
+            s = s.replace(/(^|[^_])_([^_\n]+)_(?!_)/g, '$1<u>$2</u>');
+            // Restore code spans.
+            s = s.replace(/\u0001(\d+)\u0001/g, function (_, i) {
+                return '<code>' + codes[+i] + '</code>';
+            });
+            return s;
+        }
+
+        for (var i = 0; i < lines.length; i++) {
+            var ln = lines[i];
+            var m;
+            if ((m = ln.match(/^\s*(#{1,4})\s+(.*)$/))) {
+                closeList();
+                var lvl = m[1].length;
+                out.push('<h' + lvl + '>' + inline(m[2]) + '</h' + lvl + '>');
+            } else if ((m = ln.match(/^\s*\d+\.\s+(.*)$/))) {
+                if (listType !== 'ol') { closeList(); out.push('<ol>'); listType = 'ol'; }
+                out.push('<li>' + inline(m[1]) + '</li>');
+            } else if ((m = ln.match(/^\s*[-\*]\s+(.*)$/))) {
+                if (listType !== 'ul') { closeList(); out.push('<ul>'); listType = 'ul'; }
+                out.push('<li>' + inline(m[1]) + '</li>');
+            } else {
+                closeList();
+                // Preserve blank lines as <br>; otherwise plain line + <br>.
+                if (ln.length === 0) {
+                    out.push('<br>');
+                } else {
+                    out.push(inline(ln) + '<br>');
+                }
+            }
+        }
+        closeList();
+        // Trim trailing <br> for cleaner sizing.
+        while (out.length && out[out.length - 1] === '<br>') out.pop();
+        return out.join('');
+    }
+
     // Render the blank-state message overlay (sits above blank clock & scoreboard).
     function renderBlankMessageOverlay() {
         var overlay = document.getElementById('blank_message_overlay');
@@ -799,20 +872,20 @@
         // Center clock+body together as a vertical group.
         overlay.style.justifyContent = 'center';
 
-        // Set text + alignment
-        textSpan.textContent = blankMessageText;
+        // Set rendered markdown + alignment
+        textSpan.innerHTML = renderBlankMessageMarkdown(blankMessageText);
         textSpan.style.textAlign = blankMessageAlign;
         textSpan.style.display = 'inline-block';
         textSpan.style.width = '100%';
-        textSpan.style.whiteSpace = 'pre';
+        textSpan.style.whiteSpace = 'normal';
 
         overlay.style.display = 'flex';
         // Force reflow so opacity transition runs when going from display:none
         void overlay.offsetHeight;
 
-        // Auto-fit font size via binary search.
+        // Auto-fit font size via binary search on a hidden block measurer that
+        // mirrors the rendered markdown content at a fixed width.
         var lines = blankMessageText.split('\n');
-        var longest = lines.reduce(function (a, b) { return a.length >= b.length ? a : b; }, '');
         var padTotal = 64; // 32px left + right from CSS padding
         var MIN_FONT_PX = 24; // Minimum legible message font; overlay grows to honor this.
         var MAX_FONT_PX = 200;
@@ -823,19 +896,28 @@
         var clockBandH = isBlank ? clockRegion.getBoundingClientRect().height : 0;
         var availH = Math.max(50, tableH - clockBandH - padTotal);
 
-        // Use a measuring span that mirrors target styling.
-        var measurer = document.createElement('span');
+        // Hidden block-level measurer mirrors textSpan styling at width=availW.
+        var measurer = document.createElement('div');
+        measurer.className = 'blank-message-body';
         measurer.style.position = 'absolute';
+        measurer.style.left = '-99999px';
+        measurer.style.top = '0';
         measurer.style.visibility = 'hidden';
-        measurer.style.whiteSpace = 'pre';
+        measurer.style.width = availW + 'px';
         measurer.style.fontFamily = "'Overpass Mono', monospace";
         measurer.style.lineHeight = '1.1';
+        measurer.style.textAlign = blankMessageAlign;
+        measurer.style.whiteSpace = 'normal';
+        measurer.innerHTML = textSpan.innerHTML;
         document.body.appendChild(measurer);
 
-        function widthAtFont(px) {
+        function fitsAtFont(px) {
             measurer.style.fontSize = px + 'px';
-            measurer.textContent = longest || ' ';
-            return measurer.getBoundingClientRect().width;
+            return measurer.scrollWidth <= availW && measurer.scrollHeight <= availH;
+        }
+        function widthFitsAtFont(px) {
+            measurer.style.fontSize = px + 'px';
+            return measurer.scrollWidth <= availW;
         }
 
         // Pass 1: largest font that fits both width and height inside the scoreboard.
@@ -843,9 +925,7 @@
         try {
             while (lo <= hi) {
                 var mid = Math.floor((lo + hi) / 2);
-                var w = widthAtFont(mid);
-                var h = mid * 1.1 * Math.max(1, lines.length);
-                if (w <= availW && h <= availH) {
+                if (fitsAtFont(mid)) {
                     best = mid;
                     lo = mid + 1;
                 } else {
@@ -858,7 +938,7 @@
                 var loW = MIN_FONT_PX, hiW = MAX_FONT_PX, bestW = MIN_FONT_PX;
                 while (loW <= hiW) {
                     var midW = Math.floor((loW + hiW) / 2);
-                    if (widthAtFont(midW) <= availW) {
+                    if (widthFitsAtFont(midW)) {
                         bestW = midW;
                         loW = midW + 1;
                     } else {
@@ -867,6 +947,9 @@
                 }
                 best = Math.max(MIN_FONT_PX, bestW);
             }
+            // Final measure of rendered height at chosen font for overlay sizing.
+            measurer.style.fontSize = best + 'px';
+            var renderedH = measurer.scrollHeight;
         } finally {
             document.body.removeChild(measurer);
         }
@@ -877,7 +960,7 @@
 
         // Compute final overlay height: never shorter than table; grows when the
         // message at MIN_FONT_PX needs more vertical room.
-        var contentH = clockBandH + best * 1.1 * Math.max(1, lines.length) + padTotal;
+        var contentH = clockBandH + renderedH + padTotal;
         var finalH = Math.max(tableH, contentH);
         overlay.style.minHeight = finalH + 'px';
 
