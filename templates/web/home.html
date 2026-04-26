@@ -896,20 +896,6 @@
         var availW = Math.max(50, (tableEl ? tableEl.getBoundingClientRect().width : overlay.clientWidth) - padHorizontal);
         var tableH = tableEl ? tableEl.getBoundingClientRect().height : overlay.clientHeight;
 
-        // Clock band height: measure naturally even when its max-height is in flight.
-        var clockBandH = 0;
-        if (isBlank) {
-            var savedMax = clockRegion.style.maxHeight;
-            var savedOp = clockRegion.style.opacity;
-            clockRegion.style.maxHeight = 'none';
-            clockRegion.style.opacity = '0';
-            clockRegion.style.visibility = 'hidden';
-            clockBandH = clockRegion.getBoundingClientRect().height;
-            clockRegion.style.maxHeight = savedMax;
-            clockRegion.style.opacity = savedOp;
-            clockRegion.style.visibility = '';
-        }
-
         // Hidden measurer at fixed width to find the smallest font that avoids
         // horizontal overflow.
         var measurer = document.createElement('div');
@@ -949,30 +935,20 @@
         textSpan.style.fontSize = chosen + 'px';
         textSpan.style.lineHeight = '1.1';
 
-        // Compute final overlay height: never shorter than table; grow only when
-        // body content (clock + text + body padding) actually overflows.
-        // renderedH already includes the body's 16+16 padding.
-        var contentH = clockBandH + renderedH;
-        if (contentH > tableH) {
-            // Must grow.
+        // Overlay height: always match the table. The clock is inside the body
+        // flex container, so it shares space with the text — no extra height
+        // needed for it. Only grow if text alone exceeds the table height.
+        var finalH = Math.max(tableH, renderedH);
+        overlay.style.minHeight = finalH + 'px';
+        if (finalH > tableH) {
             bodyEl.style.flex = '0 0 auto';
-            overlay.style.minHeight = contentH + 'px';
-            if (stackEl) {
-                stackEl.style.minHeight = contentH + 'px';
-                if (stackEl.style.maxHeight === '0px') {
-                    stackEl.style.maxHeight = contentH + 'px';
-                }
-            }
         } else {
-            // Fits inside tableH — don't force any growth. Let body fill overlay
-            // (CSS default flex: 1 1 auto) so clock+text center naturally.
             bodyEl.style.flex = '';
-            overlay.style.minHeight = tableH + 'px';
-            if (stackEl) {
-                stackEl.style.minHeight = tableH + 'px';
-                if (stackEl.style.maxHeight === '0px') {
-                    stackEl.style.maxHeight = tableH + 'px';
-                }
+        }
+        if (stackEl) {
+            stackEl.style.minHeight = finalH + 'px';
+            if (stackEl.style.maxHeight === '0px') {
+                stackEl.style.maxHeight = finalH + 'px';
             }
         }
 
