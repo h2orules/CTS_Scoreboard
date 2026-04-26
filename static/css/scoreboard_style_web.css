@@ -439,10 +439,16 @@ body.hide-time-decorations .qt-highlight {
 }
 
 .scoreboard-stack {
-    display: inline-block;
+    display: inline-grid;
     position: relative;
     overflow: hidden;
     transition: max-height 0.5s ease, min-height 0.5s ease, opacity 0.5s;
+}
+
+/* All stack children overlap in the same grid cell; the tallest
+   visible child determines the stack height naturally. */
+.scoreboard-stack > * {
+    grid-area: 1 / 1;
 }
 
 .blank-clock {
@@ -455,11 +461,7 @@ body.hide-time-decorations .qt-highlight {
     transition: opacity 0.5s;
     background-color: #b7d7e8;
     box-sizing: border-box;
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    align-self: stretch;
     align-items: center;
     justify-content: center;
     line-height: 1;
@@ -467,17 +469,14 @@ body.hide-time-decorations .qt-highlight {
 }
 
 .blank-message {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    min-height: 100%;
     background-color: #b7d7e8;
     box-sizing: border-box;
     display: none;
     opacity: 0;
     transition: opacity 0.5s ease;
     flex-direction: column;
+    justify-content: center;
+    align-self: stretch;
     z-index: 2;
 }
 
@@ -515,6 +514,11 @@ body.hide-time-decorations .qt-highlight {
 }
 
 #blank_message_text {
+    display: inline-block;
+    width: 100%;
+    white-space: normal;
+    font-size: 36px;
+    line-height: 1.1;
     transition: font-size 0.5s ease;
 }
 
@@ -939,6 +943,27 @@ table.scoreboard_table td[id^="lane_place"] {
         bottom: 0;
         padding: 12px 0;
     }
+
+    /* Blank-state message overlay: match lane row font sizing on mobile.
+       Lane rows use min(24px, 3.5vw); headers scale proportionally. */
+    .blank-message-clock {
+        font-size: min(60px, 10vw);
+        max-height: 120px;
+        padding: 0 8px 0 0;
+    }
+
+    .blank-message-body {
+        padding: 8px 16px;
+    }
+
+    #blank_message_text {
+        font-size: min(24px, 3.5vw) !important;
+    }
+
+    .blank-message-body h1 { font-size: 1.4em; }
+    .blank-message-body h2 { font-size: 1.25em; }
+    .blank-message-body h3 { font-size: 1.1em; }
+    .blank-message-body h4 { font-size: 1em; }
 }
 
 /* Confetti particles */
