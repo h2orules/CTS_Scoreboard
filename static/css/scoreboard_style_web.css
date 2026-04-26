@@ -506,9 +506,47 @@ body.hide-time-decorations .qt-highlight {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    white-space: pre;
+    white-space: normal;
     overflow: hidden;
 }
+
+/* Markdown elements rendered inside the blank-state message overlay.
+   Keep margins minimal so auto-fit math fits within the 8-line budget. */
+.blank-message-body h1,
+.blank-message-body h2,
+.blank-message-body h3,
+.blank-message-body h4 {
+    font-family: inherit;
+    color: inherit;
+    font-weight: bold;
+    margin: 0;
+    padding: 0;
+    line-height: 1.1;
+}
+.blank-message-body h1 { font-size: 1.4em; }
+.blank-message-body h2 { font-size: 1.25em; }
+.blank-message-body h3 { font-size: 1.1em; }
+.blank-message-body h4 { font-size: 1em; }
+.blank-message-body ul,
+.blank-message-body ol {
+    margin: 0;
+    padding-left: 1.5em;
+    list-style-position: inside;
+}
+.blank-message-body li {
+    margin: 0;
+    padding: 0;
+}
+.blank-message-body code {
+    font-family: inherit;
+    background-color: rgba(0, 0, 0, 0.08);
+    border-radius: 3px;
+    padding: 0 0.25em;
+}
+.blank-message-body strong { font-weight: bold; }
+.blank-message-body em { font-style: italic; }
+.blank-message-body u { text-decoration: underline; }
+.blank-message-body s { text-decoration: line-through; }
 
 .seed-time-italic {
     font-style: italic;
