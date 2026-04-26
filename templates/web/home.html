@@ -397,14 +397,8 @@
             maxQtTagLen = Math.max(maxQtTagLen, recTagLen);
         }
 
-        // Update tag placeholder widths
-        for (var i = 1; i <= {{ num_lanes }}; i++) {
-            var tagEl = document.getElementById("lane_qt_tag" + i);
-            if (tagEl) {
-                tagEl.style.display = maxQtTagLen > 0 ? "inline-block" : "none";
-                tagEl.style.minWidth = maxQtTagLen > 0 ? maxQtTagLen + "ch" : "0";
-            }
-        }
+        // Tag placeholder widths are now handled by CSS (fixed min-width on
+        // .lane_qt_tag), so no JS sizing needed.
 
         if (qtThresholds.length === 0 && !hasAnyRecords) return;
 
