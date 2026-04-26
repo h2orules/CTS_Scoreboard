@@ -401,15 +401,17 @@ body.hide-time-decorations .qt-highlight {
 }
 
 .content_scoreboard_ad {
-    max-width: 400px;
-    width: 100%;
+    width: auto;
+    min-width: 30%;
+    max-width: 60%;
     display: flex;
     justify-content: center;
     align-items: flex-start;
     margin: 25px auto 0;
-    flex: 1 1 0;
+    flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
+    container-type: size;
 }
 
 .content_scoreboard_ad img {
@@ -418,6 +420,15 @@ body.hide-time-decorations .qt-highlight {
     width: auto;
     height: auto;
     object-fit: contain;
+    transition: opacity 0.5s ease;
+}
+
+/* Hide ad image when container is too small to be meaningful */
+@container (max-height: 79px) {
+    img {
+        opacity: 0;
+        pointer-events: none;
+    }
 }
 
 .scoreboard_disclaimer {
@@ -447,7 +458,7 @@ body.hide-time-decorations .qt-highlight {
 
 /* All stack children overlap in the same grid cell; the tallest
    visible child determines the stack height naturally. */
-.scoreboard-stack > * {
+.scoreboard-stack>* {
     grid-area: 1 / 1;
 }
 
@@ -755,7 +766,7 @@ table.scoreboard_table td[id^="lane_place"] {
         padding: 10px;
         /* Reserve space for the fixed disclaimer footer so content is
            clipped at the footer cutoff rather than overlapping it. */
-        padding-bottom: 56px;
+        padding-bottom: 80px;
         height: 100vh;
         min-height: 0;
         width: 100%;
@@ -917,16 +928,7 @@ table.scoreboard_table td[id^="lane_place"] {
     }
 
     .content_scoreboard_ad {
-        /* Shrink to fit the space between the scoreboard table and the
-           footer cutoff, down to a minimum of 30% width. If the viewport
-           can't fit the image at that size, it will be clipped behind
-           the footer mask. */
-        width: auto;
-        min-width: 30%;
-        max-width: 60%;
-        flex: 1 1 auto;
-        min-height: 0;
-        display: flex;
+        margin-top: 10px;
     }
 
     .content_scores {
@@ -960,10 +962,21 @@ table.scoreboard_table td[id^="lane_place"] {
         font-size: min(24px, 3.5vw) !important;
     }
 
-    .blank-message-body h1 { font-size: 1.4em; }
-    .blank-message-body h2 { font-size: 1.25em; }
-    .blank-message-body h3 { font-size: 1.1em; }
-    .blank-message-body h4 { font-size: 1em; }
+    .blank-message-body h1 {
+        font-size: 1.4em;
+    }
+
+    .blank-message-body h2 {
+        font-size: 1.25em;
+    }
+
+    .blank-message-body h3 {
+        font-size: 1.1em;
+    }
+
+    .blank-message-body h4 {
+        font-size: 1em;
+    }
 }
 
 /* Confetti particles */
