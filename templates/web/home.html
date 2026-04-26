@@ -870,8 +870,8 @@
             clockRegion.style.opacity = '0';
         }
 
-        // Body region grows to its content, centered as a group with the clock.
-        bodyEl.style.flex = '0 0 auto';
+        // Body region: flex sizing decided after we know if content overflows
+        // (set further below).
 
         // Center clock+body together as a vertical group.
         overlay.style.justifyContent = 'center';
@@ -949,19 +949,30 @@
         textSpan.style.fontSize = chosen + 'px';
         textSpan.style.lineHeight = '1.1';
 
-        // Compute final overlay height: never shorter than table; grow if needed.
-        // renderedH already includes the body's 16+16 padding (measurer uses
-        // class blank-message-body), so no extra vertical padding is added.
+        // Compute final overlay height: never shorter than table; grow only when
+        // body content (clock + text + body padding) actually overflows.
+        // renderedH already includes the body's 16+16 padding.
         var contentH = clockBandH + renderedH;
-        var finalH = Math.max(tableH, contentH);
-        overlay.style.minHeight = finalH + 'px';
-
-        // Push the surrounding stack to grow with the overlay so the ad below
-        // animates down. Min-height transition is defined in CSS.
-        if (stackEl) {
-            stackEl.style.minHeight = finalH + 'px';
-            if (stackEl.style.maxHeight === '0px') {
-                stackEl.style.maxHeight = finalH + 'px';
+        if (contentH > tableH) {
+            // Must grow.
+            bodyEl.style.flex = '0 0 auto';
+            overlay.style.minHeight = contentH + 'px';
+            if (stackEl) {
+                stackEl.style.minHeight = contentH + 'px';
+                if (stackEl.style.maxHeight === '0px') {
+                    stackEl.style.maxHeight = contentH + 'px';
+                }
+            }
+        } else {
+            // Fits inside tableH — don't force any growth. Let body fill overlay
+            // (CSS default flex: 1 1 auto) so clock+text center naturally.
+            bodyEl.style.flex = '';
+            overlay.style.minHeight = tableH + 'px';
+            if (stackEl) {
+                stackEl.style.minHeight = tableH + 'px';
+                if (stackEl.style.maxHeight === '0px') {
+                    stackEl.style.maxHeight = tableH + 'px';
+                }
             }
         }
 
