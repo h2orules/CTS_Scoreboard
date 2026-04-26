@@ -397,14 +397,8 @@
             maxQtTagLen = Math.max(maxQtTagLen, recTagLen);
         }
 
-        // Update tag placeholder widths
-        for (var i = 1; i <= {{ num_lanes }}; i++) {
-            var tagEl = document.getElementById("lane_qt_tag" + i);
-            if (tagEl) {
-                tagEl.style.display = maxQtTagLen > 0 ? "inline-block" : "none";
-                tagEl.style.minWidth = maxQtTagLen > 0 ? maxQtTagLen + "ch" : "0";
-            }
-        }
+        // Tag placeholder widths are now handled by CSS (fixed min-width on
+        // .lane_qt_tag), so no JS sizing needed.
 
         if (qtThresholds.length === 0 && !hasAnyRecords) return;
 
@@ -813,12 +807,12 @@
     }
 
     // Render the blank-state message overlay (sits above blank clock & scoreboard).
+    // Layout is CSS-only (inline-grid stacking); JS just toggles content,
+    // display/opacity, and clock visibility.
     function renderBlankMessageOverlay() {
         var overlay = document.getElementById('blank_message_overlay');
         if (!overlay) return;
-        var tableEl = document.querySelector('.content_scoreboard_table');
         var clockRegion = document.getElementById('blank_message_clock');
-        var bodyEl = overlay.querySelector('.blank-message-body');
         var textSpan = document.getElementById('blank_message_text');
 
         var isBlank = (raceState === "Blank" || raceState === "BlankPreRace");
@@ -829,11 +823,8 @@
 
         if (!show) {
             overlay.style.opacity = '0';
-            // Restore stack control to updateBlankDisplay
             if (stackEl) {
-                stackEl.style.minHeight = '';
                 if (isTotalBlank) {
-                    // Re-collapse stack to match TotalBlank visual
                     stackEl.style.maxHeight = '0';
                 }
             }
@@ -843,25 +834,12 @@
             return;
         }
 
-        // Force scoreboard-stack to stay open so overlay is visible in TotalBlank too.
-        // We override updateBlankDisplay's collapse by setting min-height to the table's
-        // natural height and clearing any zero max-height.
-        if (stackEl && tableEl) {
-            var naturalH = tableEl.scrollHeight || tableEl.getBoundingClientRect().height;
-            stackEl.style.minHeight = naturalH + 'px';
-            if (stackEl.style.maxHeight === '0px') {
-                stackEl.style.maxHeight = naturalH + 'px';
-            }
+        // Un-collapse stack if TotalBlank collapsed it, so overlay is visible.
+        if (stackEl && stackEl.style.maxHeight === '0px') {
+            stackEl.style.maxHeight = '';
         }
 
-        // Size overlay to match scoreboard table width; allow vertical growth.
-        if (tableEl) {
-            var rect = tableEl.getBoundingClientRect();
-            overlay.style.width = rect.width + 'px';
-        }
-
-        // Clock region: hidden in TotalBlank states via opacity+max-height so
-        // the transition can animate when the state changes.
+        // Clock region: visible in Blank states, hidden otherwise (animated).
         if (isBlank) {
             clockRegion.style.maxHeight = '';
             clockRegion.style.opacity = '';
@@ -870,87 +848,13 @@
             clockRegion.style.opacity = '0';
         }
 
-        // Body region: flex sizing decided after we know if content overflows
-        // (set further below).
-
-        // Center clock+body together as a vertical group.
-        overlay.style.justifyContent = 'center';
-
         // Set rendered markdown + alignment
         textSpan.innerHTML = renderBlankMessageMarkdown(blankMessageText);
         textSpan.style.textAlign = blankMessageAlign;
-        textSpan.style.display = 'inline-block';
-        textSpan.style.width = '100%';
-        textSpan.style.whiteSpace = 'normal';
 
         overlay.style.display = 'flex';
         // Force reflow so opacity transition runs when going from display:none
         void overlay.offsetHeight;
-
-        // Fixed font-size approach (much simpler): non-header text is 36px,
-        // shrinking down to 18px only if a line is too wide. Headers scale via
-        // CSS em ratios (h1=1.4em → 50.4px max, capped well under 52px).
-        var BASE_FONT_PX = 36;
-        var MIN_FONT_PX = 18;
-        var padHorizontal = 64; // 32px left + right from CSS padding
-        var availW = Math.max(50, (tableEl ? tableEl.getBoundingClientRect().width : overlay.clientWidth) - padHorizontal);
-        var tableH = tableEl ? tableEl.getBoundingClientRect().height : overlay.clientHeight;
-
-        // Hidden measurer at fixed width to find the smallest font that avoids
-        // horizontal overflow.
-        var measurer = document.createElement('div');
-        measurer.className = 'blank-message-body';
-        measurer.style.position = 'absolute';
-        measurer.style.left = '-99999px';
-        measurer.style.top = '0';
-        measurer.style.visibility = 'hidden';
-        measurer.style.width = availW + 'px';
-        measurer.style.fontFamily = "'Overpass Mono', monospace";
-        measurer.style.lineHeight = '1.1';
-        measurer.style.textAlign = blankMessageAlign;
-        measurer.style.whiteSpace = 'normal';
-        measurer.innerHTML = textSpan.innerHTML;
-        document.body.appendChild(measurer);
-
-        var chosen = BASE_FONT_PX;
-        var renderedH = 0;
-        try {
-            measurer.style.fontSize = BASE_FONT_PX + 'px';
-            if (measurer.scrollWidth > availW) {
-                // Step down by 2px until it fits or we hit MIN_FONT_PX.
-                for (var px = BASE_FONT_PX - 2; px >= MIN_FONT_PX; px -= 2) {
-                    measurer.style.fontSize = px + 'px';
-                    if (measurer.scrollWidth <= availW) {
-                        chosen = px;
-                        break;
-                    }
-                    chosen = px;
-                }
-            }
-            measurer.style.fontSize = chosen + 'px';
-            renderedH = measurer.scrollHeight;
-        } finally {
-            document.body.removeChild(measurer);
-        }
-        textSpan.style.fontSize = chosen + 'px';
-        textSpan.style.lineHeight = '1.1';
-
-        // Overlay height: always match the table. The clock is inside the body
-        // flex container, so it shares space with the text — no extra height
-        // needed for it. Only grow if text alone exceeds the table height.
-        var finalH = Math.max(tableH, renderedH);
-        overlay.style.minHeight = finalH + 'px';
-        if (finalH > tableH) {
-            bodyEl.style.flex = '0 0 auto';
-        } else {
-            bodyEl.style.flex = '';
-        }
-        if (stackEl) {
-            stackEl.style.minHeight = finalH + 'px';
-            if (stackEl.style.maxHeight === '0px') {
-                stackEl.style.maxHeight = finalH + 'px';
-            }
-        }
 
         // Remove any in-flight confetti and disable new confetti while overlay shows.
         document.querySelectorAll('.confetti-particle').forEach(function (el) { el.remove(); });

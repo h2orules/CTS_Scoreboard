@@ -401,15 +401,17 @@ body.hide-time-decorations .qt-highlight {
 }
 
 .content_scoreboard_ad {
-    max-width: 400px;
-    width: 100%;
+    width: auto;
+    min-width: 30%;
+    max-width: 60%;
     display: flex;
     justify-content: center;
     align-items: flex-start;
     margin: 25px auto 0;
-    flex: 1 1 0;
+    flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
+    container-type: size;
 }
 
 .content_scoreboard_ad img {
@@ -418,6 +420,15 @@ body.hide-time-decorations .qt-highlight {
     width: auto;
     height: auto;
     object-fit: contain;
+    transition: opacity 0.5s ease;
+}
+
+/* Hide ad image when container is too small to be meaningful */
+@container (max-height: 79px) {
+    img {
+        opacity: 0;
+        pointer-events: none;
+    }
 }
 
 .scoreboard_disclaimer {
@@ -427,7 +438,7 @@ body.hide-time-decorations .qt-highlight {
     font-size: 20px;
     text-align: center;
     position: fixed;
-    bottom: 25px;
+    bottom: 12px;
     left: 0;
     right: 0;
     z-index: 100;
@@ -439,10 +450,16 @@ body.hide-time-decorations .qt-highlight {
 }
 
 .scoreboard-stack {
-    display: inline-block;
+    display: inline-grid;
     position: relative;
     overflow: hidden;
     transition: max-height 0.5s ease, min-height 0.5s ease, opacity 0.5s;
+}
+
+/* All stack children overlap in the same grid cell; the tallest
+   visible child determines the stack height naturally. */
+.scoreboard-stack>* {
+    grid-area: 1 / 1;
 }
 
 .blank-clock {
@@ -455,11 +472,7 @@ body.hide-time-decorations .qt-highlight {
     transition: opacity 0.5s;
     background-color: #b7d7e8;
     box-sizing: border-box;
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    align-self: stretch;
     align-items: center;
     justify-content: center;
     line-height: 1;
@@ -467,17 +480,14 @@ body.hide-time-decorations .qt-highlight {
 }
 
 .blank-message {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    min-height: 100%;
     background-color: #b7d7e8;
     box-sizing: border-box;
     display: none;
     opacity: 0;
     transition: opacity 0.5s ease;
     flex-direction: column;
+    justify-content: center;
+    align-self: stretch;
     z-index: 2;
 }
 
@@ -515,6 +525,11 @@ body.hide-time-decorations .qt-highlight {
 }
 
 #blank_message_text {
+    display: inline-block;
+    width: 100%;
+    white-space: normal;
+    font-size: 36px;
+    line-height: 1.1;
     transition: font-size 0.5s ease;
 }
 
@@ -661,6 +676,8 @@ table.scoreboard_table th {
     width: 1180px !important;
     max-width: 1180px !important;
     display: none;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .lane_name {
@@ -669,6 +686,8 @@ table.scoreboard_table th {
     padding: 0 8px;
     display: none;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .lane_name-inner {
@@ -698,16 +717,26 @@ table.scoreboard_table th {
     order: 1;
 }
 
+/* Always-visible tag slot: reserves space so the time column
+   never resizes when indicators appear. Content set by JS. */
 .lane_qt_tag {
-    display: none;
+    display: inline-block;
     font-size: 0.75em;
     text-align: left;
     margin-left: 0.5ch;
+    min-width: 6ch;
+    vertical-align: baseline;
+}
+
+/* Lane column: override inline style to match Place width */
+#scoreboard_lane_col {
+    width: 140px !important;
+    max-width: 140px !important;
 }
 
 .scoreboard_place_col {
-    width: 135px !important;
-    max-width: 135px !important;
+    width: 160px !important;
+    max-width: 160px !important;
 }
 
 table.scoreboard_table td[id^="lane_place"] {
@@ -715,8 +744,9 @@ table.scoreboard_table td[id^="lane_place"] {
 }
 
 .scoreboard_time_col {
-    width: 290px !important;
-    max-width: 290px !important;
+    width: 405px !important;
+    max-width: 405px !important;
+    min-width: 300px !important;
 }
 
 .background {
@@ -738,7 +768,7 @@ table.scoreboard_table td[id^="lane_place"] {
 }
 
 /* Mobile devices */
-@media screen and (max-width: 768px) {
+@media screen and (max-width: 1024px) {
 
     html,
     body {
@@ -751,7 +781,7 @@ table.scoreboard_table td[id^="lane_place"] {
         padding: 10px;
         /* Reserve space for the fixed disclaimer footer so content is
            clipped at the footer cutoff rather than overlapping it. */
-        padding-bottom: 56px;
+        padding-bottom: 80px;
         height: 100vh;
         min-height: 0;
         width: 100%;
@@ -804,19 +834,22 @@ table.scoreboard_table td[id^="lane_place"] {
         padding: 0 4px;
     }
 
-    /* Ensure Time column fits m:ss.ms */
+    /* Time column: auto-sized from content, minimum for m:ss.ms */
     .scoreboard_time_col {
         width: auto !important;
         max-width: none !important;
-        min-width: 5.5em;
+        min-width: 2em !important;
         white-space: nowrap;
     }
 
+    /* Name column: absorbs remaining space, truncates with ellipsis */
     .scoreboard_name_col,
     .lane_name {
         width: auto !important;
         max-width: none !important;
         white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     table.scoreboard_table td,
@@ -834,9 +867,9 @@ table.scoreboard_table td[id^="lane_place"] {
         padding: 0 4px;
     }
 
-    /* Time data cells: minimum width for m:ss.ms */
+    /* Time data cell: auto-sized, nowrap */
     table.scoreboard_table td:last-child {
-        min-width: 5.5em;
+        white-space: nowrap;
     }
 
     .scoreboard_title {
@@ -913,16 +946,7 @@ table.scoreboard_table td[id^="lane_place"] {
     }
 
     .content_scoreboard_ad {
-        /* Shrink to fit the space between the scoreboard table and the
-           footer cutoff, down to a minimum of 30% width. If the viewport
-           can't fit the image at that size, it will be clipped behind
-           the footer mask. */
-        width: auto;
-        min-width: 30%;
-        max-width: 60%;
-        flex: 1 1 auto;
-        min-height: 0;
-        display: flex;
+        margin-top: 10px;
     }
 
     .content_scores {
@@ -938,6 +962,38 @@ table.scoreboard_table td[id^="lane_place"] {
     .scoreboard_disclaimer {
         bottom: 0;
         padding: 12px 0;
+    }
+
+    /* Blank-state message overlay: match lane row font sizing on mobile.
+       Lane rows use min(24px, 3.5vw); headers scale proportionally. */
+    .blank-message-clock {
+        font-size: min(60px, 10vw);
+        max-height: 120px;
+        padding: 0 8px 0 0;
+    }
+
+    .blank-message-body {
+        padding: 8px 16px;
+    }
+
+    #blank_message_text {
+        font-size: min(24px, 3.5vw) !important;
+    }
+
+    .blank-message-body h1 {
+        font-size: 1.4em;
+    }
+
+    .blank-message-body h2 {
+        font-size: 1.25em;
+    }
+
+    .blank-message-body h3 {
+        font-size: 1.1em;
+    }
+
+    .blank-message-body h4 {
+        font-size: 1em;
     }
 }
 
