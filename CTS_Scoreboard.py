@@ -21,6 +21,7 @@ import ap
 import argparse
 import hashlib
 import sim
+import wifi_manager
 
 DEBUG = False
 #DEBUG = True
@@ -1347,8 +1348,57 @@ def route_settings():
                 team_guest2_tag=settings.get('team_guest2_tag', ''),
                 team_guest3=settings.get('team_guest3', ''),
                 team_guest3_tag=settings.get('team_guest3_tag', ''),
-                shutdown_nonce=_new_shutdown_nonce())
-                
+                shutdown_nonce=_new_shutdown_nonce(),
+                wifi_available=wifi_manager.is_available())
+
+# ── WiFi management API ──────────────────────────────────────────
+
+@app.route('/wifi/status')
+@flask_login.login_required
+def route_wifi_status():
+    status = wifi_manager.get_status()
+    status['available'] = wifi_manager.is_available()
+    return flask.jsonify(status)
+
+@app.route('/wifi/scan')
+@flask_login.login_required
+def route_wifi_scan():
+    networks = wifi_manager.scan_networks()
+    saved = wifi_manager.get_saved_networks()
+    return flask.jsonify({'networks': networks, 'saved': saved})
+
+@app.route('/wifi/connect', methods=['POST'])
+@flask_login.login_required
+def route_wifi_connect():
+    data = flask.request.get_json(force=True)
+    ssid = data.get('ssid', '')
+    password = data.get('password') or None
+    if not ssid:
+        return flask.jsonify({'success': False, 'message': 'SSID is required'}), 400
+    ok, msg = wifi_manager.connect(ssid, password)
+    return flask.jsonify({'success': ok, 'message': msg})
+
+@app.route('/wifi/forget', methods=['POST'])
+@flask_login.login_required
+def route_wifi_forget():
+    data = flask.request.get_json(force=True)
+    ssid = data.get('ssid', '')
+    if not ssid:
+        return flask.jsonify({'success': False, 'message': 'SSID is required'}), 400
+    ok, msg = wifi_manager.forget(ssid)
+    return flask.jsonify({'success': ok, 'message': msg})
+
+@app.route('/wifi/update_password', methods=['POST'])
+@flask_login.login_required
+def route_wifi_update_password():
+    data = flask.request.get_json(force=True)
+    ssid = data.get('ssid', '')
+    password = data.get('password', '')
+    if not ssid or not password:
+        return flask.jsonify({'success': False, 'message': 'SSID and password are required'}), 400
+    ok, msg = wifi_manager.update_password(ssid, password)
+    return flask.jsonify({'success': ok, 'message': msg})
+
 @app.route('/schedule_clear')
 @flask_login.login_required
 def route_schedule_clear():
