@@ -8,7 +8,7 @@
     "message_overlay_enabled": true,
     "message_pages": [
         {
-            "align": "left",
+            "align": "center",
             "enabled": true,
             "text": "# Welcome!\nTo the first meet of the year!\nKingsgate Gators vs. High Woodlands Dolphins\n\n# Warmups\n**High Woodlands:** 4:30-5:30pm\n**Kingsgate:** 5:00-5:30pm\n\n# Pre-meet Meetings\n***Timers:*** 5:30pm, ***Officials:*** 5:30pm, ***Coaches:*** 5:45pm"
         },
@@ -23,7 +23,7 @@
             "text": "## This is Page 3\n1. Milk\n2. Eggs\n3. Bread\n\n# More Content Here\n~~Nevermind~~~"
         }
     ],
-    "message_rotation_interval": 30,
+    "message_rotation_interval": 15,
     "num_lanes": 6,
     "password": "password",
     "pool_course": "SCY",

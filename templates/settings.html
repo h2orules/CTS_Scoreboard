@@ -100,6 +100,24 @@
                     .msg-tab-add { padding: 4px 10px; cursor: pointer; background: none; border: 1px dashed #aaa; border-radius: 4px; font-size: 0.9em; color: #666; }
                     .msg-page-panel { border: 1px solid #ccc; border-radius: 0 4px 4px 4px; padding: 12px; }
                     .msg-page-panel[hidden] { display: none; }
+                    /* Toggle switch */
+                    .toggle-switch { position: relative; display: inline-block; width: 40px; height: 22px; vertical-align: middle; }
+                    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+                    .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; border-radius: 22px; transition: background-color 0.2s; }
+                    .toggle-slider:before { content: ""; position: absolute; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: #fff; border-radius: 50%; transition: transform 0.2s; }
+                    .toggle-switch input:checked + .toggle-slider { background-color: #4caf50; }
+                    .toggle-switch input:checked + .toggle-slider:before { transform: translateX(18px); }
+                    /* Justify button group */
+                    .justify-btn-group { display: inline-flex; gap: 0; border: 1px solid #ccc; border-radius: 4px; overflow: hidden; vertical-align: middle; }
+                    .justify-btn { padding: 4px 8px; cursor: pointer; background: #f5f5f5; border: none; border-right: 1px solid #ccc; line-height: 1; font-size: 16px; color: #555; transition: background 0.15s, color 0.15s; }
+                    .justify-btn:last-child { border-right: none; }
+                    .justify-btn:hover { background: #e0e0e0; }
+                    .justify-btn.active { background: #337ab7; color: #fff; }
+                    .justify-btn svg { display: block; width: 16px; height: 16px; fill: currentColor; }
+                    /* Toolbar above textarea */
+                    .msg-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+                    .msg-toolbar-left { display: flex; align-items: center; gap: 10px; }
+                    .msg-toolbar-right { display: flex; align-items: center; gap: 6px; }
                 </style>
                 <details {% if message_overlay_enabled %}open{% endif %} class="bm-details" style="margin-bottom:15px;">
                     <summary style="cursor:pointer;font-weight:bold;list-style:none;">
@@ -109,11 +127,12 @@
                     <form id="message_pages_form" action="/settings" method="POST" style="margin-top:10px;">
                         <input type="hidden" name="message_pages_form" value="1">
                         <input type="hidden" name="page_count" id="page_count" value="{{ message_pages | length }}">
-                        <div class="form-group" style="margin-bottom:10px;">
-                            <label>
+                        <div class="form-group" style="margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+                            <label class="toggle-switch" title="Enable message overlay">
                                 <input type="checkbox" name="message_overlay_enabled" {% if message_overlay_enabled %}checked{% endif %}>
-                                Enable message overlay
+                                <span class="toggle-slider"></span>
                             </label>
+                            <span style="font-weight:500;">Enable overlay</span>
                         </div>
                         <div class="form-group" style="margin-bottom:10px;">
                             <label>Rotation interval:</label>
@@ -133,7 +152,30 @@
                             {% for page in message_pages %}
                             <div class="msg-page-panel" id="msg_panel_{{ loop.index0 }}" {% if not loop.first %}hidden{% endif %}>
                                 <div class="form-group">
-                                    <label>Message (max 10 lines &times; 60 visible chars)</label>
+                                    <div class="msg-toolbar">
+                                        <div class="msg-toolbar-left">
+                                            <label style="margin:0;font-size:0.85em;color:#666;">Message (max 10 lines &times; 60 visible chars)</label>
+                                            <div class="justify-btn-group" data-idx="{{ loop.index0 }}">
+                                                <button type="button" class="justify-btn{% if page.align=='left' %} active{% endif %}" data-align="left" title="Align left" onclick="msgSetAlign({{ loop.index0 }},'left',this);">
+                                                    <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="1" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="1" y="14" width="8" height="2"/></svg>
+                                                </button>
+                                                <button type="button" class="justify-btn{% if page.align=='center' %} active{% endif %}" data-align="center" title="Center" onclick="msgSetAlign({{ loop.index0 }},'center',this);">
+                                                    <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="3" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="4" y="14" width="8" height="2"/></svg>
+                                                </button>
+                                                <button type="button" class="justify-btn{% if page.align=='right' %} active{% endif %}" data-align="right" title="Align right" onclick="msgSetAlign({{ loop.index0 }},'right',this);">
+                                                    <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="5" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="7" y="14" width="8" height="2"/></svg>
+                                                </button>
+                                            </div>
+                                            <input type="hidden" name="page_align_{{ loop.index0 }}" id="page_align_{{ loop.index0 }}" value="{{ page.align }}">
+                                        </div>
+                                        <div class="msg-toolbar-right">
+                                            <span style="font-size:0.85em;color:#666;">Enabled</span>
+                                            <label class="toggle-switch" title="Enable this page">
+                                                <input type="checkbox" name="page_enabled_{{ loop.index0 }}" {% if page.enabled %}checked{% endif %}>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                    </div>
                                     <textarea name="page_text_{{ loop.index0 }}" rows="10" cols="60" maxlength="2000"
                                         class="form-control msg-textarea" data-idx="{{ loop.index0 }}"
                                         style="font-family:'Overpass Mono',monospace;white-space:pre;overflow:auto;text-align:{{ page.align }};"
@@ -152,18 +194,6 @@
                                         <code>1.</code> Numbered<span class="sep">·</span>
                                         <code>-</code> Bulleted
                                     </small>
-                                </div>
-                                <div class="form-group" style="margin-top:8px;">
-                                    <label>Justify:</label>
-                                    <label style="margin-left:10px;"><input type="radio" name="page_align_{{ loop.index0 }}" value="left" {% if page.align=='left' %}checked{% endif %} onchange="msgOnAlignChange({{ loop.index0 }}, this.value);"> Left</label>
-                                    <label style="margin-left:10px;"><input type="radio" name="page_align_{{ loop.index0 }}" value="center" {% if page.align=='center' %}checked{% endif %} onchange="msgOnAlignChange({{ loop.index0 }}, this.value);"> Center</label>
-                                    <label style="margin-left:10px;"><input type="radio" name="page_align_{{ loop.index0 }}" value="right" {% if page.align=='right' %}checked{% endif %} onchange="msgOnAlignChange({{ loop.index0 }}, this.value);"> Right</label>
-                                </div>
-                                <div class="form-group" style="margin-top:8px;">
-                                    <label>
-                                        <input type="checkbox" name="page_enabled_{{ loop.index0 }}" {% if page.enabled %}checked{% endif %}>
-                                        Enable this page
-                                    </label>
                                 </div>
                                 {% if message_pages | length > 1 %}
                                 <div class="form-group" style="margin-top:8px;">
@@ -207,9 +237,17 @@
                             if (changed) ta.value = lines.join('\n');
                         }
                         window.msgOnInput = function(ta){ enforce(ta); };
-                        window.msgOnAlignChange = function(idx, val){
+                        window.msgSetAlign = function(idx, val, btn){
+                            // Update hidden input
+                            var hidden = document.getElementById('page_align_'+idx);
+                            if (hidden) hidden.value = val;
+                            // Update textarea
                             var ta = document.querySelector('#msg_panel_'+idx+' textarea');
                             if (ta) ta.style.textAlign = val;
+                            // Toggle active class on button group
+                            var group = btn.parentElement;
+                            group.querySelectorAll('.justify-btn').forEach(function(b){ b.classList.remove('active'); });
+                            btn.classList.add('active');
                         };
                         window.msgSelectTab = function(idx){
                             activeTab = idx;
@@ -244,14 +282,27 @@
                             panel.id = 'msg_panel_'+idx;
                             panel.hidden = true;
                             panel.innerHTML =
-                                '<div class="form-group"><label>Message (max 10 lines × 60 visible chars)</label>'+
-                                '<textarea name="page_text_'+idx+'" rows="10" cols="60" maxlength="2000" class="form-control msg-textarea" data-idx="'+idx+'" style="font-family:\'Overpass Mono\',monospace;white-space:pre;overflow:auto;" oninput="msgOnInput(this);"></textarea></div>'+
-                                '<div class="form-group" style="margin-top:8px;"><label>Justify:</label>'+
-                                '<label style="margin-left:10px;"><input type="radio" name="page_align_'+idx+'" value="left" checked onchange="msgOnAlignChange('+idx+', this.value);"> Left</label>'+
-                                '<label style="margin-left:10px;"><input type="radio" name="page_align_'+idx+'" value="center" onchange="msgOnAlignChange('+idx+', this.value);"> Center</label>'+
-                                '<label style="margin-left:10px;"><input type="radio" name="page_align_'+idx+'" value="right" onchange="msgOnAlignChange('+idx+', this.value);"> Right</label>'+
+                                '<div class="form-group">'+
+                                '<div class="msg-toolbar">'+
+                                '<div class="msg-toolbar-left">'+
+                                '<label style="margin:0;font-size:0.85em;color:#666;">Message (max 10 lines × 60 visible chars)</label>'+
+                                '<div class="justify-btn-group" data-idx="'+idx+'">'+
+                                '<button type="button" class="justify-btn active" data-align="left" title="Align left" onclick="msgSetAlign('+idx+',\'left\',this);">'+
+                                '<svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="1" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="1" y="14" width="8" height="2"/></svg></button>'+
+                                '<button type="button" class="justify-btn" data-align="center" title="Center" onclick="msgSetAlign('+idx+',\'center\',this);">'+
+                                '<svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="3" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="4" y="14" width="8" height="2"/></svg></button>'+
+                                '<button type="button" class="justify-btn" data-align="right" title="Align right" onclick="msgSetAlign('+idx+',\'right\',this);">'+
+                                '<svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="5" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="7" y="14" width="8" height="2"/></svg></button>'+
                                 '</div>'+
-                                '<div class="form-group" style="margin-top:8px;"><label><input type="checkbox" name="page_enabled_'+idx+'"> Enable this page</label></div>'+
+                                '<input type="hidden" name="page_align_'+idx+'" id="page_align_'+idx+'" value="left">'+
+                                '</div>'+
+                                '<div class="msg-toolbar-right">'+
+                                '<span style="font-size:0.85em;color:#666;">Enabled</span>'+
+                                '<label class="toggle-switch" title="Enable this page"><input type="checkbox" name="page_enabled_'+idx+'"><span class="toggle-slider"></span></label>'+
+                                '</div>'+
+                                '</div>'+
+                                '<textarea name="page_text_'+idx+'" rows="10" cols="60" maxlength="2000" class="form-control msg-textarea" data-idx="'+idx+'" style="font-family:\'Overpass Mono\',monospace;white-space:pre;overflow:auto;" oninput="msgOnInput(this);"></textarea>'+
+                                '</div>'+
                                 '<div class="form-group" style="margin-top:8px;"><button type="button" class="btn btn-danger btn-sm" onclick="msgRemovePage('+idx+')">Remove Page</button></div>';
                             container.appendChild(panel);
                             msgSelectTab(idx);
@@ -278,9 +329,17 @@
                                 // Rename form fields
                                 var ta = panels[i].querySelector('textarea');
                                 if (ta) { ta.name = 'page_text_'+i; ta.setAttribute('data-idx', i); ta.setAttribute('oninput', 'msgOnInput(this)'); }
-                                var radios = panels[i].querySelectorAll('input[type=radio]');
-                                radios.forEach(function(r){ r.name = 'page_align_'+i; r.setAttribute('onchange', 'msgOnAlignChange('+i+', this.value)'); });
-                                var cb = panels[i].querySelector('input[type=checkbox]');
+                                var hidden = panels[i].querySelector('input[type=hidden][name^=page_align_]');
+                                if (hidden) { hidden.name = 'page_align_'+i; hidden.id = 'page_align_'+i; }
+                                var justifyGroup = panels[i].querySelector('.justify-btn-group');
+                                if (justifyGroup) {
+                                    justifyGroup.setAttribute('data-idx', i);
+                                    justifyGroup.querySelectorAll('.justify-btn').forEach(function(b){
+                                        var al = b.getAttribute('data-align');
+                                        b.setAttribute('onclick', 'msgSetAlign('+i+',\''+al+'\',this)');
+                                    });
+                                }
+                                var cb = panels[i].querySelector('.toggle-switch input[type=checkbox]');
                                 if (cb) cb.name = 'page_enabled_'+i;
                                 var rmBtn = panels[i].querySelector('.btn-danger');
                                 if (rmBtn) rmBtn.setAttribute('onclick', 'msgRemovePage('+i+')');

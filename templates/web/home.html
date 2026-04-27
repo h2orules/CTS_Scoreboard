@@ -443,7 +443,7 @@
         }
     }
 
-    // renderBlankMessageMarkdown is provided by scoreboard.js (on window)
+    var _lastRenderedPageIdx = -1;
 
     // Render the message overlay (sits above blank clock & scoreboard).
     // Supports multiple pages with crossfade rotation.
@@ -468,6 +468,7 @@
             setTimeout(function () {
                 if (overlay.style.opacity === '0') overlay.style.display = 'none';
             }, 500);
+            _lastRenderedPageIdx = -1;
             return;
         }
 
@@ -476,7 +477,7 @@
             stackEl.style.maxHeight = '';
         }
 
-        // Clock region: visible in Blank states, hidden otherwise (animated).
+        // Clock region: visible in Blank states, hidden otherwise (animated via CSS transitions).
         if (isBlank) {
             clockRegion.style.maxHeight = '';
             clockRegion.style.opacity = '';
@@ -487,39 +488,43 @@
 
         // Find the active page
         var page = null;
+        var pageIdx = -1;
         if (activeMessagePage >= 0 && activeMessagePage < messagePages.length) {
             page = messagePages[activeMessagePage];
+            pageIdx = activeMessagePage;
         }
         if (!page || !page.enabled) {
             // Fallback to first enabled page
             for (var i = 0; i < messagePages.length; i++) {
                 if (messagePages[i].enabled && messagePages[i].text && messagePages[i].text.replace(/\s+/g, '').length > 0) {
                     page = messagePages[i];
+                    pageIdx = i;
                     break;
                 }
             }
         }
         if (!page) return;
 
-        // Crossfade: fade out, swap content, fade in
+        var needsCrossfade = (_lastRenderedPageIdx !== -1 && _lastRenderedPageIdx !== pageIdx);
+        _lastRenderedPageIdx = pageIdx;
+
+        // Set content (with crossfade only when switching pages)
         var pageKey = page.key;
         if (pageKey) {
-            var pageIdx = messagePages.indexOf(page);
             fetchFragment('/api/message-page/' + pageIdx, pageKey, function (html) {
-                textSpan.style.opacity = '0';
-                setTimeout(function () {
+                if (needsCrossfade) {
+                    textSpan.style.opacity = '0';
+                    setTimeout(function () {
+                        textSpan.innerHTML = html;
+                        textSpan.style.textAlign = page.align || 'left';
+                        textSpan.style.opacity = '1';
+                    }, 300);
+                } else {
                     textSpan.innerHTML = html;
                     textSpan.style.textAlign = page.align || 'left';
                     textSpan.style.opacity = '1';
-                }, 300);
+                }
             });
-        } else {
-            textSpan.style.opacity = '0';
-            setTimeout(function () {
-                textSpan.innerHTML = renderBlankMessageMarkdown(page.text || '');
-                textSpan.style.textAlign = page.align || 'left';
-                textSpan.style.opacity = '1';
-            }, 300);
         }
 
         overlay.style.display = 'flex';
