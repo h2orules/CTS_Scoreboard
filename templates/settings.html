@@ -86,49 +86,24 @@
         <div class="row">
             <div class="col-lg-6">
                 <form action="/settings" method="POST">
-                    <div class="input-group">
+                    <div class="form-group" style="margin-bottom:10px;">
                         <label for="num_lanes">Number of Lanes</label>
-                        <div class="input-group">
-                            <select id="num_lanes" name="num_lanes" class="form-control"
-                                oninput="document.getElementById('num_lanes_submit').disabled=false;">
-                                {% for n in range(4, 11) %}
-                                {% if n == num_lanes %}
-                                <option value="{{n}}" selected>{{n}}</option>
-                                {% else %}
-                                <option value="{{n}}">{{n}}</option>
-                                {% endif %}
-                                {% endfor %}
-                            </select>
-                            <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="num_lanes_submit" disabled>Update</button>
-                            </span>
-                        </div>
+                        <select id="num_lanes" name="num_lanes" class="form-control">
+                            {% for n in range(4, 11) %}
+                            <option value="{{n}}" {% if n == num_lanes %}selected{% endif %}>{{n}}</option>
+                            {% endfor %}
+                        </select>
                     </div>
-                </form>
-            </div>
-        </div>
-        
-        <div class="row">
-            <div class="col-lg-6">
-                <form action="/settings" method="POST">
-                    <div class="input-group">
+                    <div class="form-group" style="margin-bottom:10px;">
                         <label for="pool_course">Pool Course</label>
-                        <div class="input-group">
-                            <select id="pool_course" name="pool_course" class="form-control"
-                                oninput="document.getElementById('pool_course_submit').disabled=false;">
-                                {% for code, label in [('SCY', 'Short Course Yards (SCY)'), ('SCM', 'Short Course Meters
-                                (SCM)'), ('LCM', 'Long Course Meters (LCM)')] %}
-                                {% if code == pool_course %}
-                                <option value="{{code}}" selected>{{label}}</option>
-                                {% else %}
-                                <option value="{{code}}">{{label}}</option>
-                                {% endif %}
-                                {% endfor %}
-                            </select>
-                            <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="pool_course_submit" disabled>Update</button>
-                            </span>
-                        </div>
+                        <select id="pool_course" name="pool_course" class="form-control">
+                            {% for code, label in [('SCY', 'Short Course Yards (SCY)'), ('SCM', 'Short Course Meters (SCM)'), ('LCM', 'Long Course Meters (LCM)')] %}
+                            <option value="{{code}}" {% if code == pool_course %}selected{% endif %}>{{label}}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <button class="btn btn-default" type="submit">Update</button>
                     </div>
                 </form>
             </div>
@@ -685,36 +660,31 @@
         
         <h3>Team Names</h3>
         <div>Clear team names to prevent showing scores for that team.</div>
-        {% for team_key, team_label, team_val, tag_key, tag_val in [
-        ('team_home', 'Home', team_home, 'team_home_tag', team_home_tag),
-        ('team_guest1', 'Guest 1', team_guest1, 'team_guest1_tag', team_guest1_tag),
-        ('team_guest2', 'Guest 2', team_guest2, 'team_guest2_tag', team_guest2_tag),
-        ('team_guest3', 'Guest 3', team_guest3, 'team_guest3_tag', team_guest3_tag)
-        ] %}
         <div class="row">
             <div class="col-lg-8">
                 <form action="/settings" method="POST">
-                    <div class="input-group">
-                        <label for="{{ team_key }}" style="display: inline-block; width: 7ch;">{{ team_label }}</label>
-                        <div class="input-group" style="display: inline-flex; width: auto;">
-                            <input id="{{ team_key }}" name="{{ team_key }}" value="{{ team_val }}" class="form-control"
-                                maxlength="15" aria-label="Team name" placeholder="Team name" style="width: 20ch;"
-                                oninput="document.getElementById('{{ team_key }}_submit').disabled=false;"></input>
-                            <input id="{{ tag_key }}" name="{{ tag_key }}" value="{{ tag_val }}" class="form-control"
-                                maxlength="5" aria-label="Tag" placeholder="TEAM" style="width: 8ch; margin-left: 1ch;"
-                                oninput="document.getElementById('{{ team_key }}_submit').disabled=false;"></input>
-                            <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="{{ team_key }}_submit"
-                                    disabled>Update</button>
-                                <button class="btn btn-default" type="button"
-                                    onclick="document.getElementById('{{ team_key }}').value=''; document.getElementById('{{ tag_key }}').value=''; document.getElementById('{{ team_key }}_submit').disabled=false;">Clear</button>
-                            </span>
-                        </div>
+                    {% for team_key, team_label, team_val, tag_key, tag_val in [
+                    ('team_home', 'Home', team_home, 'team_home_tag', team_home_tag),
+                    ('team_guest1', 'Guest 1', team_guest1, 'team_guest1_tag', team_guest1_tag),
+                    ('team_guest2', 'Guest 2', team_guest2, 'team_guest2_tag', team_guest2_tag),
+                    ('team_guest3', 'Guest 3', team_guest3, 'team_guest3_tag', team_guest3_tag)
+                    ] %}
+                    <div class="form-group" style="margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+                        <label for="{{ team_key }}" style="margin:0;min-width:7ch;">{{ team_label }}</label>
+                        <input id="{{ team_key }}" name="{{ team_key }}" value="{{ team_val }}" class="form-control"
+                            maxlength="15" aria-label="Team name" placeholder="Team name" style="width:20ch;">
+                        <input id="{{ tag_key }}" name="{{ tag_key }}" value="{{ tag_val }}" class="form-control"
+                            maxlength="5" aria-label="Tag" placeholder="TEAM" style="width:8ch;">
+                        <button class="btn btn-default btn-sm" type="button" title="Clear"
+                            onclick="document.getElementById('{{ team_key }}').value=''; document.getElementById('{{ tag_key }}').value='';">&times;</button>
+                    </div>
+                    {% endfor %}
+                    <div class="form-group" style="margin-top:10px;">
+                        <button class="btn btn-default" type="submit">Update</button>
                     </div>
                 </form>
             </div>
         </div>
-        {% endfor %}
 
         <h3>Meet Manager (Hytek/Active) Data</h3>
         <div class="row">
