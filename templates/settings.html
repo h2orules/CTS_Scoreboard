@@ -49,6 +49,155 @@
         background: #eee;
         color: #c00;
     }
+
+    /* ── WiFi section ──────────────────────────── */
+    .wifi-status-bar {
+        display: flex; align-items: center; gap: 10px;
+        padding: 8px 12px; background: #f9f9f9; border: 1px solid #ddd;
+        border-radius: 4px; margin-bottom: 12px; font-size: 14px;
+    }
+    .wifi-status-bar .status-line {
+        display: flex; align-items: center; gap: 6px;
+    }
+    .wifi-status-bar svg { flex-shrink: 0; }
+
+    .wifi-list-header {
+        display: flex; align-items: center; justify-content: space-between;
+        margin-bottom: 6px;
+    }
+    .wifi-list-header label { margin: 0; font-weight: bold; }
+
+    .wifi-refresh-btn {
+        background: none; border: 1px solid #ccc; border-radius: 50%;
+        width: 30px; height: 30px; padding: 0; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center;
+        transition: background 0.15s;
+    }
+    .wifi-refresh-btn:hover { background: #eee; }
+    .wifi-refresh-btn.spinning svg {
+        animation: wifi-spin 0.8s linear infinite;
+    }
+    @keyframes wifi-spin { to { transform: rotate(360deg); } }
+
+    .wifi-network-list {
+        border: 1px solid #ddd; border-radius: 4px;
+        max-height: 230px; overflow-y: auto;
+    }
+    .wifi-network-row {
+        display: flex; align-items: center; gap: 8px;
+        padding: 7px 10px; border-bottom: 1px solid #eee;
+        cursor: default; transition: background 0.1s;
+    }
+    .wifi-network-row:last-child { border-bottom: none; }
+    .wifi-network-row:hover { background: #f5f5f5; }
+    .wifi-network-row.clickable { cursor: pointer; }
+
+    .wifi-ssid { flex: 1; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .wifi-badge {
+        font-size: 11px; padding: 2px 7px; border-radius: 10px;
+        font-weight: 600; white-space: nowrap;
+    }
+    .wifi-badge-connected { background: #d4edda; color: #155724; }
+    .wifi-badge-saved     { background: #d1ecf1; color: #0c5460; }
+
+    .wifi-btn {
+        background: none; border: 1px solid #ccc; border-radius: 4px;
+        padding: 3px 6px; cursor: pointer; display: inline-flex;
+        align-items: center; justify-content: center;
+        transition: background 0.15s, color 0.15s;
+    }
+    .wifi-btn:hover { background: #eee; }
+    .wifi-btn svg { width: 14px; height: 14px; }
+    .wifi-btn-danger:hover { background: #f8d7da; color: #721c24; border-color: #f5c6cb; }
+
+    .wifi-confirm-forget {
+        display: inline-flex; align-items: center; gap: 4px;
+        font-size: 12px; color: #a94442;
+    }
+    .wifi-confirm-forget button {
+        font-size: 11px; padding: 1px 8px; border-radius: 3px;
+        cursor: pointer;
+    }
+    .wifi-confirm-forget .wifi-forget-yes {
+        background: #d9534f; color: #fff; border: none;
+    }
+    .wifi-confirm-forget .wifi-forget-no {
+        background: #f5f5f5; color: #333; border: 1px solid #ccc;
+    }
+
+    .wifi-signal-bars {
+        display: inline-flex; align-items: flex-end; gap: 1px;
+        width: 16px; height: 14px;
+    }
+    .wifi-signal-bars span {
+        display: inline-block; width: 3px; border-radius: 1px;
+        background: #ccc; transition: background 0.2s;
+    }
+    .wifi-signal-bars span.filled { background: #333; }
+    .wifi-signal-bars span:nth-child(1) { height: 4px; }
+    .wifi-signal-bars span:nth-child(2) { height: 7px; }
+    .wifi-signal-bars span:nth-child(3) { height: 10px; }
+    .wifi-signal-bars span:nth-child(4) { height: 14px; }
+
+    .wifi-lock-icon { width: 12px; height: 12px; fill: #999; flex-shrink: 0; }
+
+    .wifi-spinner {
+        display: inline-block; width: 20px; height: 20px;
+        border: 3px solid #ddd; border-top-color: #337ab7;
+        border-radius: 50%; animation: wifi-spin 0.6s linear infinite;
+    }
+    .wifi-spinner-row {
+        display: flex; align-items: center; justify-content: center;
+        gap: 8px; padding: 18px 0; color: #888; font-size: 13px;
+    }
+    .wifi-hidden-btn {
+        margin-top: 8px;
+    }
+    .wifi-hidden-btn button {
+        background: #f5f5f5; border: 1px solid #ccc; border-radius: 4px;
+        padding: 5px 12px; cursor: pointer; font-size: 13px;
+        display: inline-flex; align-items: center; gap: 6px;
+        transition: background 0.15s;
+    }
+    .wifi-hidden-btn button:hover { background: #e8e8e8; }
+    .wifi-hidden-btn button svg { width: 16px; height: 16px; }
+
+    .wifi-overlay {
+        display: none; position: fixed; top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: rgba(0,0,0,0.5); z-index: 9999;
+        align-items: center; justify-content: center;
+    }
+    .wifi-overlay-card {
+        background: #fff; padding: 24px 32px; border-radius: 6px;
+        max-width: 380px; width: 90%; text-align: center;
+    }
+    .wifi-overlay-card h4 { margin-top: 0; }
+    .wifi-overlay-card input {
+        width: 100%; padding: 6px 10px; margin-bottom: 10px;
+        border: 1px solid #ccc; border-radius: 4px; font-size: 14px;
+        box-sizing: border-box;
+    }
+    .wifi-overlay-card .input-wrap {
+        position: relative; text-align: left; margin-bottom: 10px;
+    }
+    .wifi-overlay-card .input-wrap input { margin-bottom: 0; padding-right: 36px; }
+    .wifi-eye-btn {
+        position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+        background: none; border: none; cursor: pointer; padding: 2px;
+        color: #888;
+    }
+    .wifi-eye-btn:hover { color: #333; }
+    .wifi-overlay-card .wifi-overlay-msg {
+        font-size: 13px; margin-bottom: 8px; min-height: 18px;
+    }
+    .wifi-overlay-card .wifi-overlay-msg.error { color: #a94442; }
+    .wifi-overlay-card .wifi-overlay-msg.success { color: #3c763d; }
+    .wifi-unavailable {
+        padding: 10px 14px; background: #fcf8e3; border: 1px solid #faebcc;
+        border-radius: 4px; color: #8a6d3b; font-size: 13px;
+    }
 </style>
 
 <script>
@@ -899,6 +1048,48 @@
         {% if ad_url and (ad_url != '') %}
         <img src="{{url_for('static', filename='ad/'+ad_url)}}" width='400px' />
         {% endif %}
+
+        <h3>WiFi Network</h3>
+        {% if wifi_available %}
+        <div class="row">
+            <div class="col-lg-6">
+                <!-- Connection status -->
+                <div class="wifi-status-bar" id="wifi-status-bar">
+                    <div class="status-line" id="wifi-status-line">
+                        <span class="wifi-spinner" style="width:16px;height:16px;border-width:2px;"></span>
+                        <span>Checking connection&hellip;</span>
+                    </div>
+                </div>
+
+                <!-- Network list -->
+                <div class="wifi-list-header">
+                    <label>Available Networks</label>
+                    <button class="wifi-refresh-btn" id="wifi-refresh-btn" title="Refresh" onclick="wifiScan()">
+                        <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M13.65 2.35A7.96 7.96 0 0 0 8 0a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L10 6h6V0l-2.35 2.35z"/></svg>
+                    </button>
+                </div>
+                <div class="wifi-network-list" id="wifi-network-list">
+                    <div class="wifi-spinner-row" id="wifi-scan-spinner">
+                        <span class="wifi-spinner"></span> Scanning&hellip;
+                    </div>
+                </div>
+                <div class="wifi-hidden-btn">
+                    <button type="button" onclick="wifiShowManualOverlay()">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1 9l2 2a12.73 12.73 0 0 1 18 0l2-2A15.57 15.57 0 0 0 1 9zm4 4l2 2a8.5 8.5 0 0 1 10 0l2-2a11.36 11.36 0 0 0-14 0zm4 4l3 3 3-3a4.24 4.24 0 0 0-6 0z"/><line x1="19" y1="1" x2="23" y2="5" stroke="currentColor" stroke-width="2"/><line x1="23" y1="1" x2="19" y2="5" stroke="currentColor" stroke-width="2"/></svg>
+                        Connect to hidden network&hellip;
+                    </button>
+                </div>
+            </div>
+        </div>
+        {% else %}
+        <div class="row">
+            <div class="col-lg-6">
+                <div class="wifi-unavailable">
+                    WiFi management is not available on this system. NetworkManager (nmcli) is required.
+                </div>
+            </div>
+        </div>
+        {% endif %}
  
         <h3>Advanced Settings</h3>
         <div class="row">
@@ -977,6 +1168,41 @@
     </div>
 
     <!-- Shutdown confirmation overlay -->
+
+    <!-- WiFi password overlay (connect / edit password) -->
+    <div class="wifi-overlay" id="wifi-password-overlay">
+        <div class="wifi-overlay-card">
+            <h4 id="wifi-pw-title">Connect to Network</h4>
+            <div class="wifi-overlay-msg" id="wifi-pw-msg"></div>
+            <div class="input-wrap">
+                <input type="password" id="wifi-pw-input" placeholder="Password" autocomplete="off">
+                <button type="button" class="wifi-eye-btn" onclick="wifiToggleEye('wifi-pw-input', this)" title="Show password">
+                    <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor"><path d="M10 4C4.48 4 0 10 0 10s4.48 6 10 6 10-6 10-6-4.48-6-10-6zm0 10a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm0-6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>
+                </button>
+            </div>
+            <button class="btn btn-primary" id="wifi-pw-ok" onclick="wifiPasswordOk()">Connect</button>
+            <button class="btn btn-default" onclick="wifiCloseOverlay('wifi-password-overlay')">Cancel</button>
+        </div>
+    </div>
+
+    <!-- WiFi manual SSID overlay -->
+    <div class="wifi-overlay" id="wifi-manual-overlay">
+        <div class="wifi-overlay-card">
+            <h4>Connect to Hidden Network</h4>
+            <div class="wifi-overlay-msg" id="wifi-manual-msg"></div>
+            <input type="text" id="wifi-manual-ssid" placeholder="Network name (SSID)" autocomplete="off">
+            <div class="input-wrap">
+                <input type="password" id="wifi-manual-pw" placeholder="Password" autocomplete="off">
+                <button type="button" class="wifi-eye-btn" onclick="wifiToggleEye('wifi-manual-pw', this)" title="Show password">
+                    <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor"><path d="M10 4C4.48 4 0 10 0 10s4.48 6 10 6 10-6 10-6-4.48-6-10-6zm0 10a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm0-6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/></svg>
+                </button>
+            </div>
+            <button class="btn btn-primary" onclick="wifiManualConnect()">Connect</button>
+            <button class="btn btn-default" onclick="wifiCloseOverlay('wifi-manual-overlay')">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Shutdown confirmation overlay -->
     <div id="shutdown-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
         <div style="background:#fff; padding:24px 32px; border-radius:6px; max-width:360px; text-align:center;">
             <h4 style="margin-top:0;">Stop Server?</h4>
@@ -1013,6 +1239,292 @@
             xhr.send('nonce={{ shutdown_nonce }}');
         }
     </script>
+    {% if wifi_available %}
+    <script>
+    (function() {
+        var _statusTimer = null;
+        var _pwOverlaySSID = '';
+        var _pwOverlayMode = ''; // 'connect' or 'edit'
+
+        // ── SVG helpers ──────────────────────────────────────
+
+        function signalBarsHTML(signal) {
+            var thresholds = [20, 40, 60, 80];
+            var html = '<span class="wifi-signal-bars">';
+            for (var i = 0; i < 4; i++) {
+                html += '<span' + (signal >= thresholds[i] ? ' class="filled"' : '') + '></span>';
+            }
+            return html + '</span>';
+        }
+
+        var wifiIconConnected = '<svg viewBox="0 0 24 24" width="20" height="20" fill="#333">'
+            + '<path d="M1 9l2 2a12.73 12.73 0 0 1 18 0l2-2A15.57 15.57 0 0 0 1 9z"/>'
+            + '<path d="M5 13l2 2a8.5 8.5 0 0 1 10 0l2-2a11.36 11.36 0 0 0-14 0z"/>'
+            + '<path d="M9 17l3 3 3-3a4.24 4.24 0 0 0-6 0z"/></svg>';
+
+        var wifiIconDisconnected = '<svg viewBox="0 0 24 24" width="20" height="20" fill="#999">'
+            + '<path d="M1 9l2 2a12.73 12.73 0 0 1 18 0l2-2A15.57 15.57 0 0 0 1 9z" opacity="0.3"/>'
+            + '<path d="M5 13l2 2a8.5 8.5 0 0 1 10 0l2-2a11.36 11.36 0 0 0-14 0z" opacity="0.3"/>'
+            + '<path d="M9 17l3 3 3-3a4.24 4.24 0 0 0-6 0z" opacity="0.3"/></svg>';
+
+        var ethernetIcon = '<svg viewBox="0 0 24 24" width="18" height="18" fill="#333">'
+            + '<path d="M7.77 6.76L6.23 5.48.82 12l5.41 6.52 1.54-1.28L3.42 12l4.35-5.24zM14.23 '
+            + '6.76l1.54-1.28L21.18 12l-5.41 6.52-1.54-1.28L18.58 12l-4.35-5.24zM7.5 '
+            + '14h2v-4h-2v4zm3-4v4h2v-4h-2zm5 0v4h2v-4h-2z"/></svg>';
+
+        var lockIcon = '<svg class="wifi-lock-icon" viewBox="0 0 16 16" fill="#999">'
+            + '<path d="M12 7h-1V5a3 3 0 0 0-6 0v2H4a1 1 0 0 0-1 1v5a1 1 0 0 0 1 '
+            + '1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zM6 5a2 2 0 0 1 4 0v2H6V5z"/></svg>';
+
+        // ── Status ───────────────────────────────────────────
+
+        window.wifiLoadStatus = function() {
+            fetch('/wifi/status').then(function(r) { return r.json(); }).then(function(d) {
+                var bar = document.getElementById('wifi-status-bar');
+                if (!bar) return;
+                var html = '';
+                if (d.wifi_ssid) {
+                    html += '<div class="status-line">' + wifiIconConnected
+                        + ' <span>Connected to <strong>' + esc(d.wifi_ssid) + '</strong></span></div>';
+                } else {
+                    html += '<div class="status-line">' + wifiIconDisconnected
+                        + ' <span>Not connected to WiFi</span></div>';
+                }
+                if (d.ethernet) {
+                    html += '<div class="status-line" style="margin-left:4px;">'
+                        + ethernetIcon + ' <span>Ethernet connected</span></div>';
+                }
+                bar.innerHTML = html;
+            }).catch(function() {
+                var bar = document.getElementById('wifi-status-bar');
+                if (bar) bar.innerHTML = '<div class="status-line">' + wifiIconDisconnected
+                    + ' <span style="color:#999;">Unable to get status</span></div>';
+            });
+        };
+
+        // ── Scan ─────────────────────────────────────────────
+
+        window.wifiScan = function() {
+            var btn = document.getElementById('wifi-refresh-btn');
+            var list = document.getElementById('wifi-network-list');
+            if (btn) btn.classList.add('spinning');
+            list.innerHTML = '<div class="wifi-spinner-row"><span class="wifi-spinner"></span> Scanning&hellip;</div>';
+
+            fetch('/wifi/scan').then(function(r) { return r.json(); }).then(function(d) {
+                if (btn) btn.classList.remove('spinning');
+                var saved = d.saved || [];
+                var nets = d.networks || [];
+                if (nets.length === 0) {
+                    list.innerHTML = '<div class="wifi-spinner-row" style="color:#999;">No networks found</div>';
+                    return;
+                }
+                var html = '';
+                for (var i = 0; i < nets.length; i++) {
+                    var n = nets[i];
+                    var isSaved = saved.indexOf(n.ssid) !== -1;
+                    var isClickable = !n.in_use && !isSaved;
+                    html += '<div class="wifi-network-row' + (isClickable ? ' clickable' : '') + '"'
+                        + (isClickable ? ' onclick="wifiShowPasswordOverlay(\'' + escAttr(n.ssid) + '\', \'connect\')"' : '')
+                        + '>';
+                    html += signalBarsHTML(n.signal);
+                    html += n.security ? lockIcon : '<span style="width:12px;display:inline-block;"></span>';
+                    html += '<span class="wifi-ssid">' + esc(n.ssid) + '</span>';
+                    if (n.in_use) {
+                        html += '<span class="wifi-badge wifi-badge-connected">Connected</span>';
+                    } else if (isSaved) {
+                        html += '<span class="wifi-badge wifi-badge-saved">Saved</span>';
+                    }
+                    // Action buttons
+                    if (isSaved && !n.in_use) {
+                        html += '<button class="wifi-btn" title="Connect" onclick="event.stopPropagation();wifiConnectSaved(\'' + escAttr(n.ssid) + '\')">'
+                            + '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M4 2l10 6-10 6V2z"/></svg></button>';
+                    }
+                    if (isSaved) {
+                        html += '<button class="wifi-btn" title="Edit password" onclick="event.stopPropagation();wifiShowPasswordOverlay(\'' + escAttr(n.ssid) + '\', \'edit\')">'
+                            + '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M12.15 1.85a.5.5 0 0 1 .7 0l1.3 1.3a.5.5 0 0 1 0 .7L5.5 12.5 3 13l.5-2.5 8.65-8.65zM11 4l1 1"/></svg></button>';
+                        html += '<span id="wifi-forget-' + i + '">'
+                            + '<button class="wifi-btn wifi-btn-danger" title="Forget" onclick="event.stopPropagation();wifiForgetAsk(\'' + escAttr(n.ssid) + '\',' + i + ')">'
+                            + '<svg viewBox="0 0 16 16" fill="currentColor"><path d="M5.5 1a.5.5 0 0 1 .5-.5h4a.5.5 0 0 1 .5.5v1H14v1H2V2h3.5V1zM3 5h10l-.8 9a1 1 0 0 1-1 .9H4.8a1 1 0 0 1-1-.9L3 5z"/></svg>'
+                            + '</button></span>';
+                    }
+                    html += '</div>';
+                }
+                list.innerHTML = html;
+            }).catch(function() {
+                if (btn) btn.classList.remove('spinning');
+                list.innerHTML = '<div class="wifi-spinner-row" style="color:#a94442;">Scan failed</div>';
+            });
+        };
+
+        // ── Connect (saved network, no password needed) ──────
+
+        window.wifiConnectSaved = function(ssid) {
+            fetch('/wifi/connect', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ssid: ssid})
+            }).then(function(r) { return r.json(); }).then(function(d) {
+                wifiLoadStatus();
+                wifiScan();
+            });
+        };
+
+        // ── Password overlay ─────────────────────────────────
+
+        window.wifiShowPasswordOverlay = function(ssid, mode) {
+            _pwOverlaySSID = ssid;
+            _pwOverlayMode = mode;
+            var overlay = document.getElementById('wifi-password-overlay');
+            var title = document.getElementById('wifi-pw-title');
+            var okBtn = document.getElementById('wifi-pw-ok');
+            var msg = document.getElementById('wifi-pw-msg');
+            var inp = document.getElementById('wifi-pw-input');
+            title.textContent = mode === 'edit'
+                ? 'Update password for ' + ssid
+                : 'Connect to ' + ssid;
+            okBtn.textContent = mode === 'edit' ? 'Update' : 'Connect';
+            msg.textContent = '';
+            msg.className = 'wifi-overlay-msg';
+            inp.value = '';
+            inp.type = 'password';
+            overlay.style.display = 'flex';
+            inp.focus();
+        };
+
+        window.wifiPasswordOk = function() {
+            var pw = document.getElementById('wifi-pw-input').value;
+            var msg = document.getElementById('wifi-pw-msg');
+            if (!pw) { msg.textContent = 'Password is required'; msg.className = 'wifi-overlay-msg error'; return; }
+            var url = _pwOverlayMode === 'edit' ? '/wifi/update_password' : '/wifi/connect';
+            var body = _pwOverlayMode === 'edit'
+                ? {ssid: _pwOverlaySSID, password: pw}
+                : {ssid: _pwOverlaySSID, password: pw};
+            msg.textContent = _pwOverlayMode === 'edit' ? 'Updating\u2026' : 'Connecting\u2026';
+            msg.className = 'wifi-overlay-msg';
+            fetch(url, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(body)
+            }).then(function(r) { return r.json(); }).then(function(d) {
+                if (d.success) {
+                    msg.textContent = d.message;
+                    msg.className = 'wifi-overlay-msg success';
+                    setTimeout(function() {
+                        wifiCloseOverlay('wifi-password-overlay');
+                        wifiLoadStatus();
+                        wifiScan();
+                    }, 800);
+                } else {
+                    msg.textContent = d.message;
+                    msg.className = 'wifi-overlay-msg error';
+                }
+            }).catch(function() {
+                msg.textContent = 'Request failed';
+                msg.className = 'wifi-overlay-msg error';
+            });
+        };
+
+        // ── Manual SSID overlay ──────────────────────────────
+
+        window.wifiShowManualOverlay = function() {
+            var overlay = document.getElementById('wifi-manual-overlay');
+            var msg = document.getElementById('wifi-manual-msg');
+            document.getElementById('wifi-manual-ssid').value = '';
+            document.getElementById('wifi-manual-pw').value = '';
+            document.getElementById('wifi-manual-pw').type = 'password';
+            msg.textContent = '';
+            msg.className = 'wifi-overlay-msg';
+            overlay.style.display = 'flex';
+            document.getElementById('wifi-manual-ssid').focus();
+        };
+
+        window.wifiManualConnect = function() {
+            var ssid = document.getElementById('wifi-manual-ssid').value.trim();
+            var pw = document.getElementById('wifi-manual-pw').value;
+            var msg = document.getElementById('wifi-manual-msg');
+            if (!ssid) { msg.textContent = 'Network name is required'; msg.className = 'wifi-overlay-msg error'; return; }
+            msg.textContent = 'Connecting\u2026';
+            msg.className = 'wifi-overlay-msg';
+            fetch('/wifi/connect', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ssid: ssid, password: pw || null})
+            }).then(function(r) { return r.json(); }).then(function(d) {
+                if (d.success) {
+                    msg.textContent = d.message;
+                    msg.className = 'wifi-overlay-msg success';
+                    setTimeout(function() {
+                        wifiCloseOverlay('wifi-manual-overlay');
+                        wifiLoadStatus();
+                        wifiScan();
+                    }, 800);
+                } else {
+                    msg.textContent = d.message;
+                    msg.className = 'wifi-overlay-msg error';
+                }
+            }).catch(function() {
+                msg.textContent = 'Request failed';
+                msg.className = 'wifi-overlay-msg error';
+            });
+        };
+
+        // ── Forget (inline confirmation) ─────────────────────
+
+        window.wifiForgetAsk = function(ssid, idx) {
+            var el = document.getElementById('wifi-forget-' + idx);
+            if (!el) return;
+            var origHTML = el.innerHTML;
+            el.innerHTML = '<span class="wifi-confirm-forget">Sure? '
+                + '<button class="wifi-forget-yes" onclick="event.stopPropagation();wifiForgetConfirm(\'' + escAttr(ssid) + '\')">Yes</button>'
+                + '<button class="wifi-forget-no" onclick="event.stopPropagation();wifiForgetCancel(' + idx + ')">No</button></span>';
+            el._origHTML = origHTML;
+            el._timer = setTimeout(function() { wifiForgetCancel(idx); }, 3000);
+        };
+
+        window.wifiForgetCancel = function(idx) {
+            var el = document.getElementById('wifi-forget-' + idx);
+            if (!el || !el._origHTML) return;
+            clearTimeout(el._timer);
+            el.innerHTML = el._origHTML;
+        };
+
+        window.wifiForgetConfirm = function(ssid) {
+            fetch('/wifi/forget', {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ssid: ssid})
+            }).then(function(r) { return r.json(); }).then(function(d) {
+                wifiLoadStatus();
+                wifiScan();
+            });
+        };
+
+        // ── Overlay helpers ──────────────────────────────────
+
+        window.wifiCloseOverlay = function(id) {
+            document.getElementById(id).style.display = 'none';
+        };
+
+        window.wifiToggleEye = function(inputId, btn) {
+            var inp = document.getElementById(inputId);
+            inp.type = inp.type === 'password' ? 'text' : 'password';
+        };
+
+        // ── Util ─────────────────────────────────────────────
+
+        function esc(s) {
+            var d = document.createElement('div');
+            d.appendChild(document.createTextNode(s));
+            return d.innerHTML;
+        }
+        function escAttr(s) {
+            return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        }
+
+        // ── Init ─────────────────────────────────────────────
+
+        wifiLoadStatus();
+        wifiScan();
+        _statusTimer = setInterval(wifiLoadStatus, 30000);
+    })();
+    </script>
+    {% endif %}
     <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
     <!-- Latest compiled and minified JavaScript -->

@@ -40,4 +40,5 @@ only-include = [
     "hytek_st2_parser.py",
     "race_state_machine.py",
     "sim.py",
+    "wifi_manager.py",
 ]
