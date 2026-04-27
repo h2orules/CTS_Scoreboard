@@ -1834,6 +1834,7 @@ def main():
     global in_file, out_file, in_speed, debug_console
 
     load_settings()
+    _update_message_rotation()
 
     parser = argparse.ArgumentParser(description='Provide HTML rendering of Coloado Timing System data.')
     parser.add_argument('--port', '-p', action = 'store', default = '', 

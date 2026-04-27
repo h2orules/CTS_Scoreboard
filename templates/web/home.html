@@ -84,7 +84,7 @@
                 </div>
                 <div id="blank_clock" class="blank-clock"></div>
                 <div id="blank_message_overlay" class="blank-message">
-                    <div class="blank-message-body"><div class="blank-message-clock" id="blank_message_clock"></div><span id="blank_message_text"></span></div>
+                    <div class="blank-message-clock" id="blank_message_clock"></div><div class="blank-message-body"><div class="blank-message-text-stack"><span id="blank_message_text_a" class="blank-message-text"></span><span id="blank_message_text_b" class="blank-message-text" style="opacity:0;"></span></div></div>
                 </div>
             </div>
         </div>
@@ -444,14 +444,16 @@
     }
 
     var _lastRenderedPageIdx = -1;
+    // Dual text containers: _activeTxt is currently visible, _nextTxt is offscreen
+    var _activeTxt = document.getElementById('blank_message_text_a');
+    var _nextTxt = document.getElementById('blank_message_text_b');
 
     // Render the message overlay (sits above blank clock & scoreboard).
-    // Supports multiple pages with crossfade rotation.
+    // Uses two stacked text containers for blink-free crossfade.
     function renderMessageOverlay() {
         var overlay = document.getElementById('blank_message_overlay');
         if (!overlay) return;
         var clockRegion = document.getElementById('blank_message_clock');
-        var textSpan = document.getElementById('blank_message_text');
 
         var isBlank = (raceState === "Blank" || raceState === "BlankPreRace");
         var isTotalBlank = (raceState === "TotalBlank" || raceState === "TotalBlankPreRace");
@@ -513,16 +515,28 @@
         if (pageKey) {
             fetchFragment('/api/message-page/' + pageIdx, pageKey, function (html) {
                 if (needsCrossfade) {
-                    textSpan.style.opacity = '0';
+                    // Fade out active text
+                    _activeTxt.style.opacity = '0';
                     setTimeout(function () {
-                        textSpan.innerHTML = html;
-                        textSpan.style.textAlign = page.align || 'left';
-                        textSpan.style.opacity = '1';
+                        // Old text is now invisible — swap content into back container
+                        _activeTxt.innerHTML = '';
+                        _nextTxt.innerHTML = html;
+                        _nextTxt.style.textAlign = page.align || 'left';
+                        // Fade in new text
+                        requestAnimationFrame(function () {
+                            _nextTxt.style.opacity = '1';
+                        });
+                        // After fade-in, swap roles
+                        setTimeout(function () {
+                            var tmp = _activeTxt;
+                            _activeTxt = _nextTxt;
+                            _nextTxt = tmp;
+                        }, 350);
                     }, 300);
                 } else {
-                    textSpan.innerHTML = html;
-                    textSpan.style.textAlign = page.align || 'left';
-                    textSpan.style.opacity = '1';
+                    _activeTxt.innerHTML = html;
+                    _activeTxt.style.textAlign = page.align || 'left';
+                    _activeTxt.style.opacity = '1';
                 }
             });
         }
