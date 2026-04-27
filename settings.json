@@ -20,10 +20,10 @@
         {
             "align": "center",
             "enabled": true,
-            "text": "## This is Page 3\n1. Milk\n2. Eggs\n3. Bread\n\n# More Content Here\n~~Nevermind~~~"
+            "text": "## This is Page 3\n1. Milk\n2. Eggs\n3. Bread\n\n# More Content Here\n~~Nevermind~~"
         }
     ],
-    "message_rotation_interval": 15,
+    "message_rotation_interval": 5,
     "num_lanes": 6,
     "password": "password",
     "pool_course": "SCY",
