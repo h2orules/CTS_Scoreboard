@@ -95,8 +95,11 @@
                     .bm-md-legend u { text-decoration: underline; }
                     .bm-md-legend s { text-decoration: line-through; }
                     .msg-tab-bar { display: flex; gap: 4px; margin-bottom: 8px; align-items: center; }
-                    .msg-tab { padding: 4px 12px; border: 1px solid #ccc; border-bottom: none; border-radius: 4px 4px 0 0; cursor: pointer; background: #f5f5f5; font-size: 0.9em; }
+                    .msg-tab { padding: 4px 8px 4px 12px; border: 1px solid #ccc; border-bottom: none; border-radius: 4px 4px 0 0; cursor: pointer; background: #f5f5f5; font-size: 0.9em; display: inline-flex; align-items: center; gap: 4px; }
                     .msg-tab.active { background: #fff; font-weight: bold; border-bottom: 1px solid #fff; margin-bottom: -1px; }
+                    .msg-tab-close { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: none; background: none; padding: 0; cursor: pointer; border-radius: 3px; color: #999; font-size: 14px; line-height: 1; opacity: 0; transition: opacity 0.15s; }
+                    .msg-tab:hover .msg-tab-close { opacity: 1; }
+                    .msg-tab-close:hover { background: #ddd; color: #c00; }
                     .msg-tab-add { padding: 4px 10px; cursor: pointer; background: none; border: 1px dashed #aaa; border-radius: 4px; font-size: 0.9em; color: #666; }
                     .msg-page-panel { border: 1px solid #ccc; border-radius: 0 4px 4px 4px; padding: 12px; }
                     .msg-page-panel[hidden] { display: none; }
@@ -144,7 +147,7 @@
                         </div>
                         <div class="msg-tab-bar" id="msg_tab_bar">
                             {% for page in message_pages %}
-                            <span class="msg-tab{% if loop.first %} active{% endif %}" data-idx="{{ loop.index0 }}" onclick="msgSelectTab({{ loop.index0 }})">Page {{ loop.index }}</span>
+                            <span class="msg-tab{% if loop.first %} active{% endif %}" data-idx="{{ loop.index0 }}" onclick="msgSelectTab({{ loop.index0 }})"><span class="msg-tab-label">Page {{ loop.index }}</span>{% if message_pages | length > 1 %}<button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage({{ loop.index0 }})" title="Remove page">&times;</button>{% endif %}</span>
                             {% endfor %}
                             <button type="button" class="msg-tab-add" id="msg_add_page" onclick="msgAddPage()" {% if message_pages | length >= 5 %}disabled{% endif %}>+ Add</button>
                         </div>
@@ -195,11 +198,7 @@
                                         <code>-</code> Bulleted
                                     </small>
                                 </div>
-                                {% if message_pages | length > 1 %}
-                                <div class="form-group" style="margin-top:8px;">
-                                    <button type="button" class="btn btn-danger btn-sm" onclick="msgRemovePage({{ loop.index0 }})">Remove Page</button>
-                                </div>
-                                {% endif %}
+
                             </div>
                             {% endfor %}
                         </div>
@@ -271,8 +270,10 @@
                             var tab = document.createElement('span');
                             tab.className = 'msg-tab';
                             tab.setAttribute('data-idx', idx);
-                            tab.textContent = 'Page '+(idx+1);
+                            tab.innerHTML = '<span class="msg-tab-label">Page '+(idx+1)+'</span><button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage('+idx+')" title="Remove page">&times;</button>';
                             tab.onclick = function(){ msgSelectTab(idx); };
+                            // Show close buttons on all tabs now that there are multiple
+                            document.querySelectorAll('.msg-tab').forEach(function(t){ if (!t.querySelector('.msg-tab-close')){ t.innerHTML = '<span class="msg-tab-label">'+t.textContent+'</span><button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage('+t.getAttribute('data-idx')+')" title="Remove page">&times;</button>'; } });
                             tabBar.insertBefore(tab, addBtn);
                             if (pageCount >= 5) addBtn.disabled = true;
                             // Add panel
@@ -303,12 +304,30 @@
                                 '</div>'+
                                 '<textarea name="page_text_'+idx+'" rows="10" cols="60" maxlength="2000" class="form-control msg-textarea" data-idx="'+idx+'" style="font-family:\'Overpass Mono\',monospace;white-space:pre;overflow:auto;" oninput="msgOnInput(this);"></textarea>'+
                                 '</div>'+
-                                '<div class="form-group" style="margin-top:8px;"><button type="button" class="btn btn-danger btn-sm" onclick="msgRemovePage('+idx+')">Remove Page</button></div>';
+                                '';
                             container.appendChild(panel);
                             msgSelectTab(idx);
                         };
                         window.msgRemovePage = function(idx){
                             if (pageCount <= 1) return;
+                            // Show confirmation overlay
+                            var ov = document.getElementById('msg-remove-overlay');
+                            document.getElementById('msg-remove-label').textContent = 'Remove Page '+(idx+1)+'?';
+                            ov.style.display = 'flex';
+                            var okBtn = document.getElementById('msg-remove-ok');
+                            var cancelBtn = document.getElementById('msg-remove-cancel');
+                            // Clone to remove old listeners
+                            var newOk = okBtn.cloneNode(true);
+                            okBtn.parentNode.replaceChild(newOk, okBtn);
+                            var newCancel = cancelBtn.cloneNode(true);
+                            cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+                            newCancel.onclick = function(){ ov.style.display='none'; };
+                            newOk.onclick = function(){
+                                ov.style.display='none';
+                                doRemovePage(idx);
+                            };
+                        };
+                        function doRemovePage(idx){
                             // Remove tab and panel
                             var tab = document.querySelector('.msg-tab[data-idx="'+idx+'"]');
                             if (tab) tab.remove();
@@ -321,7 +340,8 @@
                             var panels = document.querySelectorAll('.msg-page-panel');
                             for (var i=0; i<tabs.length; i++){
                                 tabs[i].setAttribute('data-idx', i);
-                                tabs[i].textContent = 'Page '+(i+1);
+                                var closeHtml = pageCount > 1 ? '<button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage('+i+')" title="Remove page">&times;</button>' : '';
+                                tabs[i].innerHTML = '<span class="msg-tab-label">Page '+(i+1)+'</span>' + closeHtml;
                                 tabs[i].onclick = (function(n){ return function(){ msgSelectTab(n); }; })(i);
                             }
                             for (var i=0; i<panels.length; i++){
@@ -341,12 +361,10 @@
                                 }
                                 var cb = panels[i].querySelector('.toggle-switch input[type=checkbox]');
                                 if (cb) cb.name = 'page_enabled_'+i;
-                                var rmBtn = panels[i].querySelector('.btn-danger');
-                                if (rmBtn) rmBtn.setAttribute('onclick', 'msgRemovePage('+i+')');
                             }
                             document.getElementById('msg_add_page').disabled = (pageCount >= 5);
                             msgSelectTab(Math.min(idx, pageCount-1));
-                        };
+                        }
                     })();
                 </script>
             </div>
@@ -795,6 +813,16 @@
             <input type="text" id="shutdown-confirm-input" class="form-control" placeholder="Type Stop" style="margin-bottom:12px;">
             <button class="btn btn-danger" id="shutdown-ok-btn" disabled onclick="shutdownServer();">OK</button>
             <button class="btn btn-default" onclick="document.getElementById('shutdown-overlay').style.display='none'; document.getElementById('shutdown-confirm-input').value='';  document.getElementById('shutdown-ok-btn').disabled=true;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Remove page confirmation overlay -->
+    <div id="msg-remove-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+        <div style="background:#fff; padding:24px 32px; border-radius:6px; max-width:360px; text-align:center;">
+            <h4 id="msg-remove-label" style="margin-top:0;">Remove Page?</h4>
+            <p>This page and its content will be deleted.</p>
+            <button class="btn btn-danger" id="msg-remove-ok">Remove</button>
+            <button class="btn btn-default" id="msg-remove-cancel">Cancel</button>
         </div>
     </div>
     <script>
