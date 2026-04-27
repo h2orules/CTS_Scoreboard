@@ -1546,11 +1546,15 @@ def load_user(userid):
     return User(userid)
     
     
+# Module-level initialization: load settings and start rotation timer so the
+# app is ready whether launched via ``python CTS_Scoreboard.py`` (dev) or
+# imported by gunicorn (production).
+load_settings()
+_update_message_rotation()
+
+
 def main():
     global in_file, out_file, in_speed, debug_console
-
-    load_settings()
-    _update_message_rotation()
 
     parser = argparse.ArgumentParser(description='Provide HTML rendering of Coloado Timing System data.')
     parser.add_argument('--port', '-p', action = 'store', default = '', 
