@@ -145,7 +145,7 @@
     {% for i, lane in initial_lanes.items() %}
     laneAgeCodes[{{ i }}] = {{ lane.age_code | tojson }};
     laneTeamCodes[{{ i }}] = {{ lane.team | tojson }};
-    laneSeedTimes[{{ i }}] = {{ lane.seed_time | tojson if lane.seed_time is not none else '""' }};
+    laneSeedTimes[{{ i }}] = {{ (lane.seed_time if lane.seed_time is not none else "") | tojson }};
     {% endfor %}
     {% endif %}
     var showPrTags = {{ initial_settings.show_pr_tags | tojson }};
