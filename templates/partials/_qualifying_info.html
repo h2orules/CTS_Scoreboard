@@ -1,0 +1,148 @@
+{#- Render qualifying times + records into a two-column layout.
+    This partial produces the same HTML as the former JS functions
+    renderQualifyingInfo / buildStandardsRows / buildRecordsRows.
+
+    Variables:
+      qt_groups     – list of {qualifiers, items: [{time, tag, description, color_class, ...}]}
+      rec_set_list  – list of {set_name, set_team_tag, records: [{time, color_class, ...}]}
+-#}
+{%- set all_items = [] -%}
+{%- for g in qt_groups -%}
+  {%- for it in g['items'] -%}
+    {%- if all_items.append(it) -%}{%- endif -%}
+  {%- endfor -%}
+{%- endfor -%}
+{%- set rec_sets_with_data = rec_set_list | selectattr('records') | list -%}
+{%- set has_any_records = rec_sets_with_data | length > 0 -%}
+{%- if all_items | length == 0 and not has_any_records -%}
+{# empty – no qualifying times or records #}
+{%- else -%}
+<tr class="qualifying_time_row"><td colspan="4"><div class="standards-records-container">
+{%- if qt_groups | length > 0 -%}
+<div class="standards-column">
+<div class="rec_header">Time Standards</div>
+{#- Determine if any item has a description different from its tag -#}
+{%- set ns = namespace(has_desc=false) -%}
+{%- for g in qt_groups -%}
+  {%- for it in g['items'] -%}
+    {%- if it.description and it.description != it.tag -%}
+      {%- set ns.has_desc = true -%}
+    {%- endif -%}
+  {%- endfor -%}
+{%- endfor -%}
+{%- set show_group_sub = qt_groups | length > 1 -%}
+{#- Build grid-template-columns string -#}
+{%- set cols = [] -%}
+{%- if show_group_sub -%}{%- if cols.append("auto") -%}{%- endif -%}{%- endif -%}
+{%- if cols.append("auto") -%}{%- endif -%}
+{%- if ns.has_desc -%}
+  {%- if cols.append("auto") -%}{%- endif -%}
+  {%- if cols.append("minmax(0, auto)") -%}{%- endif -%}
+{%- else -%}
+  {%- if cols.append("minmax(0, auto)") -%}{%- endif -%}
+{%- endif -%}
+<div class="standards-grid" style="grid-template-columns: {{ cols | join(' ') }}">
+{%- for g in qt_groups -%}
+  {%- if not loop.first -%}<div class="grid-divider"></div>{%- endif -%}
+  {%- for qt in g['items'] -%}
+    {%- if show_group_sub -%}
+      {%- if loop.first and g.qualifiers -%}
+<div class="grid-subheader">{{ g.qualifiers }}</div>
+      {%- else -%}
+<div></div>
+      {%- endif -%}
+    {%- endif -%}
+<div class="qt_time {{ qt.color_class }}">{{ qt.time }}</div>
+<div class="qt_tag {{ qt.color_class }}">{{ qt.tag }}</div>
+    {%- if ns.has_desc -%}
+<div class="qt_desc {{ qt.color_class }}">{{ qt.description if (qt.description and qt.description != qt.tag) else '' }}</div>
+    {%- endif -%}
+  {%- endfor -%}
+{%- endfor -%}
+</div>
+</div>
+{%- endif -%}
+{%- if has_any_records -%}
+<div class="records-column">
+<div class="rec_header">Records</div>
+{%- set show_set_sub = rec_sets_with_data | length > 1 -%}
+{#- Check if any record across all sets has qualifiers -#}
+{%- set nsq = namespace(any_qual=false) -%}
+{%- for sd in rec_set_list -%}
+  {%- for rec in sd.records -%}
+    {%- if rec.qualifiers -%}{%- set nsq.any_qual = true -%}{%- endif -%}
+  {%- endfor -%}
+{%- endfor -%}
+{%- set first_set_rendered = namespace(val=false) -%}
+{%- for set_data in rec_set_list -%}
+  {%- if set_data.records | length > 0 -%}
+    {%- if first_set_rendered.val -%}
+<div class="records-set-divider"></div>
+    {%- endif -%}
+    {%- set first_set_rendered.val = true -%}
+    {#- Determine columns for this set -#}
+    {%- set is_team_specific = set_data.set_team_tag and set_data.set_team_tag != 'ALL' -%}
+    {%- set nsr = namespace(col_qual=nsq.any_qual, col_year=false, col_team=false, col_name=false) -%}
+    {%- for rec in set_data.records -%}
+      {%- if rec.qualifiers -%}{%- set nsr.col_qual = true -%}{%- endif -%}
+      {%- if rec.record_year -%}{%- set nsr.col_year = true -%}{%- endif -%}
+      {%- if not is_team_specific and rec.record_team -%}{%- set nsr.col_team = true -%}{%- endif -%}
+      {%- if rec.relay_names or rec.swimmer_name -%}{%- set nsr.col_name = true -%}{%- endif -%}
+    {%- endfor -%}
+    {#- Build subheader label -#}
+    {%- set show_this_sub = show_set_sub and set_data.set_name -%}
+    {%- if show_this_sub -%}
+      {%- set sn = set_data.set_name -%}
+      {%- if set_data.set_team_tag and set_data.set_team_tag != 'ALL' -%}
+        {%- if sn | length > 15 -%}{%- set sn = sn[:14] + '\u2026' -%}{%- endif -%}
+        {%- set sub_label = sn + ' (' + set_data.set_team_tag + ')' -%}
+      {%- else -%}
+        {%- set sub_label = sn -%}
+      {%- endif -%}
+    {%- endif -%}
+    {#- Build grid-template-columns -#}
+    {%- set rcols = [] -%}
+    {%- if show_this_sub -%}{%- if rcols.append("auto") -%}{%- endif -%}{%- endif -%}
+    {%- if nsr.col_qual -%}{%- if rcols.append("minmax(6ch, auto)") -%}{%- endif -%}{%- endif -%}
+    {%- if rcols.append("auto") -%}{%- endif -%}
+    {%- if nsr.col_year -%}{%- if rcols.append("auto") -%}{%- endif -%}{%- endif -%}
+    {%- if nsr.col_team -%}{%- if rcols.append("auto") -%}{%- endif -%}{%- endif -%}
+    {%- if nsr.col_name -%}{%- if rcols.append("minmax(0, auto)") -%}{%- endif -%}{%- endif -%}
+<div class="records-grid" style="grid-template-columns: {{ rcols | join(' ') }}">
+    {%- set last_qual = namespace(val=none) -%}
+    {%- for rec in set_data.records -%}
+      {%- set this_qual = rec.qualifiers or '' -%}
+      {%- set is_qual_first = this_qual != last_qual.val -%}
+      {%- set last_qual.val = this_qual -%}
+      {%- if show_this_sub -%}
+        {%- if loop.first -%}
+<div class="grid-subheader">{{ sub_label }}</div>
+        {%- else -%}
+<div></div>
+        {%- endif -%}
+      {%- endif -%}
+      {%- if nsr.col_qual -%}
+        {%- if is_qual_first and this_qual -%}
+<div class="grid-subheader">{{ this_qual }}</div>
+        {%- else -%}
+<div></div>
+        {%- endif -%}
+      {%- endif -%}
+<div class="rec_time {{ rec.color_class }}">{{ rec.time }}</div>
+      {%- if nsr.col_year -%}
+<div class="rec_year {{ rec.color_class }}">{{ rec.record_year or '' }}</div>
+      {%- endif -%}
+      {%- if nsr.col_team -%}
+<div class="rec_team {{ rec.color_class }}">{{ rec.record_team or '' }}</div>
+      {%- endif -%}
+      {%- if nsr.col_name -%}
+<div class="rec_name {{ rec.color_class }}">{{ rec.relay_names or rec.swimmer_name or '' }}</div>
+      {%- endif -%}
+    {%- endfor -%}
+</div>
+  {%- endif -%}
+{%- endfor -%}
+</div>
+{%- endif -%}
+</div></td></tr>
+{%- endif -%}

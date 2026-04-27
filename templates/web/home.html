@@ -25,7 +25,7 @@
     }
 </script>
 
-<body style="margin:0px" onload="init();">
+<body style="margin:0px" {% if initial_settings and not initial_settings.show_time_decorations %}class="hide-time-decorations"{% endif %} onload="init();">
     <div class="content_outer">
         <div class="scoreboard_group">
         <div class="content_title_block">
@@ -49,16 +49,17 @@
                     <table class="scoreboard_table">
                     <thead>
                         <tr>
-                            <th colspan="4" class="scoreboard_title">Event: <span id="current_event"></span> Heat: <span
-                                    id="current_heat"></span></th>
+                            <th colspan="4" class="scoreboard_title">Event: <span id="current_event">{{ initial_event }}</span> Heat: <span
+                                    id="current_heat">{{ initial_heat }}</span></th>
                         </tr>
 
                         <tr>
-                            <th colspan="4" class="content_event_name"><span id="event_name" class="anim"></span></th>
+                            <th colspan="4" class="content_event_name"><span id="event_name" class="anim">{{ initial_event_name }}</span></th>
                         </tr>
 
                     </thead>
                     <tbody id="qualifying_times_body">
+                    {{ initial_qt_html | safe }}
                     </tbody>
                     <thead>
 
@@ -75,7 +76,7 @@
                     <tr class="{{ 'scoreboard_row_odd' if i % 2 == 1 else 'scoreboard_row_eve' }}">
                         <td align="center">{{ i }}</td>
                         <td id="lane_place{{ i }}" align="center"></td>
-                        <td id="lane_name{{ i }}" class="lane_name"><div class="lane_name-inner"><span class="lane_swimmer_name" id="lane_swimmer_name{{ i }}">&nbsp;</span><span class="lane_age_code" id="lane_age_code{{ i }}"></span><span class="lane_team_code" id="lane_team{{ i }}"></span></div></td>
+                        <td id="lane_name{{ i }}" class="lane_name"><div class="lane_name-inner"><span class="lane_swimmer_name" id="lane_swimmer_name{{ i }}">{{ initial_lanes[i].name if initial_lanes and i in initial_lanes else '&nbsp;' }}</span><span class="lane_age_code" id="lane_age_code{{ i }}">{{ initial_lanes[i].age_code if initial_lanes and i in initial_lanes else '' }}</span><span class="lane_team_code" id="lane_team{{ i }}">{{ initial_lanes[i].team if initial_lanes and i in initial_lanes else '' }}</span></div></td>
                         <td align="right"><span id="lane_time{{ i }}"></span><span class="lane_qt_tag" id="lane_qt_tag{{ i }}"></span>&nbsp;</td>
                     </tr>
                     {% endfor %}
@@ -83,7 +84,7 @@
                 </div>
                 <div id="blank_clock" class="blank-clock"></div>
                 <div id="blank_message_overlay" class="blank-message">
-                    <div class="blank-message-body"><div class="blank-message-clock" id="blank_message_clock"></div><span id="blank_message_text"></span></div>
+                    <div class="blank-message-clock" id="blank_message_clock"></div><div class="blank-message-body"><div class="blank-message-text-stack"><span id="blank_message_text_a" class="blank-message-text"></span><span id="blank_message_text_b" class="blank-message-text" style="opacity:0;"></span></div></div>
                 </div>
             </div>
         </div>
@@ -123,22 +124,70 @@
 <script type="text/javascript" charset="utf-8">
     var s = {}
     var schedule_has_names = {{ 'true' if schedule_has_names else 'false' }};
-    var qtThresholds = [];  // Current event's qualifying time thresholds
-    var recSets = [];       // Current event's record sets [{set_name, set_team_tag, records:[...]}, ...]
+    var qtThresholds = {{ initial_qt_groups | tojson }};  // Pre-populated from server
+    var recSets = {{ initial_rec_sets | tojson }};
+    // Flatten qt groups into thresholds array
+    (function() {
+        var flat = [];
+        for (var g = 0; g < qtThresholds.length; g++) {
+            for (var i = 0; i < qtThresholds[g].items.length; i++) {
+                flat.push(qtThresholds[g].items[i]);
+            }
+        }
+        qtThresholds = flat;
+    })();
     var laneAgeCodes = {};  // lane -> age_code string (e.g. "8B", "12G")
     var laneTeamCodes = {}; // lane -> team code string
     var laneTimes = {};    // lane -> display time string from last update
     var laneSeedTimes = {}; // lane -> seed time in seconds (number or "")
-    var showPrTags = true;  // Whether to show PR tags
-    var showConfetti = true; // Whether to show confetti on qualifications
-    var seedTimeLabel = 'Seed Time'; // 'Seed Time', 'Entry Time', or 'None'
+    // Pre-populate lane data from server
+    {% if initial_lanes %}
+    {% for i, lane in initial_lanes.items() %}
+    laneAgeCodes[{{ i }}] = {{ lane.age_code | tojson }};
+    laneTeamCodes[{{ i }}] = {{ lane.team | tojson }};
+    laneSeedTimes[{{ i }}] = {{ (lane.seed_time if lane.seed_time is not none else "") | tojson }};
+    {% endfor %}
+    {% endif %}
+    var showPrTags = {{ initial_settings.show_pr_tags | tojson }};
+    var showConfetti = {{ initial_settings.show_confetti | tojson }};
+    var seedTimeLabel = {{ initial_settings.seed_time_label | tojson }};
     var CONFETTI_FADE_MS = 1200; // Duration for confetti particles to fade out
     var confettiFired = {};  // Track which lanes have already shown confetti
     var maxQtTagLen = 0;    // Longest tag string for space reservation
-    var raceState = "TotalBlank"; // Current race state from server FSM
-    var blankMessageText = '';
-    var blankMessageVisible = false;
-    var blankMessageAlign = 'left';
+    var raceState = {{ initial_race_state | tojson }};
+    var messageOverlayEnabled = {{ initial_settings.message_overlay_enabled | tojson }};
+    var messagePages = {{ initial_message_pages | tojson }};
+    var messageRotationInterval = {{ initial_settings.message_rotation_interval | tojson }};
+    var activeMessagePage = {{ initial_active_message_page | tojson }};
+    var qualifyingTimesKey = {{ initial_qt_key | tojson }};
+    var _fragmentCache = {};       // { url: { key, html } }
+
+    // Fetch a server-rendered HTML fragment with ETag caching.
+    // Compares incoming key against cached key; skips fetch if same.
+    function fetchFragment(url, newKey, callback) {
+        var cached = _fragmentCache[url];
+        if (cached && cached.key === newKey) {
+            callback(cached.html);
+            return;
+        }
+        var headers = {};
+        if (cached && cached.key) {
+            headers['If-None-Match'] = '"' + cached.key + '"';
+        }
+        fetch(url, { headers: headers }).then(function (resp) {
+            if (resp.status === 304 && cached) {
+                cached.key = newKey;
+                callback(cached.html);
+                return;
+            }
+            if (resp.ok) {
+                return resp.text().then(function (html) {
+                    _fragmentCache[url] = { key: newKey, html: html };
+                    callback(html);
+                });
+            }
+        }).catch(function () { /* keep current display on error */ });
+    }
 
     // Apply initial name column visibility
     document.querySelectorAll('.scoreboard_name_col, .lane_name').forEach(function (el) {
@@ -154,16 +203,19 @@
     // Get applicable record thresholds for a given lane based on age code and team
     // (provided by scoreboard.js — getRecordsForLane is on window)
 
-    // Returns true when the blank-message overlay is currently active (text + visible).
-    function isBlankMessageOverlayActive() {
-        var hasText = blankMessageText && blankMessageText.replace(/\s+/g, '').length > 0;
-        return blankMessageVisible && hasText;
+    // Returns true when the message overlay is currently active.
+    function isMessageOverlayActive() {
+        if (!messageOverlayEnabled) return false;
+        for (var i = 0; i < messagePages.length; i++) {
+            if (messagePages[i].enabled && messagePages[i].text && messagePages[i].text.replace(/\s+/g, '').length > 0) return true;
+        }
+        return false;
     }
 
     // Spawn confetti particles from the center of a given element
     function spawnConfetti(lane, targetEl) {
         if (!showConfetti) return;
-        if (isBlankMessageOverlayActive()) return;
+        if (isMessageOverlayActive()) return;
         if (raceState !== "Running" && raceState !== "Finished") return;
         if (confettiFired[lane]) return;
         confettiFired[lane] = true;
@@ -243,8 +295,8 @@
         }
     }
 
-    // Render qualifying times and records into two-column layout
-    function renderQualifyingInfo(qtGroups, recSetList) {
+    // Render qualifying times and records via server-rendered HTML fragment
+    function renderQualifyingInfo(qtGroups, recSetList, qtKey) {
         // Flatten groups into a single array for lane threshold evaluation
         qtThresholds = [];
         for (var g = 0; g < qtGroups.length; g++) {
@@ -253,8 +305,6 @@
             }
         }
         recSets = recSetList;
-        var qtBody = document.getElementById("qualifying_times_body");
-        qtBody.innerHTML = "";
 
         // Compute max tag length for space reservation in time cells
         maxQtTagLen = 0;
@@ -262,246 +312,26 @@
             maxQtTagLen = Math.max(maxQtTagLen, qtThresholds[q].tag.length);
         }
         var hasAnyRecords = false;
-        var recSetsWithData = 0;
         for (var rs = 0; rs < recSetList.length; rs++) {
             if (recSetList[rs].records.length > 0) {
                 hasAnyRecords = true;
-                recSetsWithData++;
+                break;
             }
         }
         if (hasAnyRecords) {
-            // Combined tag: "{tag} REC" or just "REC"
-            var recTagLen = 3; // "REC"
-            if (maxQtTagLen > 0) {
-                recTagLen = maxQtTagLen + 4; // "TAG REC"
-            }
+            var recTagLen = 3;
+            if (maxQtTagLen > 0) recTagLen = maxQtTagLen + 4;
             maxQtTagLen = Math.max(maxQtTagLen, recTagLen);
         }
 
-        // Tag placeholder widths are now handled by CSS (fixed min-width on
-        // .lane_qt_tag), so no JS sizing needed.
-
-        if (qtThresholds.length === 0 && !hasAnyRecords) return;
-
-        // Create container row
-        var tr = document.createElement("tr");
-        tr.className = "qualifying_time_row";
-        var td = document.createElement("td");
-        td.setAttribute("colspan", "4");
-
-        var container = document.createElement("div");
-        container.className = "standards-records-container";
-
-        if (qtGroups.length > 0) {
-            var stdDiv = document.createElement("div");
-            stdDiv.className = "standards-column";
-            var stdHeader = document.createElement("div");
-            stdHeader.className = "rec_header";
-            stdHeader.textContent = "Time Standards";
-            stdDiv.appendChild(stdHeader);
-            buildStandardsRows(stdDiv, qtGroups);
-            container.appendChild(stdDiv);
-        }
-
-        if (hasAnyRecords) {
-            var recDiv = document.createElement("div");
-            recDiv.className = "records-column";
-            var recHeader = document.createElement("div");
-            recHeader.className = "rec_header";
-            recHeader.textContent = "Records";
-            recDiv.appendChild(recHeader);
-            var showSetSubheader = (recSetsWithData > 1);
-            // If any set uses qualifier subheaders, reserve space for that
-            // column in every set so sets without qualifiers don't shift left.
-            var anyQual = false;
-            for (var rs0 = 0; rs0 < recSetList.length; rs0++) {
-                var sd = recSetList[rs0];
-                for (var ri = 0; ri < sd.records.length; ri++) {
-                    if (sd.records[ri].qualifiers) { anyQual = true; break; }
-                }
-                if (anyQual) break;
-            }
-            var firstSetRendered = false;
-            for (var rs = 0; rs < recSetList.length; rs++) {
-                var setData = recSetList[rs];
-                if (setData.records.length === 0) continue;
-                if (firstSetRendered) {
-                    var divider = document.createElement("div");
-                    divider.className = "records-set-divider";
-                    recDiv.appendChild(divider);
-                }
-                buildRecordsRows(recDiv, setData, showSetSubheader, anyQual);
-                firstSetRendered = true;
-            }
-            container.appendChild(recDiv);
-        }
-
-        td.appendChild(container);
-        tr.appendChild(td);
-        qtBody.appendChild(tr);
-    }
-
-    // Build standards grid rows inside a column container div
-    function buildStandardsRows(container, qtGroups) {
-        // Determine columns: time, tag, desc (desc only if any item has one)
-        var hasDesc = false;
-        for (var g = 0; g < qtGroups.length; g++) {
-            for (var i = 0; i < qtGroups[g].items.length; i++) {
-                var it = qtGroups[g].items[i];
-                if (it.description && it.description !== it.tag) { hasDesc = true; break; }
-            }
-            if (hasDesc) break;
-        }
-
-        var grid = document.createElement("div");
-        grid.className = "standards-grid";
-        var showGroupSubheader = (qtGroups.length > 1);
-        // Columns: [subheader?] [time] [tag] [desc?]
-        var stdCols = [];
-        if (showGroupSubheader) stdCols.push("auto");
-        stdCols.push("auto"); // time
-        stdCols.push("auto"); // tag
-        if (hasDesc) stdCols.push("minmax(0, auto)");
-        // Ensure last column can shrink even when desc is absent
-        if (!hasDesc) stdCols[stdCols.length - 1] = "minmax(0, auto)";
-        grid.style.gridTemplateColumns = stdCols.join(" ");
-        container.appendChild(grid);
-
-        for (var g = 0; g < qtGroups.length; g++) {
-            var group = qtGroups[g];
-
-            if (g > 0) {
-                var divider = document.createElement("div");
-                divider.className = "grid-divider";
-                grid.appendChild(divider);
-            }
-
-            for (var i = 0; i < group.items.length; i++) {
-                var qt = group.items[i];
-
-                // Column 1 (optional): subheader on first row of group
-                if (showGroupSubheader) {
-                    var subCell = document.createElement("div");
-                    if (i === 0 && group.qualifiers) {
-                        subCell.className = "grid-subheader";
-                        subCell.textContent = group.qualifiers;
-                    }
-                    grid.appendChild(subCell);
-                }
-
-                var timeSpan = document.createElement("div");
-                timeSpan.className = "qt_time " + qt.color_class;
-                timeSpan.textContent = qt.time;
-                grid.appendChild(timeSpan);
-
-                var tagSpan = document.createElement("div");
-                tagSpan.className = "qt_tag " + qt.color_class;
-                tagSpan.textContent = qt.tag;
-                grid.appendChild(tagSpan);
-
-                if (hasDesc) {
-                    var descSpan = document.createElement("div");
-                    descSpan.className = "qt_desc " + qt.color_class;
-                    var desc = (qt.description && qt.description !== qt.tag) ? qt.description : "";
-                    descSpan.textContent = desc;
-                    grid.appendChild(descSpan);
-                }
-            }
-        }
-    }
-
-    // Append one record set's rows as its own grid inside the records column
-    function buildRecordsRows(recDiv, setData, showSubheader, reserveQualCol) {
-        var recList = setData.records;
-        var isTeamSpecific = setData.set_team_tag && setData.set_team_tag !== 'ALL';
-
-        // Determine which columns this specific set needs
-        var colQual = !!reserveQualCol, colYear = false, colTeam = false, colName = false;
-        for (var r = 0; r < recList.length; r++) {
-            var rec = recList[r];
-            if (rec.qualifiers) colQual = true;
-            if (rec.record_year) colYear = true;
-            if (!isTeamSpecific && rec.record_team) colTeam = true;
-            if (rec.relay_names || rec.swimmer_name) colName = true;
-        }
-
-        // Build set subheader label if shown (cap set_name to 15 chars when
-        // appending a team tag so we don't overflow horizontally)
-        var showThisSubheader = showSubheader && setData.set_name;
-        var subLabel = "";
-        if (showThisSubheader) {
-            var sn = setData.set_name;
-            if (setData.set_team_tag && setData.set_team_tag !== 'ALL') {
-                if (sn.length > 15) sn = sn.slice(0, 14) + '\u2026';
-                subLabel = sn + " (" + setData.set_team_tag + ")";
-            } else {
-                subLabel = sn;
-            }
-        }
-
-        // Build per-set grid. Columns: [set-subheader]? [qual-subheader]? [time] [year]? [team]? [name]?
-        var grid = document.createElement("div");
-        grid.className = "records-grid";
-        var cols = [];
-        if (showThisSubheader) cols.push("auto");
-        if (colQual) cols.push("minmax(6ch, auto)");
-        cols.push("auto"); // time
-        if (colYear) cols.push("auto");
-        if (colTeam) cols.push("auto");
-        if (colName) cols.push("minmax(0, auto)");
-        grid.style.gridTemplateColumns = cols.join(" ");
-        recDiv.appendChild(grid);
-
-        var lastQual = null;
-        for (var r = 0; r < recList.length; r++) {
-            var rec = recList[r];
-            var thisQual = rec.qualifiers || "";
-            var isQualFirst = (thisQual !== lastQual);
-            lastQual = thisQual;
-
-            if (showThisSubheader) {
-                var setSubCell = document.createElement("div");
-                if (r === 0) {
-                    setSubCell.className = "grid-subheader";
-                    setSubCell.textContent = subLabel;
-                }
-                grid.appendChild(setSubCell);
-            }
-
-            if (colQual) {
-                var qualSubCell = document.createElement("div");
-                if (isQualFirst && thisQual) {
-                    qualSubCell.className = "grid-subheader";
-                    qualSubCell.textContent = thisQual;
-                }
-                grid.appendChild(qualSubCell);
-            }
-
-            var timeSpan = document.createElement("div");
-            timeSpan.className = "rec_time " + rec.color_class;
-            timeSpan.textContent = rec.time;
-            grid.appendChild(timeSpan);
-
-            if (colYear) {
-                var yearSpan = document.createElement("div");
-                yearSpan.className = "rec_year " + rec.color_class;
-                yearSpan.textContent = rec.record_year || "";
-                grid.appendChild(yearSpan);
-            }
-
-            if (colTeam) {
-                var teamSpan = document.createElement("div");
-                teamSpan.className = "rec_team " + rec.color_class;
-                teamSpan.textContent = rec.record_team || "";
-                grid.appendChild(teamSpan);
-            }
-
-            if (colName) {
-                var nameSpan = document.createElement("div");
-                nameSpan.className = "rec_name " + rec.color_class;
-                nameSpan.textContent = rec.relay_names || rec.swimmer_name || "";
-                grid.appendChild(nameSpan);
-            }
+        var qtBody = document.getElementById("qualifying_times_body");
+        if (qtKey) {
+            qualifyingTimesKey = qtKey;
+            fetchFragment('/api/qualifying-info', qtKey, function (html) {
+                qtBody.innerHTML = html;
+            });
+        } else {
+            qtBody.innerHTML = "";
         }
     }
 
@@ -613,21 +443,21 @@
         }
     }
 
-    // renderBlankMessageMarkdown is provided by scoreboard.js (on window)
+    var _lastRenderedPageIdx = -1;
+    // Dual text containers: _activeTxt is currently visible, _nextTxt is offscreen
+    var _activeTxt = document.getElementById('blank_message_text_a');
+    var _nextTxt = document.getElementById('blank_message_text_b');
 
-    // Render the blank-state message overlay (sits above blank clock & scoreboard).
-    // Layout is CSS-only (inline-grid stacking); JS just toggles content,
-    // display/opacity, and clock visibility.
-    function renderBlankMessageOverlay() {
+    // Render the message overlay (sits above blank clock & scoreboard).
+    // Uses two stacked text containers for blink-free crossfade.
+    function renderMessageOverlay() {
         var overlay = document.getElementById('blank_message_overlay');
         if (!overlay) return;
         var clockRegion = document.getElementById('blank_message_clock');
-        var textSpan = document.getElementById('blank_message_text');
 
         var isBlank = (raceState === "Blank" || raceState === "BlankPreRace");
         var isTotalBlank = (raceState === "TotalBlank" || raceState === "TotalBlankPreRace");
-        var hasText = blankMessageText && blankMessageText.replace(/\s+/g, '').length > 0;
-        var show = blankMessageVisible && hasText;
+        var show = isMessageOverlayActive();
         var stackEl = document.querySelector('.scoreboard-stack');
 
         if (!show) {
@@ -640,6 +470,7 @@
             setTimeout(function () {
                 if (overlay.style.opacity === '0') overlay.style.display = 'none';
             }, 500);
+            _lastRenderedPageIdx = -1;
             return;
         }
 
@@ -648,7 +479,7 @@
             stackEl.style.maxHeight = '';
         }
 
-        // Clock region: visible in Blank states, hidden otherwise (animated).
+        // Clock region: visible in Blank states, hidden otherwise (animated via CSS transitions).
         if (isBlank) {
             clockRegion.style.maxHeight = '';
             clockRegion.style.opacity = '';
@@ -657,9 +488,58 @@
             clockRegion.style.opacity = '0';
         }
 
-        // Set rendered markdown + alignment
-        textSpan.innerHTML = renderBlankMessageMarkdown(blankMessageText);
-        textSpan.style.textAlign = blankMessageAlign;
+        // Find the active page
+        var page = null;
+        var pageIdx = -1;
+        if (activeMessagePage >= 0 && activeMessagePage < messagePages.length) {
+            page = messagePages[activeMessagePage];
+            pageIdx = activeMessagePage;
+        }
+        if (!page || !page.enabled) {
+            // Fallback to first enabled page
+            for (var i = 0; i < messagePages.length; i++) {
+                if (messagePages[i].enabled && messagePages[i].text && messagePages[i].text.replace(/\s+/g, '').length > 0) {
+                    page = messagePages[i];
+                    pageIdx = i;
+                    break;
+                }
+            }
+        }
+        if (!page) return;
+
+        var needsCrossfade = (_lastRenderedPageIdx !== -1 && _lastRenderedPageIdx !== pageIdx);
+        _lastRenderedPageIdx = pageIdx;
+
+        // Set content (with crossfade only when switching pages)
+        var pageKey = page.key;
+        if (pageKey) {
+            fetchFragment('/api/message-page/' + pageIdx, pageKey, function (html) {
+                if (needsCrossfade) {
+                    // Fade out active text
+                    _activeTxt.style.opacity = '0';
+                    setTimeout(function () {
+                        // Old text is now invisible — swap content into back container
+                        _activeTxt.innerHTML = '';
+                        _nextTxt.innerHTML = html;
+                        _nextTxt.style.textAlign = page.align || 'left';
+                        // Fade in new text
+                        requestAnimationFrame(function () {
+                            _nextTxt.style.opacity = '1';
+                        });
+                        // After fade-in, swap roles
+                        setTimeout(function () {
+                            var tmp = _activeTxt;
+                            _activeTxt = _nextTxt;
+                            _nextTxt = tmp;
+                        }, 350);
+                    }, 300);
+                } else {
+                    _activeTxt.innerHTML = html;
+                    _activeTxt.style.textAlign = page.align || 'left';
+                    _activeTxt.style.opacity = '1';
+                }
+            });
+        }
 
         overlay.style.display = 'flex';
         // Force reflow so opacity transition runs when going from display:none
@@ -677,7 +557,7 @@
         var resizeTimer = null;
         window.addEventListener('resize', function () {
             if (resizeTimer) clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(renderBlankMessageOverlay, 100);
+            resizeTimer = setTimeout(renderMessageOverlay, 100);
         });
     })();
 
@@ -691,7 +571,8 @@
         if ("qualifying_times" in s || "record_sets" in s) {
             renderQualifyingInfo(
                 s["qualifying_times"] || [],
-                s["record_sets"] || []
+                s["record_sets"] || [],
+                s["qualifying_times_key"] || null
             );
         }
         updateSeedTimeDisplay(raceState);
@@ -943,12 +824,13 @@
             seedTimeLabel = s["seed_time_label"];
         }
 
-        var bmChanged = false;
-        if ("blank_message" in s) { blankMessageText = s["blank_message"] || ''; bmChanged = true; }
-        if ("blank_message_visible" in s) { blankMessageVisible = !!s["blank_message_visible"]; bmChanged = true; }
-        if ("blank_message_align" in s) { blankMessageAlign = s["blank_message_align"] || 'left'; bmChanged = true; }
-        if (bmChanged || ("race_state" in s)) {
-            renderBlankMessageOverlay();
+        var msgChanged = false;
+        if ("message_overlay_enabled" in s) { messageOverlayEnabled = !!s["message_overlay_enabled"]; msgChanged = true; }
+        if ("message_pages" in s) { messagePages = s["message_pages"]; msgChanged = true; }
+        if ("message_rotation_interval" in s) { messageRotationInterval = s["message_rotation_interval"]; }
+        if ("active_message_page" in s) { activeMessagePage = s["active_message_page"]; msgChanged = true; }
+        if (msgChanged || ("race_state" in s)) {
+            renderMessageOverlay();
         }
 
         // Evaluate all lanes for time standard qualifications (skip if event/heat just changed with stale times)
