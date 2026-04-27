@@ -34,6 +34,21 @@
     .input-group {
         width: 100%;
     }
+    .team-clear-btn {
+        background: none;
+        border: none;
+        padding: 2px 6px;
+        font-size: 16px;
+        line-height: 1;
+        color: #999;
+        cursor: pointer;
+        border-radius: 3px;
+        transition: background 0.15s, color 0.15s;
+    }
+    .team-clear-btn:hover {
+        background: #eee;
+        color: #c00;
+    }
 </style>
 
 <script>
@@ -82,57 +97,302 @@
             </div>
         </div>
 
+        <h3>Pool Settings</h3>
+        <div class="row">
+            <div class="col-lg-6">
+                <form action="/settings" method="POST">
+                    <div class="form-group" style="margin-bottom:10px;">
+                        <label for="num_lanes">Number of Lanes</label>
+                        <select id="num_lanes" name="num_lanes" class="form-control">
+                            {% for n in range(4, 11) %}
+                            <option value="{{n}}" {% if n == num_lanes %}selected{% endif %}>{{n}}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:10px;">
+                        <label for="pool_course">Pool Course</label>
+                        <select id="pool_course" name="pool_course" class="form-control">
+                            {% for code, label in [('SCY', 'Short Course Yards (SCY)'), ('SCM', 'Short Course Meters (SCM)'), ('LCM', 'Long Course Meters (LCM)')] %}
+                            <option value="{{code}}" {% if code == pool_course %}selected{% endif %}>{{label}}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <button class="btn btn-default" type="submit">Update</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <h3>Display Options</h3>
+        <div class="row">
+            <div class="col-lg-6">
+                <form action="/settings" method="POST">
+                    <input type="hidden" name="display_options_form" value="1">
+                    <div class="form-group" style="margin-bottom:10px;">
+                        <label for="seed_time_label">Seed Time Display</label>
+                        <select id="seed_time_label" name="seed_time_label" class="form-control">
+                            {% for code, label in [('Seed Time', 'Show as "Seed Time"'), ('Entry Time', 'Show as "Entry Time"'), ('None', 'Do not show seed times')] %}
+                            {% if code == seed_time_label %}
+                            <option value="{{code}}" selected>{{label}}</option>
+                            {% else %}
+                            <option value="{{code}}">{{label}}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+                        <label class="toggle-switch" title="Show PR tags">
+                            <input type="checkbox" name="show_pr_tags" value="1" {% if show_pr_tags %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span>Show PR (Personal Record) tags</span>
+                    </div>
+                    <div class="form-group" style="margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+                        <label class="toggle-switch" title="Show confetti">
+                            <input type="checkbox" name="show_confetti" value="1" {% if show_confetti %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span>Show confetti for time qualifications</span>
+                    </div>
+                    <div class="form-group" style="margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+                        <label class="toggle-switch" title="Show time decorations">
+                            <input type="checkbox" name="show_time_decorations" value="1" {% if show_time_decorations %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span>Show time decorations (underline/wavy for PR, standards, records)</span>
+                    </div>
+                    <div class="form-group">
+                        <button class="btn btn-default" type="submit">Update</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <h3>Message Board</h3>
         <div class="row">
             <div class="col-lg-8">
                 <style>
-                    .bm-details > summary::-webkit-details-marker { display: none; }
-                    .bm-details > summary { user-select: none; }
-                    .bm-details .bm-chevron { display: inline-block; transition: transform 0.15s ease; margin-right: 6px; }
-                    .bm-details[open] > summary .bm-chevron { transform: rotate(90deg); }
-                    .bm-md-legend { display: block; margin-top: 4px; font-size: 0.8em; color: #666; line-height: 1.5; }
-                    .bm-md-legend code { font-family: 'Overpass Mono', monospace; background: #f2f2f2; color: #555; padding: 0 2px; border-radius: 2px; font-size: 0.95em; }
-                    .bm-md-legend .sep { color: #bbb; margin: 0 4px; }
-                    .bm-md-legend u { text-decoration: underline; }
-                    .bm-md-legend s { text-decoration: line-through; }
-                    .msg-tab-bar { display: flex; gap: 4px; margin-bottom: 8px; align-items: center; }
-                    .msg-tab { padding: 4px 8px 4px 12px; border: 1px solid #ccc; border-bottom: none; border-radius: 4px 4px 0 0; cursor: pointer; background: #f5f5f5; font-size: 0.9em; display: inline-flex; align-items: center; gap: 4px; }
-                    .msg-tab.active { background: #fff; font-weight: bold; border-bottom: 1px solid #fff; margin-bottom: -1px; }
-                    .msg-tab-close { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: none; background: none; padding: 0; cursor: pointer; border-radius: 3px; color: #999; font-size: 14px; line-height: 1; opacity: 0; transition: opacity 0.15s; }
-                    .msg-tab:hover .msg-tab-close { opacity: 1; }
-                    .msg-tab-close:hover { background: #ddd; color: #c00; }
-                    .msg-tab-add { padding: 4px 10px; cursor: pointer; background: none; border: 1px dashed #aaa; border-radius: 4px; font-size: 0.9em; color: #666; }
-                    .msg-page-panel { border: 1px solid #ccc; border-radius: 0 4px 4px 4px; padding: 12px; }
-                    .msg-page-panel[hidden] { display: none; }
+                    .bm-md-legend {
+                        display: block;
+                        margin-top: 4px;
+                        font-size: 0.8em;
+                        color: #666;
+                        line-height: 1.5;
+                    }
+        
+                    .bm-md-legend code {
+                        font-family: 'Overpass Mono', monospace;
+                        background: #f2f2f2;
+                        color: #555;
+                        padding: 0 2px;
+                        border-radius: 2px;
+                        font-size: 0.95em;
+                    }
+        
+                    .bm-md-legend .sep {
+                        color: #bbb;
+                        margin: 0 4px;
+                    }
+        
+                    .bm-md-legend u {
+                        text-decoration: underline;
+                    }
+        
+                    .bm-md-legend s {
+                        text-decoration: line-through;
+                    }
+        
+                    .msg-tab-bar {
+                        display: flex;
+                        gap: 4px;
+                        margin-bottom: 8px;
+                        align-items: center;
+                    }
+        
+                    .msg-tab {
+                        padding: 4px 8px 4px 12px;
+                        border: 1px solid #ccc;
+                        border-bottom: none;
+                        border-radius: 4px 4px 0 0;
+                        cursor: pointer;
+                        background: #f5f5f5;
+                        font-size: 0.9em;
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 4px;
+                    }
+        
+                    .msg-tab.active {
+                        background: #fff;
+                        font-weight: bold;
+                        border-bottom: 1px solid #fff;
+                        margin-bottom: -1px;
+                    }
+        
+                    .msg-tab-close {
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        width: 16px;
+                        height: 16px;
+                        border: none;
+                        background: none;
+                        padding: 0;
+                        cursor: pointer;
+                        border-radius: 3px;
+                        color: #999;
+                        font-size: 14px;
+                        line-height: 1;
+                        opacity: 0;
+                        transition: opacity 0.15s;
+                    }
+        
+                    .msg-tab:hover .msg-tab-close {
+                        opacity: 1;
+                    }
+        
+                    .msg-tab-close:hover {
+                        background: #ddd;
+                        color: #c00;
+                    }
+        
+                    .msg-tab-add {
+                        padding: 4px 10px;
+                        cursor: pointer;
+                        background: none;
+                        border: 1px dashed #aaa;
+                        border-radius: 4px;
+                        font-size: 0.9em;
+                        color: #666;
+                    }
+        
+                    .msg-page-panel {
+                        border: 1px solid #ccc;
+                        border-radius: 0 4px 4px 4px;
+                        padding: 12px;
+                    }
+        
+                    .msg-page-panel[hidden] {
+                        display: none;
+                    }
+        
                     /* Toggle switch */
-                    .toggle-switch { position: relative; display: inline-block; width: 40px; height: 22px; vertical-align: middle; }
-                    .toggle-switch input { opacity: 0; width: 0; height: 0; }
-                    .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; border-radius: 22px; transition: background-color 0.2s; }
-                    .toggle-slider:before { content: ""; position: absolute; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: #fff; border-radius: 50%; transition: transform 0.2s; }
-                    .toggle-switch input:checked + .toggle-slider { background-color: #4caf50; }
-                    .toggle-switch input:checked + .toggle-slider:before { transform: translateX(18px); }
+                    .toggle-switch {
+                        position: relative;
+                        display: inline-block;
+                        width: 40px;
+                        height: 22px;
+                        vertical-align: middle;
+                    }
+        
+                    .toggle-switch input {
+                        opacity: 0;
+                        width: 0;
+                        height: 0;
+                    }
+        
+                    .toggle-slider {
+                        position: absolute;
+                        cursor: pointer;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: #ccc;
+                        border-radius: 22px;
+                        transition: background-color 0.2s;
+                    }
+        
+                    .toggle-slider:before {
+                        content: "";
+                        position: absolute;
+                        height: 16px;
+                        width: 16px;
+                        left: 3px;
+                        bottom: 3px;
+                        background-color: #fff;
+                        border-radius: 50%;
+                        transition: transform 0.2s;
+                    }
+        
+                    .toggle-switch input:checked+.toggle-slider {
+                        background-color: #4caf50;
+                    }
+        
+                    .toggle-switch input:checked+.toggle-slider:before {
+                        transform: translateX(18px);
+                    }
+        
                     /* Justify button group */
-                    .justify-btn-group { display: inline-flex; gap: 0; border: 1px solid #ccc; border-radius: 4px; overflow: hidden; vertical-align: middle; }
-                    .justify-btn { padding: 4px 8px; cursor: pointer; background: #f5f5f5; border: none; border-right: 1px solid #ccc; line-height: 1; font-size: 16px; color: #555; transition: background 0.15s, color 0.15s; }
-                    .justify-btn:last-child { border-right: none; }
-                    .justify-btn:hover { background: #e0e0e0; }
-                    .justify-btn.active { background: #337ab7; color: #fff; }
-                    .justify-btn svg { display: block; width: 16px; height: 16px; fill: currentColor; }
+                    .justify-btn-group {
+                        display: inline-flex;
+                        gap: 0;
+                        border: 1px solid #ccc;
+                        border-radius: 4px;
+                        overflow: hidden;
+                        vertical-align: middle;
+                    }
+        
+                    .justify-btn {
+                        padding: 4px 8px;
+                        cursor: pointer;
+                        background: #f5f5f5;
+                        border: none;
+                        border-right: 1px solid #ccc;
+                        line-height: 1;
+                        font-size: 16px;
+                        color: #555;
+                        transition: background 0.15s, color 0.15s;
+                    }
+        
+                    .justify-btn:last-child {
+                        border-right: none;
+                    }
+        
+                    .justify-btn:hover {
+                        background: #e0e0e0;
+                    }
+        
+                    .justify-btn.active {
+                        background: #337ab7;
+                        color: #fff;
+                    }
+        
+                    .justify-btn svg {
+                        display: block;
+                        width: 16px;
+                        height: 16px;
+                        fill: currentColor;
+                    }
+        
                     /* Toolbar above textarea */
-                    .msg-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
-                    .msg-toolbar-left { display: flex; align-items: center; gap: 10px; }
-                    .msg-toolbar-right { display: flex; align-items: center; gap: 6px; }
+                    .msg-toolbar {
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        margin-bottom: 4px;
+                    }
+        
+                    .msg-toolbar-left {
+                        display: flex;
+                        align-items: center;
+                        gap: 10px;
+                    }
+        
+                    .msg-toolbar-right {
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                    }
                 </style>
-                <details {% if message_overlay_enabled %}open{% endif %} class="bm-details" style="margin-bottom:15px;">
-                    <summary style="cursor:pointer;font-weight:bold;list-style:none;">
-                        <span class="bm-chevron" aria-hidden="true">&#9656;</span>
-                        Message Overlay
-                    </summary>
-                    <form id="message_pages_form" action="/settings" method="POST" style="margin-top:10px;">
+                    <form id="message_pages_form" action="/settings" method="POST">
                         <input type="hidden" name="message_pages_form" value="1">
                         <input type="hidden" name="page_count" id="page_count" value="{{ message_pages | length }}">
                         <div class="form-group" style="margin-bottom:10px;display:flex;align-items:center;gap:8px;">
                             <label class="toggle-switch" title="Enable message overlay">
-                                <input type="checkbox" name="message_overlay_enabled" {% if message_overlay_enabled %}checked{% endif %}>
+                                <input type="checkbox" name="message_overlay_enabled" {% if message_overlay_enabled %}checked{%
+                                    endif %}>
                                 <span class="toggle-slider"></span>
                             </label>
                             <span style="font-weight:500;">Enable overlay</span>
@@ -141,40 +401,74 @@
                             <label>Rotation interval:</label>
                             <select name="message_rotation_interval">
                                 {% for sec in [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60] %}
-                                <option value="{{ sec }}" {% if message_rotation_interval == sec %}selected{% endif %}>{{ sec }}s</option>
+                                <option value="{{ sec }}" {% if message_rotation_interval==sec %}selected{% endif %}>{{ sec }}s
+                                </option>
                                 {% endfor %}
                             </select>
                         </div>
                         <div class="msg-tab-bar" id="msg_tab_bar">
                             {% for page in message_pages %}
-                            <span class="msg-tab{% if loop.first %} active{% endif %}" data-idx="{{ loop.index0 }}" onclick="msgSelectTab({{ loop.index0 }})"><span class="msg-tab-label">Page {{ loop.index }}</span>{% if message_pages | length > 1 %}<button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage({{ loop.index0 }})" title="Remove page">&times;</button>{% endif %}</span>
+                            <span class="msg-tab{% if loop.first %} active{% endif %}" data-idx="{{ loop.index0 }}"
+                                onclick="msgSelectTab({{ loop.index0 }})"><span class="msg-tab-label">Page {{ loop.index
+                                    }}</span>{% if message_pages | length > 1 %}<button type="button" class="msg-tab-close"
+                                    onclick="event.stopPropagation();msgRemovePage({{ loop.index0 }})"
+                                    title="Remove page">&times;</button>{% endif %}</span>
                             {% endfor %}
-                            <button type="button" class="msg-tab-add" id="msg_add_page" onclick="msgAddPage()" {% if message_pages | length >= 5 %}disabled{% endif %}>+ Add</button>
+                            <button type="button" class="msg-tab-add" id="msg_add_page" onclick="msgAddPage()" {% if
+                                message_pages | length>= 5 %}disabled{% endif %}>+ Add</button>
                         </div>
                         <div id="msg_panels_container">
                             {% for page in message_pages %}
-                            <div class="msg-page-panel" id="msg_panel_{{ loop.index0 }}" {% if not loop.first %}hidden{% endif %}>
+                            <div class="msg-page-panel" id="msg_panel_{{ loop.index0 }}" {% if not loop.first %}hidden{% endif
+                                %}>
                                 <div class="form-group">
                                     <div class="msg-toolbar">
                                         <div class="msg-toolbar-left">
-                                            <label style="margin:0;font-size:0.85em;color:#666;">Message (max 10 lines &times; 60 visible chars)</label>
+                                            <label style="margin:0;font-size:0.85em;color:#666;">Message (max 10 lines &times;
+                                                60 visible chars)</label>
                                             <div class="justify-btn-group" data-idx="{{ loop.index0 }}">
-                                                <button type="button" class="justify-btn{% if page.align=='left' %} active{% endif %}" data-align="left" title="Align left" onclick="msgSetAlign({{ loop.index0 }},'left',this);">
-                                                    <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="1" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="1" y="14" width="8" height="2"/></svg>
+                                                <button type="button"
+                                                    class="justify-btn{% if page.align=='left' %} active{% endif %}"
+                                                    data-align="left" title="Align left"
+                                                    onclick="msgSetAlign({{ loop.index0 }},'left',this);">
+                                                    <svg viewBox="0 0 16 16">
+                                                        <rect x="1" y="2" width="14" height="2" />
+                                                        <rect x="1" y="6" width="10" height="2" />
+                                                        <rect x="1" y="10" width="14" height="2" />
+                                                        <rect x="1" y="14" width="8" height="2" />
+                                                    </svg>
                                                 </button>
-                                                <button type="button" class="justify-btn{% if page.align=='center' %} active{% endif %}" data-align="center" title="Center" onclick="msgSetAlign({{ loop.index0 }},'center',this);">
-                                                    <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="3" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="4" y="14" width="8" height="2"/></svg>
+                                                <button type="button"
+                                                    class="justify-btn{% if page.align=='center' %} active{% endif %}"
+                                                    data-align="center" title="Center"
+                                                    onclick="msgSetAlign({{ loop.index0 }},'center',this);">
+                                                    <svg viewBox="0 0 16 16">
+                                                        <rect x="1" y="2" width="14" height="2" />
+                                                        <rect x="3" y="6" width="10" height="2" />
+                                                        <rect x="1" y="10" width="14" height="2" />
+                                                        <rect x="4" y="14" width="8" height="2" />
+                                                    </svg>
                                                 </button>
-                                                <button type="button" class="justify-btn{% if page.align=='right' %} active{% endif %}" data-align="right" title="Align right" onclick="msgSetAlign({{ loop.index0 }},'right',this);">
-                                                    <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="5" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="7" y="14" width="8" height="2"/></svg>
+                                                <button type="button"
+                                                    class="justify-btn{% if page.align=='right' %} active{% endif %}"
+                                                    data-align="right" title="Align right"
+                                                    onclick="msgSetAlign({{ loop.index0 }},'right',this);">
+                                                    <svg viewBox="0 0 16 16">
+                                                        <rect x="1" y="2" width="14" height="2" />
+                                                        <rect x="5" y="6" width="10" height="2" />
+                                                        <rect x="1" y="10" width="14" height="2" />
+                                                        <rect x="7" y="14" width="8" height="2" />
+                                                    </svg>
                                                 </button>
                                             </div>
-                                            <input type="hidden" name="page_align_{{ loop.index0 }}" id="page_align_{{ loop.index0 }}" value="{{ page.align }}">
+                                            <input type="hidden" name="page_align_{{ loop.index0 }}"
+                                                id="page_align_{{ loop.index0 }}" value="{{ page.align }}">
                                         </div>
                                         <div class="msg-toolbar-right">
                                             <span style="font-size:0.85em;color:#666;">Enabled</span>
                                             <label class="toggle-switch" title="Enable this page">
-                                                <input type="checkbox" name="page_enabled_{{ loop.index0 }}" {% if page.enabled %}checked{% endif %}>
+                                                <input type="checkbox" name="page_enabled_{{ loop.index0 }}" {% if page.enabled
+                                                    %}checked{% endif %}>
                                                 <span class="toggle-slider"></span>
                                             </label>
                                         </div>
@@ -185,10 +479,18 @@
                                         oninput="msgOnInput(this);">{{ page.text }}</textarea>
                                     <small class="bm-md-legend">
                                         Markdown:
-                                        <code>#</code><h1 style="display:inline;font-size:1em;margin:0;">Header1</h1><span class="sep">·</span>
-                                        <code>##</code><h2 style="display:inline;font-size:1em;margin:0;">Header2</h2><span class="sep">·</span>
-                                        <code>###</code><h3 style="display:inline;font-size:1em;margin:0;">Header3</h3><span class="sep">·</span>
-                                        <code>####</code><h4 style="display:inline;font-size:1em;margin:0;">Header4</h4><span class="sep">·</span>
+                                        <code>#</code>
+                                        <h1 style="display:inline;font-size:1em;margin:0;">Header1</h1><span
+                                            class="sep">·</span>
+                                        <code>##</code>
+                                        <h2 style="display:inline;font-size:1em;margin:0;">Header2</h2><span
+                                            class="sep">·</span>
+                                        <code>###</code>
+                                        <h3 style="display:inline;font-size:1em;margin:0;">Header3</h3><span
+                                            class="sep">·</span>
+                                        <code>####</code>
+                                        <h4 style="display:inline;font-size:1em;margin:0;">Header4</h4><span
+                                            class="sep">·</span>
                                         <code>**</code><strong>Bold</strong><code>**</code><span class="sep">·</span>
                                         <code>*</code><em>Italic</em><code>*</code><span class="sep">·</span>
                                         <code>_</code><u>Underline</u><code>_</code><span class="sep">·</span>
@@ -198,7 +500,7 @@
                                         <code>-</code> Bulleted
                                     </small>
                                 </div>
-
+        
                             </div>
                             {% endfor %}
                         </div>
@@ -206,329 +508,198 @@
                             <button class="btn btn-default" type="submit">Update</button>
                         </div>
                     </form>
-                </details>
                 <script>
-                    (function(){
-                        var pageCount = {{ message_pages | length }};
-                        var activeTab = 0;
+                    (function () {
+                        var pageCount = {{ message_pages | length
+                    }};
+                    var activeTab = 0;
 
-                        function visibleLen(line){
-                            var s = line
-                                .replace(/^\s*#{1,4}\s+/, '')
-                                .replace(/^\s*(\d+\.|[-\*])\s+/, '')
-                                .replace(/`([^`\n]+)`/g, '$1')
-                                .replace(/\*\*([^\*\n]+)\*\*/g, '$1')
-                                .replace(/~~([^~\n]+)~~/g, '$1')
-                                .replace(/(^|[^\*])\*([^\*\n]+)\*(?!\*)/g, '$1$2')
-                                .replace(/(^|[^_])_([^_\n]+)_(?!_)/g, '$1$2');
-                            return s.length;
+                    function visibleLen(line) {
+                        var s = line
+                            .replace(/^\s*#{1,4}\s+/, '')
+                            .replace(/^\s*(\d+\.|[-\*])\s+/, '')
+                            .replace(/`([^`\n]+)`/g, '$1')
+                            .replace(/\*\*([^\*\n]+)\*\*/g, '$1')
+                            .replace(/~~([^~\n]+)~~/g, '$1')
+                            .replace(/(^|[^\*])\*([^\*\n]+)\*(?!\*)/g, '$1$2')
+                            .replace(/(^|[^_])_([^_\n]+)_(?!_)/g, '$1$2');
+                        return s.length;
+                    }
+                    function enforce(ta) {
+                        var lines = ta.value.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+                        var changed = false;
+                        if (lines.length > 10) { lines = lines.slice(0, 10); changed = true; }
+                        for (var i = 0; i < lines.length; i++) {
+                            while (visibleLen(lines[i]) > 60) {
+                                lines[i] = lines[i].slice(0, -1);
+                                changed = true;
+                            }
                         }
-                        function enforce(ta){
-                            var lines = ta.value.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
-                            var changed = false;
-                            if (lines.length > 10) { lines = lines.slice(0,10); changed = true; }
-                            for (var i=0;i<lines.length;i++){
-                                while (visibleLen(lines[i]) > 60){
-                                    lines[i] = lines[i].slice(0, -1);
-                                    changed = true;
-                                }
-                            }
-                            if (changed) ta.value = lines.join('\n');
+                        if (changed) ta.value = lines.join('\n');
+                    }
+                    window.msgOnInput = function (ta) { enforce(ta); };
+                    window.msgSetAlign = function (idx, val, btn) {
+                        // Update hidden input
+                        var hidden = document.getElementById('page_align_' + idx);
+                        if (hidden) hidden.value = val;
+                        // Update textarea
+                        var ta = document.querySelector('#msg_panel_' + idx + ' textarea');
+                        if (ta) ta.style.textAlign = val;
+                        // Toggle active class on button group
+                        var group = btn.parentElement;
+                        group.querySelectorAll('.justify-btn').forEach(function (b) { b.classList.remove('active'); });
+                        btn.classList.add('active');
+                    };
+                    window.msgSelectTab = function (idx) {
+                        activeTab = idx;
+                        var tabs = document.querySelectorAll('.msg-tab');
+                        for (var i = 0; i < tabs.length; i++) {
+                            tabs[i].classList.toggle('active', parseInt(tabs[i].getAttribute('data-idx')) === idx);
                         }
-                        window.msgOnInput = function(ta){ enforce(ta); };
-                        window.msgSetAlign = function(idx, val, btn){
-                            // Update hidden input
-                            var hidden = document.getElementById('page_align_'+idx);
-                            if (hidden) hidden.value = val;
-                            // Update textarea
-                            var ta = document.querySelector('#msg_panel_'+idx+' textarea');
-                            if (ta) ta.style.textAlign = val;
-                            // Toggle active class on button group
-                            var group = btn.parentElement;
-                            group.querySelectorAll('.justify-btn').forEach(function(b){ b.classList.remove('active'); });
-                            btn.classList.add('active');
-                        };
-                        window.msgSelectTab = function(idx){
-                            activeTab = idx;
-                            var tabs = document.querySelectorAll('.msg-tab');
-                            for (var i=0; i<tabs.length; i++){
-                                tabs[i].classList.toggle('active', parseInt(tabs[i].getAttribute('data-idx'))===idx);
-                            }
-                            for (var i=0; i<pageCount; i++){
-                                var panel = document.getElementById('msg_panel_'+i);
-                                if (panel) panel.hidden = (i!==idx);
-                            }
-                        };
-                        window.msgAddPage = function(){
-                            if (pageCount >= 5) return;
-                            var idx = pageCount;
-                            pageCount++;
-                            document.getElementById('page_count').value = pageCount;
-                            // Add tab
-                            var tabBar = document.getElementById('msg_tab_bar');
-                            var addBtn = document.getElementById('msg_add_page');
-                            var tab = document.createElement('span');
-                            tab.className = 'msg-tab';
-                            tab.setAttribute('data-idx', idx);
-                            tab.innerHTML = '<span class="msg-tab-label">Page '+(idx+1)+'</span><button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage('+idx+')" title="Remove page">&times;</button>';
-                            tab.onclick = function(){ msgSelectTab(idx); };
-                            // Show close buttons on all tabs now that there are multiple
-                            document.querySelectorAll('.msg-tab').forEach(function(t){ if (!t.querySelector('.msg-tab-close')){ t.innerHTML = '<span class="msg-tab-label">'+t.textContent+'</span><button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage('+t.getAttribute('data-idx')+')" title="Remove page">&times;</button>'; } });
-                            tabBar.insertBefore(tab, addBtn);
-                            if (pageCount >= 5) addBtn.disabled = true;
-                            // Add panel
-                            var container = document.getElementById('msg_panels_container');
-                            var panel = document.createElement('div');
-                            panel.className = 'msg-page-panel';
-                            panel.id = 'msg_panel_'+idx;
-                            panel.hidden = true;
-                            panel.innerHTML =
-                                '<div class="form-group">'+
-                                '<div class="msg-toolbar">'+
-                                '<div class="msg-toolbar-left">'+
-                                '<label style="margin:0;font-size:0.85em;color:#666;">Message (max 10 lines × 60 visible chars)</label>'+
-                                '<div class="justify-btn-group" data-idx="'+idx+'">'+
-                                '<button type="button" class="justify-btn active" data-align="left" title="Align left" onclick="msgSetAlign('+idx+',\'left\',this);">'+
-                                '<svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="1" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="1" y="14" width="8" height="2"/></svg></button>'+
-                                '<button type="button" class="justify-btn" data-align="center" title="Center" onclick="msgSetAlign('+idx+',\'center\',this);">'+
-                                '<svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="3" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="4" y="14" width="8" height="2"/></svg></button>'+
-                                '<button type="button" class="justify-btn" data-align="right" title="Align right" onclick="msgSetAlign('+idx+',\'right\',this);">'+
-                                '<svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="5" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="7" y="14" width="8" height="2"/></svg></button>'+
-                                '</div>'+
-                                '<input type="hidden" name="page_align_'+idx+'" id="page_align_'+idx+'" value="left">'+
-                                '</div>'+
-                                '<div class="msg-toolbar-right">'+
-                                '<span style="font-size:0.85em;color:#666;">Enabled</span>'+
-                                '<label class="toggle-switch" title="Enable this page"><input type="checkbox" name="page_enabled_'+idx+'"><span class="toggle-slider"></span></label>'+
-                                '</div>'+
-                                '</div>'+
-                                '<textarea name="page_text_'+idx+'" rows="10" cols="60" maxlength="2000" class="form-control msg-textarea" data-idx="'+idx+'" style="font-family:\'Overpass Mono\',monospace;white-space:pre;overflow:auto;" oninput="msgOnInput(this);"></textarea>'+
-                                '</div>'+
-                                '';
-                            container.appendChild(panel);
-                            msgSelectTab(idx);
-                        };
-                        window.msgRemovePage = function(idx){
-                            if (pageCount <= 1) return;
-                            // Show confirmation overlay
-                            var ov = document.getElementById('msg-remove-overlay');
-                            document.getElementById('msg-remove-label').textContent = 'Remove Page '+(idx+1)+'?';
-                            ov.style.display = 'flex';
-                            var okBtn = document.getElementById('msg-remove-ok');
-                            var cancelBtn = document.getElementById('msg-remove-cancel');
-                            // Clone to remove old listeners
-                            var newOk = okBtn.cloneNode(true);
-                            okBtn.parentNode.replaceChild(newOk, okBtn);
-                            var newCancel = cancelBtn.cloneNode(true);
-                            cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
-                            newCancel.onclick = function(){ ov.style.display='none'; };
-                            newOk.onclick = function(){
-                                ov.style.display='none';
-                                doRemovePage(idx);
-                            };
-                        };
-                        function doRemovePage(idx){
-                            // Remove tab and panel
-                            var tab = document.querySelector('.msg-tab[data-idx="'+idx+'"]');
-                            if (tab) tab.remove();
-                            var panel = document.getElementById('msg_panel_'+idx);
-                            if (panel) panel.remove();
-                            pageCount--;
-                            document.getElementById('page_count').value = pageCount;
-                            // Re-index remaining tabs and panels
-                            var tabs = document.querySelectorAll('.msg-tab');
-                            var panels = document.querySelectorAll('.msg-page-panel');
-                            for (var i=0; i<tabs.length; i++){
-                                tabs[i].setAttribute('data-idx', i);
-                                var closeHtml = pageCount > 1 ? '<button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage('+i+')" title="Remove page">&times;</button>' : '';
-                                tabs[i].innerHTML = '<span class="msg-tab-label">Page '+(i+1)+'</span>' + closeHtml;
-                                tabs[i].onclick = (function(n){ return function(){ msgSelectTab(n); }; })(i);
-                            }
-                            for (var i=0; i<panels.length; i++){
-                                panels[i].id = 'msg_panel_'+i;
-                                // Rename form fields
-                                var ta = panels[i].querySelector('textarea');
-                                if (ta) { ta.name = 'page_text_'+i; ta.setAttribute('data-idx', i); ta.setAttribute('oninput', 'msgOnInput(this)'); }
-                                var hidden = panels[i].querySelector('input[type=hidden][name^=page_align_]');
-                                if (hidden) { hidden.name = 'page_align_'+i; hidden.id = 'page_align_'+i; }
-                                var justifyGroup = panels[i].querySelector('.justify-btn-group');
-                                if (justifyGroup) {
-                                    justifyGroup.setAttribute('data-idx', i);
-                                    justifyGroup.querySelectorAll('.justify-btn').forEach(function(b){
-                                        var al = b.getAttribute('data-align');
-                                        b.setAttribute('onclick', 'msgSetAlign('+i+',\''+al+'\',this)');
-                                    });
-                                }
-                                var cb = panels[i].querySelector('.toggle-switch input[type=checkbox]');
-                                if (cb) cb.name = 'page_enabled_'+i;
-                            }
-                            document.getElementById('msg_add_page').disabled = (pageCount >= 5);
-                            msgSelectTab(Math.min(idx, pageCount-1));
+                        for (var i = 0; i < pageCount; i++) {
+                            var panel = document.getElementById('msg_panel_' + i);
+                            if (panel) panel.hidden = (i !== idx);
                         }
-                    })();
+                    };
+                    window.msgAddPage = function () {
+                        if (pageCount >= 5) return;
+                        var idx = pageCount;
+                        pageCount++;
+                        document.getElementById('page_count').value = pageCount;
+                        // Add tab
+                        var tabBar = document.getElementById('msg_tab_bar');
+                        var addBtn = document.getElementById('msg_add_page');
+                        var tab = document.createElement('span');
+                        tab.className = 'msg-tab';
+                        tab.setAttribute('data-idx', idx);
+                        tab.innerHTML = '<span class="msg-tab-label">Page ' + (idx + 1) + '</span><button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage(' + idx + ')" title="Remove page">&times;</button>';
+                        tab.onclick = function () { msgSelectTab(idx); };
+                        // Show close buttons on all tabs now that there are multiple
+                        document.querySelectorAll('.msg-tab').forEach(function (t) { if (!t.querySelector('.msg-tab-close')) { t.innerHTML = '<span class="msg-tab-label">' + t.textContent + '</span><button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage(' + t.getAttribute('data-idx') + ')" title="Remove page">&times;</button>'; } });
+                        tabBar.insertBefore(tab, addBtn);
+                        if (pageCount >= 5) addBtn.disabled = true;
+                        // Add panel
+                        var container = document.getElementById('msg_panels_container');
+                        var panel = document.createElement('div');
+                        panel.className = 'msg-page-panel';
+                        panel.id = 'msg_panel_' + idx;
+                        panel.hidden = true;
+                        panel.innerHTML =
+                            '<div class="form-group">' +
+                            '<div class="msg-toolbar">' +
+                            '<div class="msg-toolbar-left">' +
+                            '<label style="margin:0;font-size:0.85em;color:#666;">Message (max 10 lines × 60 visible chars)</label>' +
+                            '<div class="justify-btn-group" data-idx="' + idx + '">' +
+                            '<button type="button" class="justify-btn active" data-align="left" title="Align left" onclick="msgSetAlign(' + idx + ',\'left\',this);">' +
+                            '<svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="1" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="1" y="14" width="8" height="2"/></svg></button>' +
+                            '<button type="button" class="justify-btn" data-align="center" title="Center" onclick="msgSetAlign(' + idx + ',\'center\',this);">' +
+                            '<svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="3" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="4" y="14" width="8" height="2"/></svg></button>' +
+                            '<button type="button" class="justify-btn" data-align="right" title="Align right" onclick="msgSetAlign(' + idx + ',\'right\',this);">' +
+                            '<svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="5" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="7" y="14" width="8" height="2"/></svg></button>' +
+                            '</div>' +
+                            '<input type="hidden" name="page_align_' + idx + '" id="page_align_' + idx + '" value="left">' +
+                            '</div>' +
+                            '<div class="msg-toolbar-right">' +
+                            '<span style="font-size:0.85em;color:#666;">Enabled</span>' +
+                            '<label class="toggle-switch" title="Enable this page"><input type="checkbox" name="page_enabled_' + idx + '"><span class="toggle-slider"></span></label>' +
+                            '</div>' +
+                            '</div>' +
+                            '<textarea name="page_text_' + idx + '" rows="10" cols="60" maxlength="2000" class="form-control msg-textarea" data-idx="' + idx + '" style="font-family:\'Overpass Mono\',monospace;white-space:pre;overflow:auto;" oninput="msgOnInput(this);"></textarea>' +
+                            '</div>' +
+                            '';
+                        container.appendChild(panel);
+                        msgSelectTab(idx);
+                    };
+                    window.msgRemovePage = function (idx) {
+                        if (pageCount <= 1) return;
+                        // Show confirmation overlay
+                        var ov = document.getElementById('msg-remove-overlay');
+                        document.getElementById('msg-remove-label').textContent = 'Remove Page ' + (idx + 1) + '?';
+                        ov.style.display = 'flex';
+                        var okBtn = document.getElementById('msg-remove-ok');
+                        var cancelBtn = document.getElementById('msg-remove-cancel');
+                        // Clone to remove old listeners
+                        var newOk = okBtn.cloneNode(true);
+                        okBtn.parentNode.replaceChild(newOk, okBtn);
+                        var newCancel = cancelBtn.cloneNode(true);
+                        cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+                        newCancel.onclick = function () { ov.style.display = 'none'; };
+                        newOk.onclick = function () {
+                            ov.style.display = 'none';
+                            doRemovePage(idx);
+                        };
+                    };
+                    function doRemovePage(idx) {
+                        // Remove tab and panel
+                        var tab = document.querySelector('.msg-tab[data-idx="' + idx + '"]');
+                        if (tab) tab.remove();
+                        var panel = document.getElementById('msg_panel_' + idx);
+                        if (panel) panel.remove();
+                        pageCount--;
+                        document.getElementById('page_count').value = pageCount;
+                        // Re-index remaining tabs and panels
+                        var tabs = document.querySelectorAll('.msg-tab');
+                        var panels = document.querySelectorAll('.msg-page-panel');
+                        for (var i = 0; i < tabs.length; i++) {
+                            tabs[i].setAttribute('data-idx', i);
+                            var closeHtml = pageCount > 1 ? '<button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage(' + i + ')" title="Remove page">&times;</button>' : '';
+                            tabs[i].innerHTML = '<span class="msg-tab-label">Page ' + (i + 1) + '</span>' + closeHtml;
+                            tabs[i].onclick = (function (n) { return function () { msgSelectTab(n); }; })(i);
+                        }
+                        for (var i = 0; i < panels.length; i++) {
+                            panels[i].id = 'msg_panel_' + i;
+                            // Rename form fields
+                            var ta = panels[i].querySelector('textarea');
+                            if (ta) { ta.name = 'page_text_' + i; ta.setAttribute('data-idx', i); ta.setAttribute('oninput', 'msgOnInput(this)'); }
+                            var hidden = panels[i].querySelector('input[type=hidden][name^=page_align_]');
+                            if (hidden) { hidden.name = 'page_align_' + i; hidden.id = 'page_align_' + i; }
+                            var justifyGroup = panels[i].querySelector('.justify-btn-group');
+                            if (justifyGroup) {
+                                justifyGroup.setAttribute('data-idx', i);
+                                justifyGroup.querySelectorAll('.justify-btn').forEach(function (b) {
+                                    var al = b.getAttribute('data-align');
+                                    b.setAttribute('onclick', 'msgSetAlign(' + i + ',\'' + al + '\',this)');
+                                });
+                            }
+                            var cb = panels[i].querySelector('.toggle-switch input[type=checkbox]');
+                            if (cb) cb.name = 'page_enabled_' + i;
+                        }
+                        document.getElementById('msg_add_page').disabled = (pageCount >= 5);
+                        msgSelectTab(Math.min(idx, pageCount - 1));
+                    }
+                            }) ();
                 </script>
             </div>
         </div>
 
-        <div class="row">
-            <div class="col-lg-6">
-                <form action="/settings" method="POST">
-                    <div class="input-group">
-                        <label for="num_lanes">Number of Lanes</label>
-                        <div class="input-group">
-                            <select id="num_lanes" name="num_lanes" class="form-control"
-                                oninput="document.getElementById('num_lanes_submit').disabled=false;">
-                                {% for n in range(4, 11) %}
-                                {% if n == num_lanes %}
-                                <option value="{{n}}" selected>{{n}}</option>
-                                {% else %}
-                                <option value="{{n}}">{{n}}</option>
-                                {% endif %}
-                                {% endfor %}
-                            </select>
-                            <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="num_lanes_submit" disabled>Update</button>
-                            </span>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-        
-        
-        <div class="row">
-            <div class="col-lg-6">
-                <form action="/settings" method="POST">
-                    <div class="input-group">
-                        <label for="pool_course">Pool Course</label>
-                        <div class="input-group">
-                            <select id="pool_course" name="pool_course" class="form-control"
-                                oninput="document.getElementById('pool_course_submit').disabled=false;">
-                                {% for code, label in [('SCY', 'Short Course Yards (SCY)'), ('SCM', 'Short Course Meters
-                                (SCM)'), ('LCM', 'Long Course Meters (LCM)')] %}
-                                {% if code == pool_course %}
-                                <option value="{{code}}" selected>{{label}}</option>
-                                {% else %}
-                                <option value="{{code}}">{{label}}</option>
-                                {% endif %}
-                                {% endfor %}
-                            </select>
-                            <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="pool_course_submit" disabled>Update</button>
-                            </span>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-        <div class="row">
-            <div class="col-lg-6">
-                <form action="/settings" method="POST">
-                    <div class="input-group">
-                        <label for="seed_time_label">Seed Time Display</label>
-                        <div class="input-group">
-                            <select id="seed_time_label" name="seed_time_label" class="form-control"
-                                oninput="document.getElementById('seed_time_label_submit').disabled=false;">
-                                {% for code, label in [('Seed Time', 'Show as "Seed Time"'), ('Entry Time', 'Show as "Entry Time"'), ('None', 'Do not show seed times')] %}
-                                {% if code == seed_time_label %}
-                                <option value="{{code}}" selected>{{label}}</option>
-                                {% else %}
-                                <option value="{{code}}">{{label}}</option>
-                                {% endif %}
-                                {% endfor %}
-                            </select>
-                            <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="seed_time_label_submit" disabled>Update</button>
-                            </span>
-                        </div>
-                    </div>
-                </form>
-            </div>
-        </div>
-        <div class="row">
-            <div class="col-lg-6">
-                <form action="/settings" method="POST">
-                    <input type="hidden" name="show_pr_tags_form" value="1">
-                    <div class="input-group">
-                        <label>
-                            <input type="checkbox" name="show_pr_tags" value="1" {% if show_pr_tags %}checked{% endif %}
-                                onchange="document.getElementById('show_pr_tags_submit').disabled=false;">
-                            Show PR (Personal Record) tags
-                        </label>
-                        <span class="input-group-btn">
-                            <button class="btn btn-default" type="submit" id="show_pr_tags_submit" disabled>Update</button>
-                        </span>
-                    </div>
-                </form>
-            </div>
-        </div>
-        <div class="row">
-            <div class="col-lg-6">
-                <form action="/settings" method="POST">
-                    <input type="hidden" name="show_confetti_form" value="1">
-                    <div class="input-group">
-                        <label>
-                            <input type="checkbox" name="show_confetti" value="1" {% if show_confetti %}checked{% endif %}
-                                onchange="document.getElementById('show_confetti_submit').disabled=false;">
-                            Show confetti for time qualifications
-                        </label>
-                        <span class="input-group-btn">
-                            <button class="btn btn-default" type="submit" id="show_confetti_submit" disabled>Update</button>
-                        </span>
-                    </div>
-                </form>
-            </div>
-        </div>
-        <div class="row">
-            <div class="col-lg-6">
-                <form action="/settings" method="POST">
-                    <input type="hidden" name="show_time_decorations_form" value="1">
-                    <div class="input-group">
-                        <label>
-                            <input type="checkbox" name="show_time_decorations" value="1" {% if show_time_decorations %}checked{% endif %}
-                                onchange="document.getElementById('show_time_decorations_submit').disabled=false;">
-                            Show time decorations (underline/wavy for PR, standards, records)
-                        </label>
-                        <span class="input-group-btn">
-                            <button class="btn btn-default" type="submit" id="show_time_decorations_submit" disabled>Update</button>
-                        </span>
-                    </div>
-                </form>
-            </div>
-        </div>
         
         <h3>Team Names</h3>
         <div>Clear team names to prevent showing scores for that team.</div>
-        {% for team_key, team_label, team_val, tag_key, tag_val in [
-        ('team_home', 'Home', team_home, 'team_home_tag', team_home_tag),
-        ('team_guest1', 'Guest 1', team_guest1, 'team_guest1_tag', team_guest1_tag),
-        ('team_guest2', 'Guest 2', team_guest2, 'team_guest2_tag', team_guest2_tag),
-        ('team_guest3', 'Guest 3', team_guest3, 'team_guest3_tag', team_guest3_tag)
-        ] %}
         <div class="row">
             <div class="col-lg-8">
                 <form action="/settings" method="POST">
-                    <div class="input-group">
-                        <label for="{{ team_key }}" style="display: inline-block; width: 7ch;">{{ team_label }}</label>
-                        <div class="input-group" style="display: inline-flex; width: auto;">
-                            <input id="{{ team_key }}" name="{{ team_key }}" value="{{ team_val }}" class="form-control"
-                                maxlength="15" aria-label="Team name" placeholder="Team name" style="width: 20ch;"
-                                oninput="document.getElementById('{{ team_key }}_submit').disabled=false;"></input>
-                            <input id="{{ tag_key }}" name="{{ tag_key }}" value="{{ tag_val }}" class="form-control"
-                                maxlength="5" aria-label="Tag" placeholder="TEAM" style="width: 8ch; margin-left: 1ch;"
-                                oninput="document.getElementById('{{ team_key }}_submit').disabled=false;"></input>
-                            <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="{{ team_key }}_submit"
-                                    disabled>Update</button>
-                                <button class="btn btn-default" type="button"
-                                    onclick="document.getElementById('{{ team_key }}').value=''; document.getElementById('{{ tag_key }}').value=''; document.getElementById('{{ team_key }}_submit').disabled=false;">Clear</button>
-                            </span>
-                        </div>
+                    {% for team_key, team_label, team_val, tag_key, tag_val in [
+                    ('team_home', 'Home', team_home, 'team_home_tag', team_home_tag),
+                    ('team_guest1', 'Guest 1', team_guest1, 'team_guest1_tag', team_guest1_tag),
+                    ('team_guest2', 'Guest 2', team_guest2, 'team_guest2_tag', team_guest2_tag),
+                    ('team_guest3', 'Guest 3', team_guest3, 'team_guest3_tag', team_guest3_tag)
+                    ] %}
+                    <div class="form-group" style="margin-bottom:8px;display:flex;align-items:center;gap:6px;">
+                        <label for="{{ team_key }}" style="margin:0;min-width:7ch;">{{ team_label }}</label>
+                        <input id="{{ team_key }}" name="{{ team_key }}" value="{{ team_val }}" class="form-control"
+                            maxlength="15" aria-label="Team name" placeholder="Team name" style="width:20ch;">
+                        <input id="{{ tag_key }}" name="{{ tag_key }}" value="{{ tag_val }}" class="form-control"
+                            maxlength="5" aria-label="Tag" placeholder="TEAM" style="width:8ch;">
+                        <button class="team-clear-btn" type="button" title="Clear"
+                            onclick="document.getElementById('{{ team_key }}').value=''; document.getElementById('{{ tag_key }}').value='';">&times;</button>
+                    </div>
+                    {% endfor %}
+                    <div class="form-group" style="margin-top:10px;">
+                        <button class="btn btn-default" type="submit">Update</button>
                     </div>
                 </form>
             </div>
         </div>
-        {% endfor %}
 
         <h3>Meet Manager (Hytek/Active) Data</h3>
         <div class="row">
