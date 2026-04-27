@@ -1,6 +1,7 @@
 import pytest
 
-from CTS_Scoreboard import hex_to_digit, _format_lane_time
+from CTS_Scoreboard import hex_to_digit
+from sim import _format_lane_time
 
 
 class TestHexToDigit:

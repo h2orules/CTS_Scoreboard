@@ -1,5 +1,7 @@
 *.pyc
 __pycache__/
+.pytest_cache/
 .venv/
 test_output.txt
+test_results.log
 node_modules/
