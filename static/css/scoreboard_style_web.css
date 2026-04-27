@@ -47,7 +47,7 @@ body {
     padding: 0 30px;
 }
 
-.qualifying_time_row td {
+table.scoreboard_table .qualifying_time_row td {
     font-family: 'Overpass Mono', monospace;
     color: #333333;
     font-size: 24px;
@@ -486,7 +486,7 @@ body.hide-time-decorations .qt-highlight {
     opacity: 0;
     transition: opacity 0.5s ease;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
     align-self: stretch;
     z-index: 2;
 }
@@ -498,7 +498,7 @@ body.hide-time-decorations .qt-highlight {
     flex: 0 0 auto;
     font-size: 100px;
     line-height: 1;
-    padding: 0 16px 0 0;
+    padding: 32px 0 0 0;
     box-sizing: border-box;
     display: flex;
     align-items: center;
@@ -506,7 +506,7 @@ body.hide-time-decorations .qt-highlight {
     overflow: hidden;
     max-height: 200px;
     opacity: 1;
-    transition: max-height 0.5s ease, opacity 0.5s ease, padding 0.5s ease;
+    transition: max-height 0.4s ease, opacity 0.4s ease, padding 0.4s ease;
 }
 
 .blank-message-body {
@@ -522,15 +522,25 @@ body.hide-time-decorations .qt-highlight {
     justify-content: center;
     white-space: normal;
     overflow: hidden;
+    transition: padding 0.4s ease;
 }
 
-#blank_message_text {
+.blank-message-text-stack {
+    display: grid;
+    width: 100%;
+}
+
+.blank-message-text-stack>* {
+    grid-area: 1 / 1;
+}
+
+.blank-message-text {
     display: inline-block;
     width: 100%;
     white-space: normal;
     font-size: 36px;
     line-height: 1.1;
-    transition: font-size 0.5s ease;
+    transition: font-size 0.5s ease, opacity 0.3s ease;
 }
 
 /* Collapsible spacer emitted for blank source lines. Adds a small gap that
@@ -976,7 +986,7 @@ table.scoreboard_table td[id^="lane_place"] {
         padding: 8px 16px;
     }
 
-    #blank_message_text {
+    .blank-message-text {
         font-size: min(24px, 3.5vw) !important;
     }
 

@@ -182,61 +182,6 @@ describe('getRecordsForLane', () => {
 });
 
 // ---------------------------------------------------------------------------
-// renderBlankMessageMarkdown
-// ---------------------------------------------------------------------------
-describe('renderBlankMessageMarkdown', () => {
-    it('returns empty string for null/undefined', () => {
-        expect(sb.renderBlankMessageMarkdown(null)).toBe('');
-        expect(sb.renderBlankMessageMarkdown(undefined)).toBe('');
-    });
-
-    it('renders headers', () => {
-        expect(sb.renderBlankMessageMarkdown('# Title')).toBe('<h1>Title</h1>');
-        expect(sb.renderBlankMessageMarkdown('## Sub')).toBe('<h2>Sub</h2>');
-        expect(sb.renderBlankMessageMarkdown('### H3')).toBe('<h3>H3</h3>');
-        expect(sb.renderBlankMessageMarkdown('#### H4')).toBe('<h4>H4</h4>');
-    });
-
-    it('renders bold and italic', () => {
-        expect(sb.renderBlankMessageMarkdown('**bold**')).toBe('<strong>bold</strong><br>');
-        expect(sb.renderBlankMessageMarkdown('*italic*')).toBe('<em>italic</em><br>');
-    });
-
-    it('renders strikethrough', () => {
-        expect(sb.renderBlankMessageMarkdown('~~strike~~')).toBe('<s>strike</s><br>');
-    });
-
-    it('renders underline extension', () => {
-        expect(sb.renderBlankMessageMarkdown('_underline_')).toBe('<u>underline</u><br>');
-    });
-
-    it('renders inline code', () => {
-        expect(sb.renderBlankMessageMarkdown('`code`')).toBe('<code>code</code><br>');
-    });
-
-    it('renders unordered lists', () => {
-        const result = sb.renderBlankMessageMarkdown('- item1\n- item2');
-        expect(result).toBe('<ul><li>item1</li><li>item2</li></ul>');
-    });
-
-    it('renders ordered lists', () => {
-        const result = sb.renderBlankMessageMarkdown('1. first\n2. second');
-        expect(result).toBe('<ol><li>first</li><li>second</li></ol>');
-    });
-
-    it('escapes HTML entities', () => {
-        const result = sb.renderBlankMessageMarkdown('<script>alert("xss")</script>');
-        expect(result).not.toContain('<script>');
-        expect(result).toContain('&lt;script&gt;');
-    });
-
-    it('renders blank lines as spacer divs', () => {
-        const result = sb.renderBlankMessageMarkdown('line1\n\nline2');
-        expect(result).toContain('<div class="md-blank"></div>');
-    });
-});
-
-// ---------------------------------------------------------------------------
 // evaluateLaneResult
 // ---------------------------------------------------------------------------
 describe('evaluateLaneResult', () => {

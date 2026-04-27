@@ -94,47 +94,113 @@
                     .bm-md-legend .sep { color: #bbb; margin: 0 4px; }
                     .bm-md-legend u { text-decoration: underline; }
                     .bm-md-legend s { text-decoration: line-through; }
+                    .msg-tab-bar { display: flex; gap: 4px; margin-bottom: 8px; align-items: center; }
+                    .msg-tab { padding: 4px 8px 4px 12px; border: 1px solid #ccc; border-bottom: none; border-radius: 4px 4px 0 0; cursor: pointer; background: #f5f5f5; font-size: 0.9em; display: inline-flex; align-items: center; gap: 4px; }
+                    .msg-tab.active { background: #fff; font-weight: bold; border-bottom: 1px solid #fff; margin-bottom: -1px; }
+                    .msg-tab-close { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border: none; background: none; padding: 0; cursor: pointer; border-radius: 3px; color: #999; font-size: 14px; line-height: 1; opacity: 0; transition: opacity 0.15s; }
+                    .msg-tab:hover .msg-tab-close { opacity: 1; }
+                    .msg-tab-close:hover { background: #ddd; color: #c00; }
+                    .msg-tab-add { padding: 4px 10px; cursor: pointer; background: none; border: 1px dashed #aaa; border-radius: 4px; font-size: 0.9em; color: #666; }
+                    .msg-page-panel { border: 1px solid #ccc; border-radius: 0 4px 4px 4px; padding: 12px; }
+                    .msg-page-panel[hidden] { display: none; }
+                    /* Toggle switch */
+                    .toggle-switch { position: relative; display: inline-block; width: 40px; height: 22px; vertical-align: middle; }
+                    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+                    .toggle-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; border-radius: 22px; transition: background-color 0.2s; }
+                    .toggle-slider:before { content: ""; position: absolute; height: 16px; width: 16px; left: 3px; bottom: 3px; background-color: #fff; border-radius: 50%; transition: transform 0.2s; }
+                    .toggle-switch input:checked + .toggle-slider { background-color: #4caf50; }
+                    .toggle-switch input:checked + .toggle-slider:before { transform: translateX(18px); }
+                    /* Justify button group */
+                    .justify-btn-group { display: inline-flex; gap: 0; border: 1px solid #ccc; border-radius: 4px; overflow: hidden; vertical-align: middle; }
+                    .justify-btn { padding: 4px 8px; cursor: pointer; background: #f5f5f5; border: none; border-right: 1px solid #ccc; line-height: 1; font-size: 16px; color: #555; transition: background 0.15s, color 0.15s; }
+                    .justify-btn:last-child { border-right: none; }
+                    .justify-btn:hover { background: #e0e0e0; }
+                    .justify-btn.active { background: #337ab7; color: #fff; }
+                    .justify-btn svg { display: block; width: 16px; height: 16px; fill: currentColor; }
+                    /* Toolbar above textarea */
+                    .msg-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+                    .msg-toolbar-left { display: flex; align-items: center; gap: 10px; }
+                    .msg-toolbar-right { display: flex; align-items: center; gap: 6px; }
                 </style>
-                <details {% if blank_message %}open{% endif %} class="bm-details" style="margin-bottom:15px;">
+                <details {% if message_overlay_enabled %}open{% endif %} class="bm-details" style="margin-bottom:15px;">
                     <summary style="cursor:pointer;font-weight:bold;list-style:none;">
                         <span class="bm-chevron" aria-hidden="true">&#9656;</span>
-                        Blank-State Message Overlay
+                        Message Overlay
                     </summary>
-                    <form action="/settings" method="POST" style="margin-top:10px;">
-                        <input type="hidden" name="blank_message_form" value="1">
-                        <div class="form-group">
-                            <label for="blank_message">Message (max 10 lines &times; 60 visible chars)</label>
-                            <textarea id="blank_message" name="blank_message" rows="10" cols="60" maxlength="2000"
-                                class="form-control" style="font-family:'Overpass Mono',monospace;white-space:pre;overflow:auto;text-align:{{ blank_message_align }};"
-                                oninput="bmOnInput();">{{ blank_message }}</textarea>
-                            <small class="bm-md-legend">
-                                Markdown:
-                                <code>#</code><h1 style="display:inline;font-size:1em;margin:0;">Header1</h1><span class="sep">·</span>
-                                <code>##</code><h2 style="display:inline;font-size:1em;margin:0;">Header2</h2><span class="sep">·</span>
-                                <code>###</code><h3 style="display:inline;font-size:1em;margin:0;">Header3</h3><span class="sep">·</span>
-                                <code>####</code><h4 style="display:inline;font-size:1em;margin:0;">Header4</h4><span class="sep">·</span>
-                                <code>**</code><strong>Bold</strong><code>**</code><span class="sep">·</span>
-                                <code>*</code><em>Italic</em><code>*</code><span class="sep">·</span>
-                                <code>_</code><u>Underline</u><code>_</code><span class="sep">·</span>
-                                <code>~~</code><s>Strike</s><code>~~</code><span class="sep">·</span>
-                                <code>`</code><code>Code</code><code>`</code><span class="sep">·</span>
-                                <code>1.</code> Numbered<span class="sep">·</span>
-                                <code>-</code> Bulleted
-                            </small>
-                        </div>
-                        <div class="form-group" style="margin-top:8px;">
-                            <label>Justify:</label>
-                            <label style="margin-left:10px;"><input type="radio" name="blank_message_align" value="left" {% if blank_message_align=='left' %}checked{% endif %} onchange="bmOnAlignChange(this.value);"> Left</label>
-                            <label style="margin-left:10px;"><input type="radio" name="blank_message_align" value="center" {% if blank_message_align=='center' %}checked{% endif %} onchange="bmOnAlignChange(this.value);"> Center</label>
-                            <label style="margin-left:10px;"><input type="radio" name="blank_message_align" value="right" {% if blank_message_align=='right' %}checked{% endif %} onchange="bmOnAlignChange(this.value);"> Right</label>
-                        </div>
-                        <div class="form-group" style="margin-top:8px;">
-                            <label>
-                                <input type="checkbox" id="blank_message_visible" name="blank_message_visible"
-                                    {% if blank_message_visible %}checked{% endif %}
-                                    {% if not blank_message.strip() %}disabled{% endif %}>
-                                Show message on blank screen
+                    <form id="message_pages_form" action="/settings" method="POST" style="margin-top:10px;">
+                        <input type="hidden" name="message_pages_form" value="1">
+                        <input type="hidden" name="page_count" id="page_count" value="{{ message_pages | length }}">
+                        <div class="form-group" style="margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+                            <label class="toggle-switch" title="Enable message overlay">
+                                <input type="checkbox" name="message_overlay_enabled" {% if message_overlay_enabled %}checked{% endif %}>
+                                <span class="toggle-slider"></span>
                             </label>
+                            <span style="font-weight:500;">Enable overlay</span>
+                        </div>
+                        <div class="form-group" style="margin-bottom:10px;">
+                            <label>Rotation interval:</label>
+                            <select name="message_rotation_interval">
+                                {% for sec in [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60] %}
+                                <option value="{{ sec }}" {% if message_rotation_interval == sec %}selected{% endif %}>{{ sec }}s</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="msg-tab-bar" id="msg_tab_bar">
+                            {% for page in message_pages %}
+                            <span class="msg-tab{% if loop.first %} active{% endif %}" data-idx="{{ loop.index0 }}" onclick="msgSelectTab({{ loop.index0 }})"><span class="msg-tab-label">Page {{ loop.index }}</span>{% if message_pages | length > 1 %}<button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage({{ loop.index0 }})" title="Remove page">&times;</button>{% endif %}</span>
+                            {% endfor %}
+                            <button type="button" class="msg-tab-add" id="msg_add_page" onclick="msgAddPage()" {% if message_pages | length >= 5 %}disabled{% endif %}>+ Add</button>
+                        </div>
+                        <div id="msg_panels_container">
+                            {% for page in message_pages %}
+                            <div class="msg-page-panel" id="msg_panel_{{ loop.index0 }}" {% if not loop.first %}hidden{% endif %}>
+                                <div class="form-group">
+                                    <div class="msg-toolbar">
+                                        <div class="msg-toolbar-left">
+                                            <label style="margin:0;font-size:0.85em;color:#666;">Message (max 10 lines &times; 60 visible chars)</label>
+                                            <div class="justify-btn-group" data-idx="{{ loop.index0 }}">
+                                                <button type="button" class="justify-btn{% if page.align=='left' %} active{% endif %}" data-align="left" title="Align left" onclick="msgSetAlign({{ loop.index0 }},'left',this);">
+                                                    <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="1" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="1" y="14" width="8" height="2"/></svg>
+                                                </button>
+                                                <button type="button" class="justify-btn{% if page.align=='center' %} active{% endif %}" data-align="center" title="Center" onclick="msgSetAlign({{ loop.index0 }},'center',this);">
+                                                    <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="3" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="4" y="14" width="8" height="2"/></svg>
+                                                </button>
+                                                <button type="button" class="justify-btn{% if page.align=='right' %} active{% endif %}" data-align="right" title="Align right" onclick="msgSetAlign({{ loop.index0 }},'right',this);">
+                                                    <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="5" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="7" y="14" width="8" height="2"/></svg>
+                                                </button>
+                                            </div>
+                                            <input type="hidden" name="page_align_{{ loop.index0 }}" id="page_align_{{ loop.index0 }}" value="{{ page.align }}">
+                                        </div>
+                                        <div class="msg-toolbar-right">
+                                            <span style="font-size:0.85em;color:#666;">Enabled</span>
+                                            <label class="toggle-switch" title="Enable this page">
+                                                <input type="checkbox" name="page_enabled_{{ loop.index0 }}" {% if page.enabled %}checked{% endif %}>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <textarea name="page_text_{{ loop.index0 }}" rows="10" cols="60" maxlength="2000"
+                                        class="form-control msg-textarea" data-idx="{{ loop.index0 }}"
+                                        style="font-family:'Overpass Mono',monospace;white-space:pre;overflow:auto;text-align:{{ page.align }};"
+                                        oninput="msgOnInput(this);">{{ page.text }}</textarea>
+                                    <small class="bm-md-legend">
+                                        Markdown:
+                                        <code>#</code><h1 style="display:inline;font-size:1em;margin:0;">Header1</h1><span class="sep">·</span>
+                                        <code>##</code><h2 style="display:inline;font-size:1em;margin:0;">Header2</h2><span class="sep">·</span>
+                                        <code>###</code><h3 style="display:inline;font-size:1em;margin:0;">Header3</h3><span class="sep">·</span>
+                                        <code>####</code><h4 style="display:inline;font-size:1em;margin:0;">Header4</h4><span class="sep">·</span>
+                                        <code>**</code><strong>Bold</strong><code>**</code><span class="sep">·</span>
+                                        <code>*</code><em>Italic</em><code>*</code><span class="sep">·</span>
+                                        <code>_</code><u>Underline</u><code>_</code><span class="sep">·</span>
+                                        <code>~~</code><s>Strike</s><code>~~</code><span class="sep">·</span>
+                                        <code>`</code><code>Code</code><code>`</code><span class="sep">·</span>
+                                        <code>1.</code> Numbered<span class="sep">·</span>
+                                        <code>-</code> Bulleted
+                                    </small>
+                                </div>
+
+                            </div>
+                            {% endfor %}
                         </div>
                         <div class="form-group" style="margin-top:8px;">
                             <button class="btn btn-default" type="submit">Update</button>
@@ -143,10 +209,9 @@
                 </details>
                 <script>
                     (function(){
-                        var ta = document.getElementById('blank_message');
-                        var cb = document.getElementById('blank_message_visible');
-                        // Strip markdown syntax to count rendered (visible) length, so users
-                        // can use the full width without the markers eating their space.
+                        var pageCount = {{ message_pages | length }};
+                        var activeTab = 0;
+
                         function visibleLen(line){
                             var s = line
                                 .replace(/^\s*#{1,4}\s+/, '')
@@ -158,8 +223,7 @@
                                 .replace(/(^|[^_])_([^_\n]+)_(?!_)/g, '$1$2');
                             return s.length;
                         }
-                        function enforce(){
-                            // Enforce 10 lines x 60 visible chars live
+                        function enforce(ta){
                             var lines = ta.value.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
                             var changed = false;
                             if (lines.length > 10) { lines = lines.slice(0,10); changed = true; }
@@ -171,15 +235,136 @@
                             }
                             if (changed) ta.value = lines.join('\n');
                         }
-                        window.bmOnInput = function(){
-                            enforce();
-                            var hasText = ta.value.trim().length > 0;
-                            if (!hasText) { cb.checked = false; cb.disabled = true; }
-                            else { cb.disabled = false; }
+                        window.msgOnInput = function(ta){ enforce(ta); };
+                        window.msgSetAlign = function(idx, val, btn){
+                            // Update hidden input
+                            var hidden = document.getElementById('page_align_'+idx);
+                            if (hidden) hidden.value = val;
+                            // Update textarea
+                            var ta = document.querySelector('#msg_panel_'+idx+' textarea');
+                            if (ta) ta.style.textAlign = val;
+                            // Toggle active class on button group
+                            var group = btn.parentElement;
+                            group.querySelectorAll('.justify-btn').forEach(function(b){ b.classList.remove('active'); });
+                            btn.classList.add('active');
                         };
-                        window.bmOnAlignChange = function(val){
-                            ta.style.textAlign = val;
+                        window.msgSelectTab = function(idx){
+                            activeTab = idx;
+                            var tabs = document.querySelectorAll('.msg-tab');
+                            for (var i=0; i<tabs.length; i++){
+                                tabs[i].classList.toggle('active', parseInt(tabs[i].getAttribute('data-idx'))===idx);
+                            }
+                            for (var i=0; i<pageCount; i++){
+                                var panel = document.getElementById('msg_panel_'+i);
+                                if (panel) panel.hidden = (i!==idx);
+                            }
                         };
+                        window.msgAddPage = function(){
+                            if (pageCount >= 5) return;
+                            var idx = pageCount;
+                            pageCount++;
+                            document.getElementById('page_count').value = pageCount;
+                            // Add tab
+                            var tabBar = document.getElementById('msg_tab_bar');
+                            var addBtn = document.getElementById('msg_add_page');
+                            var tab = document.createElement('span');
+                            tab.className = 'msg-tab';
+                            tab.setAttribute('data-idx', idx);
+                            tab.innerHTML = '<span class="msg-tab-label">Page '+(idx+1)+'</span><button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage('+idx+')" title="Remove page">&times;</button>';
+                            tab.onclick = function(){ msgSelectTab(idx); };
+                            // Show close buttons on all tabs now that there are multiple
+                            document.querySelectorAll('.msg-tab').forEach(function(t){ if (!t.querySelector('.msg-tab-close')){ t.innerHTML = '<span class="msg-tab-label">'+t.textContent+'</span><button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage('+t.getAttribute('data-idx')+')" title="Remove page">&times;</button>'; } });
+                            tabBar.insertBefore(tab, addBtn);
+                            if (pageCount >= 5) addBtn.disabled = true;
+                            // Add panel
+                            var container = document.getElementById('msg_panels_container');
+                            var panel = document.createElement('div');
+                            panel.className = 'msg-page-panel';
+                            panel.id = 'msg_panel_'+idx;
+                            panel.hidden = true;
+                            panel.innerHTML =
+                                '<div class="form-group">'+
+                                '<div class="msg-toolbar">'+
+                                '<div class="msg-toolbar-left">'+
+                                '<label style="margin:0;font-size:0.85em;color:#666;">Message (max 10 lines × 60 visible chars)</label>'+
+                                '<div class="justify-btn-group" data-idx="'+idx+'">'+
+                                '<button type="button" class="justify-btn active" data-align="left" title="Align left" onclick="msgSetAlign('+idx+',\'left\',this);">'+
+                                '<svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="1" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="1" y="14" width="8" height="2"/></svg></button>'+
+                                '<button type="button" class="justify-btn" data-align="center" title="Center" onclick="msgSetAlign('+idx+',\'center\',this);">'+
+                                '<svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="3" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="4" y="14" width="8" height="2"/></svg></button>'+
+                                '<button type="button" class="justify-btn" data-align="right" title="Align right" onclick="msgSetAlign('+idx+',\'right\',this);">'+
+                                '<svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="5" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="7" y="14" width="8" height="2"/></svg></button>'+
+                                '</div>'+
+                                '<input type="hidden" name="page_align_'+idx+'" id="page_align_'+idx+'" value="left">'+
+                                '</div>'+
+                                '<div class="msg-toolbar-right">'+
+                                '<span style="font-size:0.85em;color:#666;">Enabled</span>'+
+                                '<label class="toggle-switch" title="Enable this page"><input type="checkbox" name="page_enabled_'+idx+'"><span class="toggle-slider"></span></label>'+
+                                '</div>'+
+                                '</div>'+
+                                '<textarea name="page_text_'+idx+'" rows="10" cols="60" maxlength="2000" class="form-control msg-textarea" data-idx="'+idx+'" style="font-family:\'Overpass Mono\',monospace;white-space:pre;overflow:auto;" oninput="msgOnInput(this);"></textarea>'+
+                                '</div>'+
+                                '';
+                            container.appendChild(panel);
+                            msgSelectTab(idx);
+                        };
+                        window.msgRemovePage = function(idx){
+                            if (pageCount <= 1) return;
+                            // Show confirmation overlay
+                            var ov = document.getElementById('msg-remove-overlay');
+                            document.getElementById('msg-remove-label').textContent = 'Remove Page '+(idx+1)+'?';
+                            ov.style.display = 'flex';
+                            var okBtn = document.getElementById('msg-remove-ok');
+                            var cancelBtn = document.getElementById('msg-remove-cancel');
+                            // Clone to remove old listeners
+                            var newOk = okBtn.cloneNode(true);
+                            okBtn.parentNode.replaceChild(newOk, okBtn);
+                            var newCancel = cancelBtn.cloneNode(true);
+                            cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+                            newCancel.onclick = function(){ ov.style.display='none'; };
+                            newOk.onclick = function(){
+                                ov.style.display='none';
+                                doRemovePage(idx);
+                            };
+                        };
+                        function doRemovePage(idx){
+                            // Remove tab and panel
+                            var tab = document.querySelector('.msg-tab[data-idx="'+idx+'"]');
+                            if (tab) tab.remove();
+                            var panel = document.getElementById('msg_panel_'+idx);
+                            if (panel) panel.remove();
+                            pageCount--;
+                            document.getElementById('page_count').value = pageCount;
+                            // Re-index remaining tabs and panels
+                            var tabs = document.querySelectorAll('.msg-tab');
+                            var panels = document.querySelectorAll('.msg-page-panel');
+                            for (var i=0; i<tabs.length; i++){
+                                tabs[i].setAttribute('data-idx', i);
+                                var closeHtml = pageCount > 1 ? '<button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage('+i+')" title="Remove page">&times;</button>' : '';
+                                tabs[i].innerHTML = '<span class="msg-tab-label">Page '+(i+1)+'</span>' + closeHtml;
+                                tabs[i].onclick = (function(n){ return function(){ msgSelectTab(n); }; })(i);
+                            }
+                            for (var i=0; i<panels.length; i++){
+                                panels[i].id = 'msg_panel_'+i;
+                                // Rename form fields
+                                var ta = panels[i].querySelector('textarea');
+                                if (ta) { ta.name = 'page_text_'+i; ta.setAttribute('data-idx', i); ta.setAttribute('oninput', 'msgOnInput(this)'); }
+                                var hidden = panels[i].querySelector('input[type=hidden][name^=page_align_]');
+                                if (hidden) { hidden.name = 'page_align_'+i; hidden.id = 'page_align_'+i; }
+                                var justifyGroup = panels[i].querySelector('.justify-btn-group');
+                                if (justifyGroup) {
+                                    justifyGroup.setAttribute('data-idx', i);
+                                    justifyGroup.querySelectorAll('.justify-btn').forEach(function(b){
+                                        var al = b.getAttribute('data-align');
+                                        b.setAttribute('onclick', 'msgSetAlign('+i+',\''+al+'\',this)');
+                                    });
+                                }
+                                var cb = panels[i].querySelector('.toggle-switch input[type=checkbox]');
+                                if (cb) cb.name = 'page_enabled_'+i;
+                            }
+                            document.getElementById('msg_add_page').disabled = (pageCount >= 5);
+                            msgSelectTab(Math.min(idx, pageCount-1));
+                        }
                     })();
                 </script>
             </div>
@@ -628,6 +813,16 @@
             <input type="text" id="shutdown-confirm-input" class="form-control" placeholder="Type Stop" style="margin-bottom:12px;">
             <button class="btn btn-danger" id="shutdown-ok-btn" disabled onclick="shutdownServer();">OK</button>
             <button class="btn btn-default" onclick="document.getElementById('shutdown-overlay').style.display='none'; document.getElementById('shutdown-confirm-input').value='';  document.getElementById('shutdown-ok-btn').disabled=true;">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Remove page confirmation overlay -->
+    <div id="msg-remove-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+        <div style="background:#fff; padding:24px 32px; border-radius:6px; max-width:360px; text-align:center;">
+            <h4 id="msg-remove-label" style="margin-top:0;">Remove Page?</h4>
+            <p>This page and its content will be deleted.</p>
+            <button class="btn btn-danger" id="msg-remove-ok">Remove</button>
+            <button class="btn btn-default" id="msg-remove-cancel">Cancel</button>
         </div>
     </div>
     <script>

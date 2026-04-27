@@ -132,80 +132,6 @@
     }
 
     /**
-     * Render a simple GitHub-flavored markdown subset for the blank-state message.
-     *
-     * Supports: # .. #### headers, **bold**, *italic*, _underline_ (extension),
-     * ~~strike~~, `code`, ordered (1.) and unordered (-,*) lists.
-     * Input is HTML-escaped first.
-     */
-    function renderBlankMessageMarkdown(text) {
-        if (text == null) return '';
-        // 1) HTML-escape
-        var esc = String(text)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-
-        // 2) Split into lines and classify; group consecutive list items.
-        var lines = esc.split('\n');
-        var out = [];
-        var listType = null; // 'ul' | 'ol' | null
-
-        function closeList() {
-            if (listType) { out.push('</' + listType + '>'); listType = null; }
-        }
-
-        function inline(s) {
-            // Protect inline code spans first.
-            var codes = [];
-            s = s.replace(/`([^`\n]+)`/g, function (_, c) {
-                codes.push(c);
-                return '\u0001' + (codes.length - 1) + '\u0001';
-            });
-            // Bold (**...**) before italic (*...*).
-            s = s.replace(/\*\*([^\*\n]+)\*\*/g, '<strong>$1</strong>');
-            // Strikethrough.
-            s = s.replace(/~~([^~\n]+)~~/g, '<s>$1</s>');
-            // Italic: single * not adjacent to another *.
-            s = s.replace(/(^|[^\*])\*([^\*\n]+)\*(?!\*)/g, '$1<em>$2</em>');
-            // Underline (project extension): _text_.
-            s = s.replace(/(^|[^_])_([^_\n]+)_(?!_)/g, '$1<u>$2</u>');
-            // Restore code spans.
-            s = s.replace(/\u0001(\d+)\u0001/g, function (_, i) {
-                return '<code>' + codes[+i] + '</code>';
-            });
-            return s;
-        }
-
-        for (var i = 0; i < lines.length; i++) {
-            var ln = lines[i];
-            var m;
-            if ((m = ln.match(/^\s*(#{1,4})\s+(.*)$/))) {
-                closeList();
-                var lvl = m[1].length;
-                out.push('<h' + lvl + '>' + inline(m[2]) + '</h' + lvl + '>');
-            } else if ((m = ln.match(/^\s*\d+\.\s+(.*)$/))) {
-                if (listType !== 'ol') { closeList(); out.push('<ol>'); listType = 'ol'; }
-                out.push('<li>' + inline(m[1]) + '</li>');
-            } else if ((m = ln.match(/^\s*[-\*]\s+(.*)$/))) {
-                if (listType !== 'ul') { closeList(); out.push('<ul>'); listType = 'ul'; }
-                out.push('<li>' + inline(m[1]) + '</li>');
-            } else {
-                closeList();
-                if (ln.length === 0) {
-                    out.push('<div class="md-blank"></div>');
-                } else {
-                    out.push(inline(ln) + '<br>');
-                }
-            }
-        }
-        closeList();
-        // Trim trailing <br> for cleaner sizing.
-        while (out.length && out[out.length - 1] === '<br>') out.pop();
-        return out.join('');
-    }
-
-    /**
      * Evaluate a lane's time against qualifying standards and records.
      * Returns a result object describing the decoration to apply.
      *
@@ -279,7 +205,6 @@
     exports.getThresholdsForLane = getThresholdsForLane;
     exports.getRecordsForLane = getRecordsForLane;
     exports.formatSeedTime = formatSeedTime;
-    exports.renderBlankMessageMarkdown = renderBlankMessageMarkdown;
     exports.evaluateLaneResult = evaluateLaneResult;
 
 })(typeof module !== 'undefined' && module.exports ? module.exports : window);
