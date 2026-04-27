@@ -155,11 +155,11 @@
     var confettiFired = {};  // Track which lanes have already shown confetti
     var maxQtTagLen = 0;    // Longest tag string for space reservation
     var raceState = {{ initial_race_state | tojson }};
-    var blankMessageText = {{ initial_settings.blank_message | tojson }};
-    var blankMessageVisible = {{ initial_settings.blank_message_visible | tojson }};
-    var blankMessageAlign = {{ initial_settings.blank_message_align | tojson }};
+    var messageOverlayEnabled = {{ initial_settings.message_overlay_enabled | tojson }};
+    var messagePages = {{ initial_message_pages | tojson }};
+    var messageRotationInterval = {{ initial_settings.message_rotation_interval | tojson }};
+    var activeMessagePage = {{ initial_active_message_page | tojson }};
     var qualifyingTimesKey = {{ initial_qt_key | tojson }};
-    var blankMessageKey = {{ initial_bm_key | tojson }};
     var _fragmentCache = {};       // { url: { key, html } }
 
     // Fetch a server-rendered HTML fragment with ETag caching.
@@ -203,16 +203,19 @@
     // Get applicable record thresholds for a given lane based on age code and team
     // (provided by scoreboard.js — getRecordsForLane is on window)
 
-    // Returns true when the blank-message overlay is currently active (text + visible).
-    function isBlankMessageOverlayActive() {
-        var hasText = blankMessageText && blankMessageText.replace(/\s+/g, '').length > 0;
-        return blankMessageVisible && hasText;
+    // Returns true when the message overlay is currently active.
+    function isMessageOverlayActive() {
+        if (!messageOverlayEnabled) return false;
+        for (var i = 0; i < messagePages.length; i++) {
+            if (messagePages[i].enabled && messagePages[i].text && messagePages[i].text.replace(/\s+/g, '').length > 0) return true;
+        }
+        return false;
     }
 
     // Spawn confetti particles from the center of a given element
     function spawnConfetti(lane, targetEl) {
         if (!showConfetti) return;
-        if (isBlankMessageOverlayActive()) return;
+        if (isMessageOverlayActive()) return;
         if (raceState !== "Running" && raceState !== "Finished") return;
         if (confettiFired[lane]) return;
         confettiFired[lane] = true;
@@ -442,10 +445,9 @@
 
     // renderBlankMessageMarkdown is provided by scoreboard.js (on window)
 
-    // Render the blank-state message overlay (sits above blank clock & scoreboard).
-    // Layout is CSS-only (inline-grid stacking); JS just toggles content,
-    // display/opacity, and clock visibility.
-    function renderBlankMessageOverlay() {
+    // Render the message overlay (sits above blank clock & scoreboard).
+    // Supports multiple pages with crossfade rotation.
+    function renderMessageOverlay() {
         var overlay = document.getElementById('blank_message_overlay');
         if (!overlay) return;
         var clockRegion = document.getElementById('blank_message_clock');
@@ -453,8 +455,7 @@
 
         var isBlank = (raceState === "Blank" || raceState === "BlankPreRace");
         var isTotalBlank = (raceState === "TotalBlank" || raceState === "TotalBlankPreRace");
-        var hasText = blankMessageText && blankMessageText.replace(/\s+/g, '').length > 0;
-        var show = blankMessageVisible && hasText;
+        var show = isMessageOverlayActive();
         var stackEl = document.querySelector('.scoreboard-stack');
 
         if (!show) {
@@ -484,15 +485,42 @@
             clockRegion.style.opacity = '0';
         }
 
-        // Set rendered markdown + alignment (fetched from server)
-        if (blankMessageKey) {
-            fetchFragment('/api/blank-message', blankMessageKey, function (html) {
-                textSpan.innerHTML = html;
+        // Find the active page
+        var page = null;
+        if (activeMessagePage >= 0 && activeMessagePage < messagePages.length) {
+            page = messagePages[activeMessagePage];
+        }
+        if (!page || !page.enabled) {
+            // Fallback to first enabled page
+            for (var i = 0; i < messagePages.length; i++) {
+                if (messagePages[i].enabled && messagePages[i].text && messagePages[i].text.replace(/\s+/g, '').length > 0) {
+                    page = messagePages[i];
+                    break;
+                }
+            }
+        }
+        if (!page) return;
+
+        // Crossfade: fade out, swap content, fade in
+        var pageKey = page.key;
+        if (pageKey) {
+            var pageIdx = messagePages.indexOf(page);
+            fetchFragment('/api/message-page/' + pageIdx, pageKey, function (html) {
+                textSpan.style.opacity = '0';
+                setTimeout(function () {
+                    textSpan.innerHTML = html;
+                    textSpan.style.textAlign = page.align || 'left';
+                    textSpan.style.opacity = '1';
+                }, 300);
             });
         } else {
-            textSpan.innerHTML = renderBlankMessageMarkdown(blankMessageText);
+            textSpan.style.opacity = '0';
+            setTimeout(function () {
+                textSpan.innerHTML = renderBlankMessageMarkdown(page.text || '');
+                textSpan.style.textAlign = page.align || 'left';
+                textSpan.style.opacity = '1';
+            }, 300);
         }
-        textSpan.style.textAlign = blankMessageAlign;
 
         overlay.style.display = 'flex';
         // Force reflow so opacity transition runs when going from display:none
@@ -510,7 +538,7 @@
         var resizeTimer = null;
         window.addEventListener('resize', function () {
             if (resizeTimer) clearTimeout(resizeTimer);
-            resizeTimer = setTimeout(renderBlankMessageOverlay, 100);
+            resizeTimer = setTimeout(renderMessageOverlay, 100);
         });
     })();
 
@@ -777,13 +805,13 @@
             seedTimeLabel = s["seed_time_label"];
         }
 
-        var bmChanged = false;
-        if ("blank_message" in s) { blankMessageText = s["blank_message"] || ''; bmChanged = true; }
-        if ("blank_message_visible" in s) { blankMessageVisible = !!s["blank_message_visible"]; bmChanged = true; }
-        if ("blank_message_align" in s) { blankMessageAlign = s["blank_message_align"] || 'left'; bmChanged = true; }
-        if ("blank_message_key" in s) { blankMessageKey = s["blank_message_key"]; bmChanged = true; }
-        if (bmChanged || ("race_state" in s)) {
-            renderBlankMessageOverlay();
+        var msgChanged = false;
+        if ("message_overlay_enabled" in s) { messageOverlayEnabled = !!s["message_overlay_enabled"]; msgChanged = true; }
+        if ("message_pages" in s) { messagePages = s["message_pages"]; msgChanged = true; }
+        if ("message_rotation_interval" in s) { messageRotationInterval = s["message_rotation_interval"]; }
+        if ("active_message_page" in s) { activeMessagePage = s["active_message_page"]; msgChanged = true; }
+        if (msgChanged || ("race_state" in s)) {
+            renderMessageOverlay();
         }
 
         // Evaluate all lanes for time standard qualifications (skip if event/heat just changed with stale times)

@@ -37,9 +37,9 @@ settings = {
     'show_confetti': True,
     'show_time_decorations': False,
     'seed_time_label': 'Seed Time',
-    'blank_message': '',
-    'blank_message_visible': False,
-    'blank_message_align': 'left',
+    'message_pages': [{'text': '', 'align': 'left', 'enabled': False}],
+    'message_overlay_enabled': False,
+    'message_rotation_interval': 30,
     'team_home': '',
     'team_home_tag': '',
     'team_guest1': '',
@@ -134,6 +134,17 @@ def load_settings():
             _next_rec_set_id = 1
             settings['swim_record_sets'] = base64.b64encode(pickle.dumps(swim_record_sets)).decode('ascii')
             settings.pop('swim_records', None)
+            with open(settings_file, "wt") as f:
+                json.dump(settings, f, sort_keys=True, indent=4)
+        # Migrate old flat blank_message keys → message_pages array
+        if 'blank_message' in settings and 'message_pages' not in settings:
+            settings['message_pages'] = [{
+                'text': settings.pop('blank_message', ''),
+                'align': settings.pop('blank_message_align', 'left'),
+                'enabled': bool(settings.pop('blank_message_visible', False)),
+            }]
+            settings['message_overlay_enabled'] = settings['message_pages'][0]['enabled']
+            settings.setdefault('message_rotation_interval', 30)
             with open(settings_file, "wt") as f:
                 json.dump(settings, f, sort_keys=True, indent=4)
     except: pass
@@ -741,14 +752,89 @@ def _render_qualifying_html(qt_groups, rec_set_list):
     return _cache_put('qualifying_info', html)
 
 
-def _render_and_cache_blank_message():
-    """Render the current blank message to HTML and cache it.
+def _render_and_cache_message_pages():
+    """Render all message pages to HTML and cache them.
 
-    Returns the content key (hash).
+    Returns a list of content keys (one per page).
     """
-    text = settings.get('blank_message', '')
-    html = _render_blank_message_html(text)
-    return _cache_put('blank_message', html)
+    pages = settings.get('message_pages', [])
+    keys = []
+    for i, page in enumerate(pages):
+        html = _render_blank_message_html(page.get('text', ''))
+        key = _cache_put('message_page_%d' % i, html)
+        keys.append(key)
+    return keys
+
+
+# --- Message rotation timer ---
+_message_rotation_index = 0   # index into the full message_pages list (the currently shown page)
+_message_rotation_running = False
+
+
+def _enabled_page_indices():
+    """Return list of indices of enabled message pages."""
+    return [i for i, p in enumerate(settings.get('message_pages', [])) if p.get('enabled')]
+
+
+def _start_message_rotation():
+    """Start the background rotation timer if 2+ pages are enabled and overlay is on."""
+    global _message_rotation_running
+    if _message_rotation_running:
+        return
+    enabled = _enabled_page_indices()
+    if len(enabled) < 2 or not settings.get('message_overlay_enabled', False):
+        return
+    _message_rotation_running = True
+    socketio.start_background_task(_message_rotation_tick)
+
+
+def _stop_message_rotation():
+    """Signal the rotation timer to stop."""
+    global _message_rotation_running
+    _message_rotation_running = False
+
+
+def _message_rotation_tick():
+    """Background task: rotate through enabled pages and broadcast changes."""
+    global _message_rotation_index, _message_rotation_running
+    while _message_rotation_running:
+        interval = settings.get('message_rotation_interval', 30)
+        socketio.sleep(interval)
+        if not _message_rotation_running:
+            break
+        enabled = _enabled_page_indices()
+        if len(enabled) < 2:
+            _message_rotation_running = False
+            break
+        # Advance to next enabled page
+        try:
+            cur_pos = enabled.index(_message_rotation_index)
+            next_pos = (cur_pos + 1) % len(enabled)
+        except ValueError:
+            next_pos = 0
+        _message_rotation_index = enabled[next_pos]
+        # Broadcast page change
+        page_keys = _render_and_cache_message_pages()
+        key = page_keys[_message_rotation_index] if _message_rotation_index < len(page_keys) else None
+        socketio.emit('update_scoreboard', {
+            'active_message_page': _message_rotation_index,
+            'active_message_key': key,
+        }, namespace='/scoreboard')
+
+
+def _update_message_rotation():
+    """Re-evaluate whether the rotation timer should be running.
+    Call after any change to message_pages, overlay_enabled, or interval."""
+    global _message_rotation_index
+    enabled = _enabled_page_indices()
+    if not enabled:
+        _message_rotation_index = 0
+    elif _message_rotation_index not in enabled:
+        _message_rotation_index = enabled[0]
+    if len(enabled) >= 2 and settings.get('message_overlay_enabled', False):
+        _start_message_rotation()
+    else:
+        _stop_message_rotation()
 
 
 def send_event_info():            
@@ -775,10 +861,16 @@ def send_event_info():
     update["show_confetti"] = settings.get('show_confetti', True)
     update["show_time_decorations"] = settings.get('show_time_decorations', False)
     update["seed_time_label"] = settings.get('seed_time_label', 'Seed Time')
-    update["blank_message"] = settings.get('blank_message', '')
-    update["blank_message_visible"] = settings.get('blank_message_visible', False)
-    update["blank_message_align"] = settings.get('blank_message_align', 'left')
-    update["blank_message_key"] = _render_and_cache_blank_message()
+    page_keys = _render_and_cache_message_pages()
+    pages = settings.get('message_pages', [])
+    update["message_overlay_enabled"] = settings.get('message_overlay_enabled', False)
+    update["message_pages"] = [
+        {'text': p.get('text', ''), 'align': p.get('align', 'left'),
+         'enabled': p.get('enabled', False), 'key': page_keys[i] if i < len(page_keys) else None}
+        for i, p in enumerate(pages)
+    ]
+    update["message_rotation_interval"] = settings.get('message_rotation_interval', 30)
+    update["active_message_page"] = _message_rotation_index
     update["race_state"] = race_fsm.state_name
 
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
@@ -792,13 +884,19 @@ def send_scores_info():
     update["race_state"] = race_fsm.state_name
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
 
-def send_blank_message():
-    """Broadcast just the blank-state message fields to scoreboard clients."""
+def send_message_overlay_state():
+    """Broadcast message overlay state to all scoreboard clients."""
+    page_keys = _render_and_cache_message_pages()
+    pages = settings.get('message_pages', [])
     update = {
-        'blank_message': settings.get('blank_message', ''),
-        'blank_message_visible': settings.get('blank_message_visible', False),
-        'blank_message_align': settings.get('blank_message_align', 'left'),
-        'blank_message_key': _render_and_cache_blank_message(),
+        'message_overlay_enabled': settings.get('message_overlay_enabled', False),
+        'message_pages': [
+            {'text': p.get('text', ''), 'align': p.get('align', 'left'),
+             'enabled': p.get('enabled', False), 'key': page_keys[i] if i < len(page_keys) else None}
+            for i, p in enumerate(pages)
+        ],
+        'message_rotation_interval': settings.get('message_rotation_interval', 30),
+        'active_message_page': _message_rotation_index,
     }
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
             
@@ -1150,9 +1248,10 @@ def api_qualifying_info():
     resp.headers['Cache-Control'] = 'public, max-age=60'
     return resp
 
-@app.route('/api/blank-message')
-def api_blank_message():
-    key, html = _cache_get('blank_message')
+@app.route('/api/message-page/<int:index>')
+def api_message_page(index):
+    resource = 'message_page_%d' % index
+    key, html = _cache_get(resource)
     if key is None:
         return flask.Response('', status=200, content_type='text/html; charset=utf-8')
     etag = '"' + key + '"'
@@ -1183,7 +1282,7 @@ def route_web(name):
     rec_set_results, rec_show_age = _get_matching_records(ev)
     show_age_codes = qt_show_age or rec_show_age
     qt_key = _render_qualifying_html(qt_results, rec_set_results)
-    bm_key = _render_and_cache_blank_message()
+    page_keys = _render_and_cache_message_pages()
     _, qt_html = _cache_get('qualifying_info')
     num_lanes = settings['num_lanes']
 
@@ -1195,6 +1294,13 @@ def route_web(name):
             'age_code': event_info.get_age_code(ev, ht, i) if show_age_codes else '',
             'seed_time': event_info.get_seed_time(ev, ht, i),
         }
+
+    pages = settings.get('message_pages', [])
+    initial_message_pages = [
+        {'text': p.get('text', ''), 'align': p.get('align', 'left'),
+         'enabled': p.get('enabled', False), 'key': page_keys[i] if i < len(page_keys) else None}
+        for i, p in enumerate(pages)
+    ]
 
     return flask.render_template(web_name,
         meet_title=settings['meet_title'],
@@ -1217,18 +1323,18 @@ def route_web(name):
         initial_rec_sets=rec_set_results,
         initial_qt_key=qt_key,
         initial_qt_html=qt_html or '',
-        initial_bm_key=bm_key,
         initial_lanes=initial_lanes,
         initial_scores=team_scores,
         initial_race_state=race_fsm.state_name,
+        initial_message_pages=initial_message_pages,
+        initial_active_message_page=_message_rotation_index,
         initial_settings={
             'show_pr_tags': settings.get('show_pr_tags', True),
             'show_confetti': settings.get('show_confetti', True),
             'show_time_decorations': settings.get('show_time_decorations', False),
             'seed_time_label': settings.get('seed_time_label', 'Seed Time'),
-            'blank_message': settings.get('blank_message', ''),
-            'blank_message_visible': settings.get('blank_message_visible', False),
-            'blank_message_align': settings.get('blank_message_align', 'left'),
+            'message_overlay_enabled': settings.get('message_overlay_enabled', False),
+            'message_rotation_interval': settings.get('message_rotation_interval', 30),
         },
     )
 
@@ -1402,10 +1508,7 @@ def route_settings():
                 settings['show_time_decorations'] = new_val
                 modified = True
 
-        if 'blank_message_form' in flask.request.form:
-            raw = flask.request.form.get('blank_message', '')
-            # Normalize line endings and enforce 10 lines × 60 *visible* chars
-            # (markdown markers don't count toward the limit).
+        if 'message_pages_form' in flask.request.form:
             def _visible_len(line):
                 s = re.sub(r'^\s*#{1,4}\s+', '', line)
                 s = re.sub(r'^\s*(\d+\.|[-*])\s+', '', s)
@@ -1415,46 +1518,55 @@ def route_settings():
                 s = re.sub(r'(^|[^*])\*([^*\n]+)\*(?!\*)', r'\1\2', s)
                 s = re.sub(r'(^|[^_])_([^_\n]+)_(?!_)', r'\1\2', s)
                 return len(s)
-            lines = raw.replace('\r\n', '\n').replace('\r', '\n').split('\n')[:10]
-            trimmed = []
-            for ln in lines:
-                while _visible_len(ln) > 60:
-                    ln = ln[:-1]
-                trimmed.append(ln)
-            new_msg = '\n'.join(trimmed)
-            new_align = flask.request.form.get('blank_message_align', 'left')
-            if new_align not in ('left', 'center', 'right'):
-                new_align = 'left'
-            # Visible only when textarea has content (auto-flip to False if empty)
-            new_vis = ('blank_message_visible' in flask.request.form) and bool(new_msg.strip())
+            page_count = int(flask.request.form.get('page_count', '1'))
+            page_count = max(1, min(5, page_count))
+            new_pages = []
+            for idx in range(page_count):
+                raw = flask.request.form.get('page_text_%d' % idx, '')
+                lines = raw.replace('\r\n', '\n').replace('\r', '\n').split('\n')[:10]
+                trimmed = []
+                for ln in lines:
+                    while _visible_len(ln) > 60:
+                        ln = ln[:-1]
+                    trimmed.append(ln)
+                text = '\n'.join(trimmed)
+                align = flask.request.form.get('page_align_%d' % idx, 'left')
+                if align not in ('left', 'center', 'right'):
+                    align = 'left'
+                enabled = ('page_enabled_%d' % idx) in flask.request.form
+                new_pages.append({'text': text, 'align': align, 'enabled': enabled})
+            new_overlay_enabled = 'message_overlay_enabled' in flask.request.form
+            new_interval = int(flask.request.form.get('message_rotation_interval', '30'))
+            if new_interval < 5 or new_interval > 60 or new_interval % 5 != 0:
+                new_interval = 30
 
             msg_changed = False
-            if settings.get('blank_message', '') != new_msg:
-                settings['blank_message'] = new_msg
+            if settings.get('message_pages') != new_pages:
+                settings['message_pages'] = new_pages
                 modified = True
                 msg_changed = True
-            if settings.get('blank_message_align', 'left') != new_align:
-                settings['blank_message_align'] = new_align
+            if settings.get('message_overlay_enabled', False) != new_overlay_enabled:
+                settings['message_overlay_enabled'] = new_overlay_enabled
                 modified = True
                 msg_changed = True
-            if bool(settings.get('blank_message_visible', False)) != new_vis:
-                settings['blank_message_visible'] = new_vis
+            if settings.get('message_rotation_interval', 30) != new_interval:
+                settings['message_rotation_interval'] = new_interval
                 modified = True
                 msg_changed = True
             if msg_changed:
-                # Persisted below with `modified`; push live update to clients.
-                blank_message_needs_broadcast = True
+                overlay_needs_broadcast = True
             else:
-                blank_message_needs_broadcast = False
+                overlay_needs_broadcast = False
         else:
-            blank_message_needs_broadcast = False
+            overlay_needs_broadcast = False
 
         if modified:
             with open(settings_file, "wt") as f:
                 json.dump(settings, f, sort_keys=True, indent=4)
 
-        if blank_message_needs_broadcast:
-            send_blank_message()
+        if overlay_needs_broadcast:
+            send_message_overlay_state()
+            _update_message_rotation()
                 
     comm_port_list = [(port, "%s: %s" % (port,desc)) for port, desc, id in serial.tools.list_ports.comports()]
     if settings['serial_port'] not in [port for port,desc in comm_port_list]:
@@ -1508,9 +1620,9 @@ def route_settings():
                 show_pr_tags=settings.get('show_pr_tags', True),
                 show_confetti=settings.get('show_confetti', True),
                 show_time_decorations=settings.get('show_time_decorations', False),
-                blank_message=settings.get('blank_message', ''),
-                blank_message_visible=settings.get('blank_message_visible', False),
-                blank_message_align=settings.get('blank_message_align', 'left'),
+                message_pages=settings.get('message_pages', [{'text': '', 'align': 'left', 'enabled': False}]),
+                message_overlay_enabled=settings.get('message_overlay_enabled', False),
+                message_rotation_interval=settings.get('message_rotation_interval', 30),
                 team_home=settings.get('team_home', ''),
                 team_home_tag=settings.get('team_home_tag', ''),
                 team_guest1=settings.get('team_guest1', ''),

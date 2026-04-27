@@ -530,7 +530,7 @@ body.hide-time-decorations .qt-highlight {
     white-space: normal;
     font-size: 36px;
     line-height: 1.1;
-    transition: font-size 0.5s ease;
+    transition: font-size 0.5s ease, opacity 0.3s ease;
 }
 
 /* Collapsible spacer emitted for blank source lines. Adds a small gap that
