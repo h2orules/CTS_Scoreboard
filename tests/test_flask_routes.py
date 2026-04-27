@@ -44,7 +44,8 @@ class TestPublicRoutes:
         html = resp.data.decode()
         # Should have initial content keys
         assert 'qualifyingTimesKey' in html
-        assert 'blankMessageKey' in html
+        assert 'messageOverlayEnabled' in html
+        assert 'messagePages' in html
         # Should have pre-populated race state
         assert 'raceState' in html
         # Should have the fetchFragment helper

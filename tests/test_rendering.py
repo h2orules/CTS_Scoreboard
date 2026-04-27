@@ -8,7 +8,7 @@ from CTS_Scoreboard import (
     _content_cache,
     _render_blank_message_html,
     _render_qualifying_html,
-    _render_and_cache_blank_message,
+    _render_and_cache_message_pages,
     app,
     settings,
 )
@@ -238,19 +238,26 @@ class TestRenderQualifyingHtml:
 
 
 # ---------------------------------------------------------------------------
-# _render_and_cache_blank_message
+# _render_and_cache_message_pages
 # ---------------------------------------------------------------------------
-class TestRenderAndCacheBlankMessage:
+class TestRenderAndCacheMessagePages:
     def setup_method(self):
         _content_cache.clear()
 
-    def test_caches_current_settings_message(self):
-        old_msg = settings.get('blank_message', '')
-        settings['blank_message'] = '# Hello'
+    def test_caches_current_settings_pages(self):
+        old_pages = settings.get('message_pages', [])
+        settings['message_pages'] = [
+            {'text': '# Hello', 'align': 'left', 'enabled': True},
+            {'text': '## World', 'align': 'center', 'enabled': False},
+        ]
         try:
-            key = _render_and_cache_blank_message()
-            cached_key, html = _cache_get('blank_message')
-            assert cached_key == key
-            assert '<h1>Hello</h1>' in html
+            keys = _render_and_cache_message_pages()
+            assert len(keys) == 2
+            cached_key_0, html_0 = _cache_get('message_page_0')
+            assert cached_key_0 == keys[0]
+            assert '<h1>Hello</h1>' in html_0
+            cached_key_1, html_1 = _cache_get('message_page_1')
+            assert cached_key_1 == keys[1]
+            assert '<h2>World</h2>' in html_1
         finally:
-            settings['blank_message'] = old_msg
+            settings['message_pages'] = old_pages
