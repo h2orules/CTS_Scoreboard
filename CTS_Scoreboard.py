@@ -1193,7 +1193,19 @@ def route_settings():
                     settings[k]=val
                     modified = True
         
-        # Handle checkbox fields (not present in form when unchecked)
+        # Handle combined display options form
+        if 'display_options_form' in flask.request.form:
+            new_seed = flask.request.form.get('seed_time_label', 'Seed Time')
+            if settings.get('seed_time_label') != new_seed:
+                settings['seed_time_label'] = new_seed
+                modified = True
+            for opt_key in ('show_pr_tags', 'show_confetti', 'show_time_decorations'):
+                new_val = opt_key in flask.request.form
+                if settings.get(opt_key) != new_val:
+                    settings[opt_key] = new_val
+                    modified = True
+
+        # Handle legacy individual checkbox forms (backwards compat)
         if 'show_pr_tags_form' in flask.request.form:
             new_val = 'show_pr_tags' in flask.request.form
             if settings.get('show_pr_tags') != new_val:
