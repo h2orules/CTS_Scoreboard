@@ -138,74 +138,42 @@
         <div class="row">
             <div class="col-lg-6">
                 <form action="/settings" method="POST">
-                    <div class="input-group">
+                    <input type="hidden" name="display_options_form" value="1">
+                    <div class="form-group" style="margin-bottom:10px;">
                         <label for="seed_time_label">Seed Time Display</label>
-                        <div class="input-group">
-                            <select id="seed_time_label" name="seed_time_label" class="form-control"
-                                oninput="document.getElementById('seed_time_label_submit').disabled=false;">
-                                {% for code, label in [('Seed Time', 'Show as "Seed Time"'), ('Entry Time', 'Show as "Entry Time"'), ('None', 'Do not show seed times')] %}
-                                {% if code == seed_time_label %}
-                                <option value="{{code}}" selected>{{label}}</option>
-                                {% else %}
-                                <option value="{{code}}">{{label}}</option>
-                                {% endif %}
-                                {% endfor %}
-                            </select>
-                            <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="seed_time_label_submit" disabled>Update</button>
-                            </span>
-                        </div>
+                        <select id="seed_time_label" name="seed_time_label" class="form-control">
+                            {% for code, label in [('Seed Time', 'Show as "Seed Time"'), ('Entry Time', 'Show as "Entry Time"'), ('None', 'Do not show seed times')] %}
+                            {% if code == seed_time_label %}
+                            <option value="{{code}}" selected>{{label}}</option>
+                            {% else %}
+                            <option value="{{code}}">{{label}}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
                     </div>
-                </form>
-            </div>
-        </div>
-        <div class="row">
-            <div class="col-lg-6">
-                <form action="/settings" method="POST">
-                    <input type="hidden" name="show_pr_tags_form" value="1">
-                    <div class="input-group">
-                        <label>
-                            <input type="checkbox" name="show_pr_tags" value="1" {% if show_pr_tags %}checked{% endif %}
-                                onchange="document.getElementById('show_pr_tags_submit').disabled=false;">
-                            Show PR (Personal Record) tags
+                    <div class="form-group" style="margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+                        <label class="toggle-switch" title="Show PR tags">
+                            <input type="checkbox" name="show_pr_tags" value="1" {% if show_pr_tags %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
                         </label>
-                        <span class="input-group-btn">
-                            <button class="btn btn-default" type="submit" id="show_pr_tags_submit" disabled>Update</button>
-                        </span>
+                        <span>Show PR (Personal Record) tags</span>
                     </div>
-                </form>
-            </div>
-        </div>
-        <div class="row">
-            <div class="col-lg-6">
-                <form action="/settings" method="POST">
-                    <input type="hidden" name="show_confetti_form" value="1">
-                    <div class="input-group">
-                        <label>
-                            <input type="checkbox" name="show_confetti" value="1" {% if show_confetti %}checked{% endif %}
-                                onchange="document.getElementById('show_confetti_submit').disabled=false;">
-                            Show confetti for time qualifications
+                    <div class="form-group" style="margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+                        <label class="toggle-switch" title="Show confetti">
+                            <input type="checkbox" name="show_confetti" value="1" {% if show_confetti %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
                         </label>
-                        <span class="input-group-btn">
-                            <button class="btn btn-default" type="submit" id="show_confetti_submit" disabled>Update</button>
-                        </span>
+                        <span>Show confetti for time qualifications</span>
                     </div>
-                </form>
-            </div>
-        </div>
-        <div class="row">
-            <div class="col-lg-6">
-                <form action="/settings" method="POST">
-                    <input type="hidden" name="show_time_decorations_form" value="1">
-                    <div class="input-group">
-                        <label>
-                            <input type="checkbox" name="show_time_decorations" value="1" {% if show_time_decorations %}checked{% endif %}
-                                onchange="document.getElementById('show_time_decorations_submit').disabled=false;">
-                            Show time decorations (underline/wavy for PR, standards, records)
+                    <div class="form-group" style="margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+                        <label class="toggle-switch" title="Show time decorations">
+                            <input type="checkbox" name="show_time_decorations" value="1" {% if show_time_decorations %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
                         </label>
-                        <span class="input-group-btn">
-                            <button class="btn btn-default" type="submit" id="show_time_decorations_submit" disabled>Update</button>
-                        </span>
+                        <span>Show time decorations (underline/wavy for PR, standards, records)</span>
+                    </div>
+                    <div class="form-group">
+                        <button class="btn btn-default" type="submit">Update</button>
                     </div>
                 </form>
             </div>
@@ -215,24 +183,6 @@
         <div class="row">
             <div class="col-lg-8">
                 <style>
-                    .bm-details>summary::-webkit-details-marker {
-                        display: none;
-                    }
-        
-                    .bm-details>summary {
-                        user-select: none;
-                    }
-        
-                    .bm-details .bm-chevron {
-                        display: inline-block;
-                        transition: transform 0.15s ease;
-                        margin-right: 6px;
-                    }
-        
-                    .bm-details[open]>summary .bm-chevron {
-                        transform: rotate(90deg);
-                    }
-        
                     .bm-md-legend {
                         display: block;
                         margin-top: 4px;
@@ -446,12 +396,7 @@
                         gap: 6px;
                     }
                 </style>
-                <details {% if message_overlay_enabled %}open{% endif %} class="bm-details" style="margin-bottom:15px;">
-                    <summary style="cursor:pointer;font-weight:bold;list-style:none;">
-                        <span class="bm-chevron" aria-hidden="true">&#9656;</span>
-                        Message Overlay
-                    </summary>
-                    <form id="message_pages_form" action="/settings" method="POST" style="margin-top:10px;">
+                    <form id="message_pages_form" action="/settings" method="POST">
                         <input type="hidden" name="message_pages_form" value="1">
                         <input type="hidden" name="page_count" id="page_count" value="{{ message_pages | length }}">
                         <div class="form-group" style="margin-bottom:10px;display:flex;align-items:center;gap:8px;">
@@ -573,7 +518,6 @@
                             <button class="btn btn-default" type="submit">Update</button>
                         </div>
                     </form>
-                </details>
                 <script>
                     (function () {
                         var pageCount = {{ message_pages | length
