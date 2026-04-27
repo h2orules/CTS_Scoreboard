@@ -47,7 +47,7 @@ body {
     padding: 0 30px;
 }
 
-.qualifying_time_row td {
+table.scoreboard_table .qualifying_time_row td {
     font-family: 'Overpass Mono', monospace;
     color: #333333;
     font-size: 24px;
