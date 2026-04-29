@@ -826,23 +826,15 @@
                             <button class="btn btn-default" type="submit">Update</button>
                         </div>
                     </form>
+                <script src="/static/js/msg_formatting.js"></script>
                 <script>
                     (function () {
                         var pageCount = {{ message_pages | length
                     }};
                     var activeTab = 0;
 
-                    function visibleLen(line) {
-                        var s = line
-                            .replace(/^\s*#{1,4}\s+/, '')
-                            .replace(/^\s*(\d+\.|[-\*])\s+/, '')
-                            .replace(/`([^`\n]+)`/g, '$1')
-                            .replace(/\*\*([^\*\n]+)\*\*/g, '$1')
-                            .replace(/~~([^~\n]+)~~/g, '$1')
-                            .replace(/(^|[^\*])\*([^\*\n]+)\*(?!\*)/g, '$1$2')
-                            .replace(/(^|[^_])_([^_\n]+)_(?!_)/g, '$1$2');
-                        return s.length;
-                    }
+                    var visibleLen = MsgFmt.visibleLen;
+
                     function enforce(ta) {
                         var lines = ta.value.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
                         var changed = false;
@@ -869,364 +861,27 @@
                         btn.classList.add('active');
                     };
 
-                    // ── Markdown formatting toolbar ──────────────────────────
+                    // ── Markdown formatting toolbar (delegated to MsgFmt module) ──
 
-                    var FMT = {
-                        bold:      { wrap: ['**', '**'] },
-                        italic:    { wrap: ['*', '*'] },
-                        underline: { wrap: ['_', '_'] },
-                        strike:    { wrap: ['~~', '~~'] },
-                        code:      { wrap: ['`', '`'] },
-                        ul:        { prefix: '- ' },
-                        ol:        { prefix: '1. ' }
-                    };
+                    var FMT = MsgFmt.FMT;
 
                     function _getTA(idx) {
                         return document.querySelector('#msg_panel_' + idx + ' textarea');
                     }
 
-                    function _getCurrentLine(ta) {
-                        var val = ta.value;
-                        var pos = ta.selectionStart;
-                        var lineStart = val.lastIndexOf('\n', pos - 1) + 1;
-                        var lineEnd = val.indexOf('\n', pos);
-                        if (lineEnd === -1) lineEnd = val.length;
-                        return { start: lineStart, end: lineEnd, text: val.substring(lineStart, lineEnd) };
-                    }
-
-                    function _getSelectedLines(ta) {
-                        var val = ta.value;
-                        var ss = ta.selectionStart, se = ta.selectionEnd;
-                        var lineStart = val.lastIndexOf('\n', ss - 1) + 1;
-                        var lineEnd = val.indexOf('\n', se - 1);
-                        if (lineEnd === -1 || lineEnd < se) lineEnd = val.indexOf('\n', se);
-                        if (lineEnd === -1) lineEnd = val.length;
-                        return { start: lineStart, end: lineEnd, text: val.substring(lineStart, lineEnd) };
-                    }
-
-                    function _detectHeading(lineText) {
-                        var m = lineText.match(/^(#{1,4})\s/);
-                        return m ? m[1].length : 0;
-                    }
-
-                    // Detect all active inline formats at the cursor position.
-                    // Scans the current line character-by-character so that
-                    // nested / combined markers like _*~~**`text`**~~*_ work.
-                    function _detectFormats(ta) {
-                        var result = { bold: false, italic: false, underline: false, strike: false, code: false };
-                        var line = _getCurrentLine(ta);
-                        var lt = line.text;
-                        var cp = ta.selectionStart - line.start;
-                        if (cp < 0) cp = 0;
-                        if (cp > lt.length) cp = lt.length;
-
-                        // Step 1 — scan left of cursor to find which formats are open
-                        var state = { bold: false, italic: false, underline: false, strike: false, code: false };
-                        var pos = 0;
-                        while (pos < cp) {
-                            if (lt[pos] === '`') {
-                                state.code = !state.code;
-                                pos++;
-                            } else if (state.code) {
-                                pos++;                       // inside code, skip
-                            } else if (pos + 1 < cp && lt[pos] === '~' && lt[pos + 1] === '~') {
-                                state.strike = !state.strike;
-                                pos += 2;
-                            } else if (lt[pos] === '*') {
-                                var ss = pos;
-                                while (pos < cp && lt[pos] === '*') pos++;
-                                var n = pos - ss;
-                                if (Math.floor(n / 2) % 2 === 1) state.bold = !state.bold;
-                                if (n % 2 === 1) state.italic = !state.italic;
-                            } else if (lt[pos] === '_') {
-                                state.underline = !state.underline;
-                                pos++;
-                            } else {
-                                pos++;
-                            }
-                        }
-
-                        // Step 2 — verify each open format has a closing marker on the right
-                        var right = lt.substring(cp);
-
-                        if (state.code) {
-                            var bi = right.indexOf('`');
-                            if (bi >= 0) {
-                                result.code = true;
-                                // other closing markers live after the closing backtick
-                                var after = right.substring(bi + 1);
-                                if (state.bold)      result.bold      = after.indexOf('**') >= 0;
-                                if (state.italic)    { var s = after.replace(/\*\*/g, ''); result.italic = s.indexOf('*') >= 0; }
-                                if (state.strike)    result.strike    = after.indexOf('~~') >= 0;
-                                if (state.underline) result.underline = after.indexOf('_') >= 0;
-                            }
-                        } else {
-                            // blank out code-span interiors so markers inside `…` are ignored
-                            var clean = right.replace(/`[^`]*`/g, function (m) {
-                                return '`' + ' '.repeat(Math.max(0, m.length - 2)) + '`';
-                            });
-                            if (state.bold)      result.bold      = clean.indexOf('**') >= 0;
-                            if (state.italic)    { var s = clean.replace(/\*\*/g, ''); result.italic = s.indexOf('*') >= 0; }
-                            if (state.strike)    result.strike    = clean.indexOf('~~') >= 0;
-                            if (state.underline) result.underline = clean.indexOf('_') >= 0;
-                        }
-
-                        return result;
-                    }
-
-                    function _detectPrefix(ta, prefix) {
-                        var line = _getCurrentLine(ta);
-                        return line.text.indexOf(prefix) === 0 || /^\s*/.exec(line.text)[0].length + prefix.length <= line.text.length && line.text.trimStart().indexOf(prefix) === 0;
-                    }
+                    var _getCurrentLine = MsgFmt.getCurrentLine;
+                    var _detectHeading  = MsgFmt.detectHeading;
+                    var _detectFormats  = MsgFmt.detectFormats;
+                    var _detectPrefix   = MsgFmt.detectPrefix;
 
                     window.fmtToggle = function(idx, fmt) {
                         var ta = _getTA(idx);
                         if (!ta) return;
-                        var def = FMT[fmt];
                         ta.focus();
-
-                        if (def.wrap) {
-                            _toggleWrap(ta, def.wrap);
-                        } else if (def.prefix) {
-                            _togglePrefix(ta, def.prefix, fmt);
-                        }
+                        MsgFmt.fmtToggle(ta, fmt);
                         enforce(ta);
                         fmtUpdateToolbar(idx);
                     };
-
-                    function _toggleWrap(ta, wrapDef) {
-                        var open = wrapDef[0], close = wrapDef[1];
-                        var ss = ta.selectionStart, se = ta.selectionEnd;
-                        var val = ta.value;
-                        var line = _getCurrentLine(ta);
-
-                        if (ss === se) {
-                            // Collapsed cursor — use _detectFormats to check if active
-                            var fmts = _detectFormats(ta);
-                            var fmtName = open === '**' ? 'bold' : open === '*' ? 'italic'
-                                        : open === '_' ? 'underline' : open === '~~' ? 'strike' : 'code';
-                            if (fmts[fmtName]) {
-                                // Remove: find & delete the innermost matching marker pair
-                                _removeMarkerPair(ta, open, close, line);
-                            } else {
-                                // Insert empty markers at cursor
-                                ta.value = val.substring(0, ss) + open + close + val.substring(ss);
-                                ta.selectionStart = ta.selectionEnd = ss + open.length;
-                            }
-                            return;
-                        }
-
-                        // Has selection — scan outward from selection edges to find marker
-                        var found = _findMarkerPair(val, ss, se, open, close, line);
-                        if (found) {
-                            if (found.removeCount !== undefined) {
-                                // Star markers: subtract removeCount from each star run
-                                var newLeftStars = found.leftStars - found.removeCount;
-                                var newRightStars = found.rightStars - found.removeCount;
-                                var content = val.substring(found.openEnd, found.closeStart);
-                                ta.value = val.substring(0, found.openStart) +
-                                    '*'.repeat(Math.max(0, newLeftStars)) + content +
-                                    '*'.repeat(Math.max(0, newRightStars)) + val.substring(found.closeEnd);
-                                var shift = found.leftStars - Math.max(0, newLeftStars);
-                                ta.selectionStart = ss - shift;
-                                ta.selectionEnd = se - shift;
-                            } else {
-                                // Non-star: remove entire marker
-                                var before = val.substring(0, found.openStart);
-                                var mid = val.substring(found.openEnd, found.closeStart);
-                                var after = val.substring(found.closeEnd);
-                                ta.value = before + mid + after;
-                                ta.selectionStart = ss - (found.openEnd - found.openStart);
-                                ta.selectionEnd = se - (found.openEnd - found.openStart);
-                            }
-                        } else {
-                            // Add wrapping immediately around selection
-                            var sel = val.substring(ss, se);
-                            ta.value = val.substring(0, ss) + open + sel + close + val.substring(se);
-                            ta.selectionStart = ss + open.length;
-                            ta.selectionEnd = se + open.length;
-                        }
-                    }
-
-                    // Find a matching open/close marker pair that surrounds the selection.
-                    // Scans outward from selection edges, skipping over other markers.
-                    function _findMarkerPair(val, ss, se, open, close, line) {
-                        var lineStart = line.start;
-                        var lineEnd = line.end;
-
-                        if (open[0] === '*') {
-                            return _findStarMarkerPair(val, ss, se, open.length, lineStart, lineEnd);
-                        }
-
-                        // Non-star: scan left from selection start for opening marker
-                        var left = ss;
-                        while (left >= lineStart + open.length) {
-                            if (val.substring(left - open.length, left) === open) {
-                                // Verify it's not escaped or part of a longer same-char run
-                                break;
-                            }
-                            left--;
-                        }
-                        var openStart = left - open.length;
-                        if (openStart < lineStart) return null;
-
-                        // Scan right from selection end for closing marker
-                        var right = se;
-                        while (right + close.length <= lineEnd) {
-                            if (val.substring(right, right + close.length) === close) {
-                                break;
-                            }
-                            right++;
-                        }
-                        if (right + close.length > lineEnd) return null;
-
-                        return {
-                            openStart: openStart,
-                            openEnd: openStart + open.length,
-                            closeStart: right,
-                            closeEnd: right + close.length
-                        };
-                    }
-
-                    function _findStarMarkerPair(val, ss, se, starCount, lineStart, lineEnd) {
-                        // Scan left: find star run that ends at or before ss
-                        var left = ss;
-                        while (left > lineStart && val[left - 1] !== '*') left--;
-                        // left now points to char after the non-star (or lineStart)
-                        var starEnd = left;
-                        while (left > lineStart && val[left - 1] === '*') left--;
-                        var leftStars = starEnd - left;
-
-                        // Scan right: find star run that starts at or after se
-                        var right = se;
-                        while (right < lineEnd && val[right] !== '*') right++;
-                        var rightStarStart = right;
-                        while (right < lineEnd && val[right] === '*') right++;
-                        var rightStars = right - rightStarStart;
-
-                        var minS = Math.min(leftStars, rightStars);
-                        var isActive = (starCount === 2) ? minS >= 2 : minS % 2 === 1;
-                        if (!isActive || leftStars === 0 || rightStars === 0) return null;
-
-                        // Calculate which stars to remove
-                        if (starCount === 2) {
-                            // Bold: remove 2 from each side (outermost of the run for this pair)
-                            return {
-                                openStart: left,
-                                openEnd: left + leftStars,
-                                closeStart: rightStarStart,
-                                closeEnd: rightStarStart + rightStars,
-                                leftStars: leftStars,
-                                rightStars: rightStars,
-                                removeCount: 2
-                            };
-                        } else {
-                            // Italic: remove 1 from each side
-                            return {
-                                openStart: left,
-                                openEnd: left + leftStars,
-                                closeStart: rightStarStart,
-                                closeEnd: rightStarStart + rightStars,
-                                leftStars: leftStars,
-                                rightStars: rightStars,
-                                removeCount: 1
-                            };
-                        }
-                    }
-
-                    // Remove the innermost matching marker pair around the cursor
-                    function _removeMarkerPair(ta, open, close, line) {
-                        var val = ta.value;
-                        var ss = ta.selectionStart;
-                        var cp = ss - line.start;
-                        var lt = line.text;
-
-                        if (open[0] === '*') {
-                            var starCount = open.length;
-                            // Find enclosing stars by scanning outward from cursor
-                            var contentLeft = cp;
-                            while (contentLeft > 0 && lt[contentLeft - 1] !== '*') contentLeft--;
-                            var starLeft = contentLeft;
-                            while (starLeft > 0 && lt[starLeft - 1] === '*') starLeft--;
-                            var leftCount = contentLeft - starLeft;
-
-                            var contentRight = cp;
-                            while (contentRight < lt.length && lt[contentRight] !== '*') contentRight++;
-                            var starRight = contentRight;
-                            while (starRight < lt.length && lt[starRight] === '*') starRight++;
-                            var rightCount = starRight - contentRight;
-
-                            if (leftCount >= starCount && rightCount >= starCount) {
-                                var lS = line.start + starLeft;
-                                var rE = line.start + starRight;
-                                var nL = leftCount - starCount;
-                                var nR = rightCount - starCount;
-                                var inner = val.substring(line.start + contentLeft, line.start + contentRight);
-                                ta.value = val.substring(0, lS) +
-                                    '*'.repeat(Math.max(0, nL)) + inner +
-                                    '*'.repeat(Math.max(0, nR)) + val.substring(rE);
-                                ta.selectionStart = ta.selectionEnd = lS + Math.max(0, nL) + (cp - contentLeft);
-                            }
-                            return;
-                        }
-
-                        // Non-star: find innermost pair by scanning outward from cursor
-                        var leftPos = cp - 1;
-                        while (leftPos >= 0) {
-                            if (lt.substring(leftPos, leftPos + open.length) === open) break;
-                            leftPos--;
-                        }
-                        if (leftPos < 0) return;
-
-                        var rightPos = cp;
-                        while (rightPos + close.length <= lt.length) {
-                            if (lt.substring(rightPos, rightPos + close.length) === close) break;
-                            rightPos++;
-                        }
-                        if (rightPos + close.length > lt.length) return;
-
-                        var mStart = line.start + leftPos;
-                        var mEnd = line.start + rightPos + close.length;
-                        var inner = val.substring(mStart + open.length, line.start + rightPos);
-                        ta.value = val.substring(0, mStart) + inner + val.substring(mEnd);
-                        ta.selectionStart = ta.selectionEnd = ss - open.length;
-                    }
-
-                    function _toggleStarWrap(ta, starCount) {
-                        return _toggleWrap(ta, ['*'.repeat(starCount), '*'.repeat(starCount)]);
-                    }
-
-                    function _togglePrefix(ta, prefix, fmt) {
-                        var info = _getSelectedLines(ta);
-                        var val = ta.value;
-                        var lines = info.text.split('\n');
-                        var allHavePrefix = lines.every(function(l) {
-                            var stripped = l.replace(/^\s*/, '');
-                            return stripped.indexOf(prefix) === 0 || (fmt === 'ol' && /^\s*\d+\.\s/.test(l));
-                        });
-                        var newLines;
-                        if (allHavePrefix) {
-                            // Remove prefix
-                            newLines = lines.map(function(l) {
-                                if (fmt === 'ol') return l.replace(/^\s*\d+\.\s/, '');
-                                return l.replace(new RegExp('^(\\s*)' + prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), '$1');
-                            });
-                        } else {
-                            // Add prefix
-                            newLines = lines.map(function(l, i) {
-                                var indent = /^(\s*)/.exec(l)[1];
-                                var content = l.substring(indent.length);
-                                // Remove existing list prefix if switching types
-                                content = content.replace(/^(\d+\.\s|[-*]\s)/, '');
-                                if (fmt === 'ol') return indent + (i + 1) + '. ' + content;
-                                return indent + prefix + content;
-                            });
-                        }
-                        var result = newLines.join('\n');
-                        ta.value = val.substring(0, info.start) + result + val.substring(info.end);
-                        ta.selectionStart = info.start;
-                        ta.selectionEnd = info.start + result.length;
-                    }
 
                     // ── Heading dropdown ──────────────────────────────────────
 
@@ -1261,14 +916,7 @@
                         var ta = _getTA(idx);
                         if (!ta) return;
                         ta.focus();
-                        var line = _getCurrentLine(ta);
-                        var val = ta.value;
-                        var lineText = line.text;
-                        // Remove existing heading prefix
-                        var stripped = lineText.replace(/^#{1,4}\s+/, '');
-                        var newLine = level > 0 ? ('#'.repeat(level) + ' ' + stripped) : stripped;
-                        ta.value = val.substring(0, line.start) + newLine + val.substring(line.end);
-                        ta.selectionStart = ta.selectionEnd = line.start + newLine.length;
+                        MsgFmt.setHeading(ta, level);
                         enforce(ta);
                         // Close menu and update toolbar
                         document.getElementById('fmt_heading_menu_' + idx).classList.remove('open');
