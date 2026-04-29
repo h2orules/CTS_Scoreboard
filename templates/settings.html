@@ -454,7 +454,7 @@
                     }
         
                     .justify-btn {
-                        padding: 4px 8px;
+                        padding: 3px 7px;
                         cursor: pointer;
                         background: #f5f5f5;
                         border: none;
@@ -462,6 +462,11 @@
                         line-height: 1;
                         font-size: 16px;
                         color: #555;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        min-width: 28px;
+                        height: 28px;
                         transition: background 0.15s, color 0.15s;
                     }
         
@@ -612,6 +617,52 @@
                     .fmt-heading-option[data-level="2"] { font-size: 17px; font-weight: bold; }
                     .fmt-heading-option[data-level="3"] { font-size: 15px; font-weight: bold; }
                     .fmt-heading-option[data-level="4"] { font-size: 13px; font-weight: bold; }
+
+                    /* Markdown legend tooltip */
+                    .md-legend-wrap {
+                        position: relative;
+                        display: inline-block;
+                        cursor: default;
+                    }
+                    .md-legend-trigger {
+                        font-size: 0.8em;
+                        color: #888;
+                        border-bottom: 1px dashed #aaa;
+                        user-select: none;
+                    }
+                    .md-legend-popup {
+                        display: none;
+                        position: absolute;
+                        bottom: 100%;
+                        left: 0;
+                        margin-bottom: 6px;
+                        background: #fff;
+                        border: 1px solid #ccc;
+                        border-radius: 6px;
+                        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+                        padding: 10px 14px;
+                        z-index: 200;
+                        min-width: 260px;
+                        font-size: 12px;
+                        line-height: 1.6;
+                        white-space: nowrap;
+                        color: #333;
+                    }
+                    .md-legend-wrap:hover .md-legend-popup { display: block; }
+                    .md-legend-popup table { border-collapse: collapse; width: 100%; }
+                    .md-legend-popup td { padding: 1px 6px; vertical-align: top; }
+                    .md-legend-popup td:first-child {
+                        font-family: 'Overpass Mono', monospace;
+                        color: #666;
+                        white-space: nowrap;
+                    }
+                    .md-legend-popup td:last-child { color: #333; }
+                    .md-legend-popup .legend-title {
+                        font-weight: 600;
+                        margin-bottom: 4px;
+                        font-size: 12px;
+                        color: #555;
+                    }
                 </style>
                     <form id="message_pages_form" action="/settings" method="POST">
                         <input type="hidden" name="message_pages_form" value="1">
@@ -651,8 +702,29 @@
                                 <div class="form-group">
                                     <div class="msg-toolbar">
                                         <div class="msg-toolbar-top">
-                                            <label style="margin:0;font-size:0.85em;color:#666;">Message (max 10 lines &times;
-                                                60 visible chars)</label>
+                                            <div style="display:flex;align-items:center;gap:8px;">
+                                                <label style="margin:0;font-size:0.85em;color:#666;">Message (max 10 lines &times;
+                                                    60 visible chars)</label>
+                                                <span class="md-legend-wrap">
+                                                    <span class="md-legend-trigger">Markdown&nbsp;Legend</span>
+                                                    <div class="md-legend-popup">
+                                                        <div class="legend-title">Supported Markdown</div>
+                                                        <table>
+                                                            <tr><td>**text**</td><td><strong>Bold</strong></td></tr>
+                                                            <tr><td>*text*</td><td><em>Italic</em></td></tr>
+                                                            <tr><td>_text_</td><td><u>Underline</u></td></tr>
+                                                            <tr><td>~~text~~</td><td><s>Strikethrough</s></td></tr>
+                                                            <tr><td>`text`</td><td><code>Code</code></td></tr>
+                                                            <tr><td># Heading</td><td>Heading 1</td></tr>
+                                                            <tr><td>## Heading</td><td>Heading 2</td></tr>
+                                                            <tr><td>### Heading</td><td>Heading 3</td></tr>
+                                                            <tr><td>#### Heading</td><td>Heading 4</td></tr>
+                                                            <tr><td>- item</td><td>Bulleted list</td></tr>
+                                                            <tr><td>1. item</td><td>Numbered list</td></tr>
+                                                        </table>
+                                                    </div>
+                                                </span>
+                                            </div>
                                             <div class="msg-toolbar-right">
                                                 <span style="font-size:0.85em;color:#666;">Enabled</span>
                                                 <label class="toggle-switch" title="Enable this page">
