@@ -12,13 +12,13 @@
     /* ── Format definitions ────────────────────────────────────── */
 
     var FMT = {
-        bold:      { wrap: ['**', '**'] },
-        italic:    { wrap: ['*', '*'] },
+        bold: { wrap: ['**', '**'] },
+        italic: { wrap: ['*', '*'] },
         underline: { wrap: ['_', '_'] },
-        strike:    { wrap: ['~~', '~~'] },
-        code:      { wrap: ['`', '`'] },
-        ul:        { prefix: '- ' },
-        ol:        { prefix: '1. ' }
+        strike: { wrap: ['~~', '~~'] },
+        code: { wrap: ['`', '`'] },
+        ul: { prefix: '- ' },
+        ol: { prefix: '1. ' }
     };
 
     /* ── Visible-length calculation ────────────────────────────── */
@@ -105,18 +105,18 @@
             if (bi >= 0) {
                 result.code = true;
                 var after = right.substring(bi + 1);
-                if (state.bold)      result.bold      = after.indexOf('**') >= 0;
-                if (state.italic)    { var s = after.replace(/\*\*/g, ''); result.italic = s.indexOf('*') >= 0; }
-                if (state.strike)    result.strike    = after.indexOf('~~') >= 0;
+                if (state.bold) result.bold = after.indexOf('**') >= 0;
+                if (state.italic) { var s = after.replace(/\*\*/g, ''); result.italic = s.indexOf('*') >= 0; }
+                if (state.strike) result.strike = after.indexOf('~~') >= 0;
                 if (state.underline) result.underline = after.indexOf('_') >= 0;
             }
         } else {
             var clean = right.replace(/`[^`]*`/g, function (m) {
                 return '`' + ' '.repeat(Math.max(0, m.length - 2)) + '`';
             });
-            if (state.bold)      result.bold      = clean.indexOf('**') >= 0;
-            if (state.italic)    { var s = clean.replace(/\*\*/g, ''); result.italic = s.indexOf('*') >= 0; }
-            if (state.strike)    result.strike    = clean.indexOf('~~') >= 0;
+            if (state.bold) result.bold = clean.indexOf('**') >= 0;
+            if (state.italic) { var s = clean.replace(/\*\*/g, ''); result.italic = s.indexOf('*') >= 0; }
+            if (state.strike) result.strike = clean.indexOf('~~') >= 0;
             if (state.underline) result.underline = clean.indexOf('_') >= 0;
         }
 
@@ -263,7 +263,7 @@
         if (ss === se) {
             var fmts = detectFormats(ta);
             var fmtName = open === '**' ? 'bold' : open === '*' ? 'italic'
-                        : open === '_' ? 'underline' : open === '~~' ? 'strike' : 'code';
+                : open === '_' ? 'underline' : open === '~~' ? 'strike' : 'code';
             if (fmts[fmtName]) {
                 removeMarkerPair(ta, open, close, line);
             } else {
@@ -307,18 +307,18 @@
         var info = getSelectedLines(ta);
         var val = ta.value;
         var lines = info.text.split('\n');
-        var allHavePrefix = lines.every(function(l) {
+        var allHavePrefix = lines.every(function (l) {
             var stripped = l.replace(/^\s*/, '');
             return stripped.indexOf(prefix) === 0 || (fmt === 'ol' && /^\s*\d+\.\s/.test(l));
         });
         var newLines;
         if (allHavePrefix) {
-            newLines = lines.map(function(l) {
+            newLines = lines.map(function (l) {
                 if (fmt === 'ol') return l.replace(/^\s*\d+\.\s/, '');
                 return l.replace(new RegExp('^(\\s*)' + prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), '$1');
             });
         } else {
-            newLines = lines.map(function(l, i) {
+            newLines = lines.map(function (l, i) {
                 var indent = /^(\s*)/.exec(l)[1];
                 var content = l.substring(indent.length);
                 content = content.replace(/^(\d+\.\s|[-*]\s)/, '');
@@ -357,19 +357,19 @@
 
     /* ── Exports ───────────────────────────────────────────────── */
 
-    exports.FMT            = FMT;
-    exports.visibleLen      = visibleLen;
-    exports.getCurrentLine  = getCurrentLine;
+    exports.FMT = FMT;
+    exports.visibleLen = visibleLen;
+    exports.getCurrentLine = getCurrentLine;
     exports.getSelectedLines = getSelectedLines;
-    exports.detectHeading   = detectHeading;
-    exports.detectFormats   = detectFormats;
-    exports.detectPrefix    = detectPrefix;
-    exports.findMarkerPair  = findMarkerPair;
+    exports.detectHeading = detectHeading;
+    exports.detectFormats = detectFormats;
+    exports.detectPrefix = detectPrefix;
+    exports.findMarkerPair = findMarkerPair;
     exports.findStarMarkerPair = findStarMarkerPair;
     exports.removeMarkerPair = removeMarkerPair;
-    exports.toggleWrap      = toggleWrap;
-    exports.togglePrefix    = togglePrefix;
-    exports.setHeading      = setHeading;
-    exports.fmtToggle       = fmtToggle;
+    exports.toggleWrap = toggleWrap;
+    exports.togglePrefix = togglePrefix;
+    exports.setHeading = setHeading;
+    exports.fmtToggle = fmtToggle;
 
 })(typeof exports !== 'undefined' ? exports : (this.MsgFmt = {}));
