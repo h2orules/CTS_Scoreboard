@@ -325,7 +325,7 @@
                     .msg-tab-bar {
                         display: flex;
                         gap: 4px;
-                        margin-bottom: 8px;
+                        margin-bottom: 0;
                         align-items: center;
                     }
         
@@ -381,7 +381,8 @@
                         cursor: pointer;
                         background: none;
                         border: 1px dashed #aaa;
-                        border-radius: 4px;
+                        border-bottom: none;
+                        border-radius: 4px 4px 0 0;
                         font-size: 0.9em;
                         color: #666;
                     }
@@ -1459,11 +1460,20 @@
                 </form>
             </div>
         </div>
-        <div class="row" style="margin-top: 20px;">
-            <div class="col-md-4">
-                <button class="btn btn-danger" type="button" onclick="document.getElementById('shutdown-overlay').style.display='flex';">Stop Server</button>
+
+        <h3 style="color:#a94442;">Danger Zone</h3>
+        <div class="row">
+            <div class="col-lg-6">
+                <div style="border:1px solid #ebccd1;border-radius:4px;padding:12px 16px;background:#fff;">
+                    <p style="margin:0 0 8px;font-size:13px;color:#8a6d3b;">
+                        <strong>Warning:</strong> Only advanced users who know how to maintain the Raspberry Pi should use this.
+                        Stopping the server will require manual intervention to restart it.
+                    </p>
+                    <button class="btn btn-danger" type="button" onclick="document.getElementById('shutdown-overlay').style.display='flex';">Stop Server</button>
+                </div>
             </div>
         </div>
+        <div style="height:32px;"></div>
     </div>
 
     <!-- Shutdown confirmation overlay -->
