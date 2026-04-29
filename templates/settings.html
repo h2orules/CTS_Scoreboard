@@ -322,36 +322,6 @@
         <div class="row">
             <div class="col-lg-8">
                 <style>
-                    .bm-md-legend {
-                        display: block;
-                        margin-top: 4px;
-                        font-size: 0.8em;
-                        color: #666;
-                        line-height: 1.5;
-                    }
-        
-                    .bm-md-legend code {
-                        font-family: 'Overpass Mono', monospace;
-                        background: #f2f2f2;
-                        color: #555;
-                        padding: 0 2px;
-                        border-radius: 2px;
-                        font-size: 0.95em;
-                    }
-        
-                    .bm-md-legend .sep {
-                        color: #bbb;
-                        margin: 0 4px;
-                    }
-        
-                    .bm-md-legend u {
-                        text-decoration: underline;
-                    }
-        
-                    .bm-md-legend s {
-                        text-decoration: line-through;
-                    }
-        
                     .msg-tab-bar {
                         display: flex;
                         gap: 4px;
@@ -518,15 +488,27 @@
                     /* Toolbar above textarea */
                     .msg-toolbar {
                         display: flex;
+                        flex-direction: column;
+                        gap: 4px;
+                        margin-bottom: 4px;
+                    }
+
+                    .msg-toolbar-top {
+                        display: flex;
                         align-items: center;
                         justify-content: space-between;
-                        margin-bottom: 4px;
+                    }
+
+                    .msg-toolbar-bottom {
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
                     }
         
                     .msg-toolbar-left {
                         display: flex;
                         align-items: center;
-                        gap: 10px;
+                        gap: 6px;
                     }
         
                     .msg-toolbar-right {
@@ -534,6 +516,102 @@
                         align-items: center;
                         gap: 6px;
                     }
+
+                    /* Formatting button group */
+                    .fmt-btn-group {
+                        display: inline-flex;
+                        gap: 0;
+                        border: 1px solid #ccc;
+                        border-radius: 4px;
+                        overflow: hidden;
+                        vertical-align: middle;
+                    }
+
+                    .fmt-btn {
+                        padding: 3px 7px;
+                        cursor: pointer;
+                        background: #f5f5f5;
+                        border: none;
+                        border-right: 1px solid #ccc;
+                        line-height: 1;
+                        font-size: 14px;
+                        color: #555;
+                        display: inline-flex;
+                        align-items: center;
+                        justify-content: center;
+                        min-width: 28px;
+                        height: 28px;
+                        transition: background 0.15s, color 0.15s;
+                    }
+                    .fmt-btn:last-child { border-right: none; }
+                    .fmt-btn:hover { background: #e0e0e0; }
+                    .fmt-btn.active { background: #337ab7; color: #fff; }
+
+                    /* Heading dropdown */
+                    .fmt-heading-wrap {
+                        position: relative;
+                        display: inline-flex;
+                    }
+                    .fmt-heading-btn {
+                        padding: 3px 7px;
+                        cursor: pointer;
+                        background: #f5f5f5;
+                        border: 1px solid #ccc;
+                        border-radius: 4px;
+                        line-height: 1;
+                        font-size: 14px;
+                        color: #555;
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 3px;
+                        min-width: 28px;
+                        height: 28px;
+                        transition: background 0.15s, color 0.15s;
+                    }
+                    .fmt-heading-btn:hover { background: #e0e0e0; }
+                    .fmt-heading-btn.active { background: #337ab7; color: #fff; }
+                    .fmt-heading-btn .caret {
+                        display: inline-block;
+                        width: 0; height: 0;
+                        border-left: 4px solid transparent;
+                        border-right: 4px solid transparent;
+                        border-top: 4px solid currentColor;
+                        margin-left: 2px;
+                    }
+                    .fmt-heading-menu {
+                        display: none;
+                        position: absolute;
+                        top: 100%;
+                        left: 0;
+                        margin-top: 2px;
+                        background: #fff;
+                        border: 1px solid #ccc;
+                        border-radius: 4px;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+                        z-index: 100;
+                        min-width: 160px;
+                        padding: 4px 0;
+                    }
+                    .fmt-heading-menu.open { display: block; }
+                    .fmt-heading-option {
+                        display: block;
+                        width: 100%;
+                        padding: 4px 12px;
+                        border: none;
+                        background: none;
+                        text-align: left;
+                        cursor: pointer;
+                        color: #333;
+                        white-space: nowrap;
+                        transition: background 0.1s;
+                    }
+                    .fmt-heading-option:hover { background: #f0f0f0; }
+                    .fmt-heading-option.active { background: #e8f0fe; font-weight: 600; }
+                    .fmt-heading-option[data-level="0"] { font-size: 14px; }
+                    .fmt-heading-option[data-level="1"] { font-size: 20px; font-weight: bold; }
+                    .fmt-heading-option[data-level="2"] { font-size: 17px; font-weight: bold; }
+                    .fmt-heading-option[data-level="3"] { font-size: 15px; font-weight: bold; }
+                    .fmt-heading-option[data-level="4"] { font-size: 13px; font-weight: bold; }
                 </style>
                     <form id="message_pages_form" action="/settings" method="POST">
                         <input type="hidden" name="message_pages_form" value="1">
@@ -572,82 +650,101 @@
                                 %}>
                                 <div class="form-group">
                                     <div class="msg-toolbar">
-                                        <div class="msg-toolbar-left">
+                                        <div class="msg-toolbar-top">
                                             <label style="margin:0;font-size:0.85em;color:#666;">Message (max 10 lines &times;
                                                 60 visible chars)</label>
-                                            <div class="justify-btn-group" data-idx="{{ loop.index0 }}">
-                                                <button type="button"
-                                                    class="justify-btn{% if page.align=='left' %} active{% endif %}"
-                                                    data-align="left" title="Align left"
-                                                    onclick="msgSetAlign({{ loop.index0 }},'left',this);">
-                                                    <svg viewBox="0 0 16 16">
-                                                        <rect x="1" y="2" width="14" height="2" />
-                                                        <rect x="1" y="6" width="10" height="2" />
-                                                        <rect x="1" y="10" width="14" height="2" />
-                                                        <rect x="1" y="14" width="8" height="2" />
-                                                    </svg>
-                                                </button>
-                                                <button type="button"
-                                                    class="justify-btn{% if page.align=='center' %} active{% endif %}"
-                                                    data-align="center" title="Center"
-                                                    onclick="msgSetAlign({{ loop.index0 }},'center',this);">
-                                                    <svg viewBox="0 0 16 16">
-                                                        <rect x="1" y="2" width="14" height="2" />
-                                                        <rect x="3" y="6" width="10" height="2" />
-                                                        <rect x="1" y="10" width="14" height="2" />
-                                                        <rect x="4" y="14" width="8" height="2" />
-                                                    </svg>
-                                                </button>
-                                                <button type="button"
-                                                    class="justify-btn{% if page.align=='right' %} active{% endif %}"
-                                                    data-align="right" title="Align right"
-                                                    onclick="msgSetAlign({{ loop.index0 }},'right',this);">
-                                                    <svg viewBox="0 0 16 16">
-                                                        <rect x="1" y="2" width="14" height="2" />
-                                                        <rect x="5" y="6" width="10" height="2" />
-                                                        <rect x="1" y="10" width="14" height="2" />
-                                                        <rect x="7" y="14" width="8" height="2" />
-                                                    </svg>
-                                                </button>
+                                            <div class="msg-toolbar-right">
+                                                <span style="font-size:0.85em;color:#666;">Enabled</span>
+                                                <label class="toggle-switch" title="Enable this page">
+                                                    <input type="checkbox" name="page_enabled_{{ loop.index0 }}" {% if page.enabled
+                                                        %}checked{% endif %}>
+                                                    <span class="toggle-slider"></span>
+                                                </label>
                                             </div>
-                                            <input type="hidden" name="page_align_{{ loop.index0 }}"
-                                                id="page_align_{{ loop.index0 }}" value="{{ page.align }}">
                                         </div>
-                                        <div class="msg-toolbar-right">
-                                            <span style="font-size:0.85em;color:#666;">Enabled</span>
-                                            <label class="toggle-switch" title="Enable this page">
-                                                <input type="checkbox" name="page_enabled_{{ loop.index0 }}" {% if page.enabled
-                                                    %}checked{% endif %}>
-                                                <span class="toggle-slider"></span>
-                                            </label>
+                                        <div class="msg-toolbar-bottom" onmousedown="event.preventDefault()">
+                                            <div class="msg-toolbar-left">
+                                                <div class="fmt-heading-wrap" data-idx="{{ loop.index0 }}">
+                                                    <button type="button" class="fmt-heading-btn" title="Heading level"
+                                                        onclick="fmtToggleHeadingMenu({{ loop.index0 }})">
+                                                        <span class="fmt-heading-label">Normal</span><span class="caret"></span>
+                                                    </button>
+                                                    <div class="fmt-heading-menu" id="fmt_heading_menu_{{ loop.index0 }}">
+                                                        <button type="button" class="fmt-heading-option" data-level="0" onclick="fmtSetHeading({{ loop.index0 }},0)">Normal text</button>
+                                                        <button type="button" class="fmt-heading-option" data-level="1" onclick="fmtSetHeading({{ loop.index0 }},1)">Heading 1</button>
+                                                        <button type="button" class="fmt-heading-option" data-level="2" onclick="fmtSetHeading({{ loop.index0 }},2)">Heading 2</button>
+                                                        <button type="button" class="fmt-heading-option" data-level="3" onclick="fmtSetHeading({{ loop.index0 }},3)">Heading 3</button>
+                                                        <button type="button" class="fmt-heading-option" data-level="4" onclick="fmtSetHeading({{ loop.index0 }},4)">Heading 4</button>
+                                                    </div>
+                                                </div>
+                                                <div class="fmt-btn-group" data-idx="{{ loop.index0 }}">
+                                                    <button type="button" class="fmt-btn" data-fmt="bold" title="Bold"
+                                                        onclick="fmtToggle({{ loop.index0 }},'bold')"><strong>B</strong></button>
+                                                    <button type="button" class="fmt-btn" data-fmt="italic" title="Italic"
+                                                        onclick="fmtToggle({{ loop.index0 }},'italic')"><em>I</em></button>
+                                                    <button type="button" class="fmt-btn" data-fmt="underline" title="Underline"
+                                                        onclick="fmtToggle({{ loop.index0 }},'underline')"><u>U</u></button>
+                                                    <button type="button" class="fmt-btn" data-fmt="strike" title="Strikethrough"
+                                                        onclick="fmtToggle({{ loop.index0 }},'strike')"><s>S</s></button>
+                                                    <button type="button" class="fmt-btn" data-fmt="code" title="Code"
+                                                        onclick="fmtToggle({{ loop.index0 }},'code')" style="font-family:monospace;">&lt;/&gt;</button>
+                                                </div>
+                                                <div class="fmt-btn-group" data-idx="{{ loop.index0 }}">
+                                                    <button type="button" class="fmt-btn" data-fmt="ul" title="Bulleted list"
+                                                        onclick="fmtToggle({{ loop.index0 }},'ul')">
+                                                        <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><circle cx="2" cy="4" r="1.5"/><rect x="5" y="3" width="10" height="2"/><circle cx="2" cy="8" r="1.5"/><rect x="5" y="7" width="10" height="2"/><circle cx="2" cy="12" r="1.5"/><rect x="5" y="11" width="10" height="2"/></svg>
+                                                    </button>
+                                                    <button type="button" class="fmt-btn" data-fmt="ol" title="Numbered list"
+                                                        onclick="fmtToggle({{ loop.index0 }},'ol')">
+                                                        <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><text x="0" y="5.5" font-size="5" font-family="sans-serif">1.</text><rect x="5" y="3" width="10" height="2"/><text x="0" y="9.5" font-size="5" font-family="sans-serif">2.</text><rect x="5" y="7" width="10" height="2"/><text x="0" y="13.5" font-size="5" font-family="sans-serif">3.</text><rect x="5" y="11" width="10" height="2"/></svg>
+                                                    </button>
+                                                </div>
+                                                <div class="justify-btn-group" data-idx="{{ loop.index0 }}">
+                                                    <button type="button"
+                                                        class="justify-btn{% if page.align=='left' %} active{% endif %}"
+                                                        data-align="left" title="Align left"
+                                                        onclick="msgSetAlign({{ loop.index0 }},'left',this);">
+                                                        <svg viewBox="0 0 16 16">
+                                                            <rect x="1" y="2" width="14" height="2" />
+                                                            <rect x="1" y="6" width="10" height="2" />
+                                                            <rect x="1" y="10" width="14" height="2" />
+                                                            <rect x="1" y="14" width="8" height="2" />
+                                                        </svg>
+                                                    </button>
+                                                    <button type="button"
+                                                        class="justify-btn{% if page.align=='center' %} active{% endif %}"
+                                                        data-align="center" title="Center"
+                                                        onclick="msgSetAlign({{ loop.index0 }},'center',this);">
+                                                        <svg viewBox="0 0 16 16">
+                                                            <rect x="1" y="2" width="14" height="2" />
+                                                            <rect x="3" y="6" width="10" height="2" />
+                                                            <rect x="1" y="10" width="14" height="2" />
+                                                            <rect x="4" y="14" width="8" height="2" />
+                                                        </svg>
+                                                    </button>
+                                                    <button type="button"
+                                                        class="justify-btn{% if page.align=='right' %} active{% endif %}"
+                                                        data-align="right" title="Align right"
+                                                        onclick="msgSetAlign({{ loop.index0 }},'right',this);">
+                                                        <svg viewBox="0 0 16 16">
+                                                            <rect x="1" y="2" width="14" height="2" />
+                                                            <rect x="5" y="6" width="10" height="2" />
+                                                            <rect x="1" y="10" width="14" height="2" />
+                                                            <rect x="7" y="14" width="8" height="2" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                                <input type="hidden" name="page_align_{{ loop.index0 }}"
+                                                    id="page_align_{{ loop.index0 }}" value="{{ page.align }}">
+                                            </div>
                                         </div>
                                     </div>
                                     <textarea name="page_text_{{ loop.index0 }}" rows="10" cols="60" maxlength="2000"
                                         class="form-control msg-textarea" data-idx="{{ loop.index0 }}"
                                         style="font-family:'Overpass Mono',monospace;white-space:pre;overflow:auto;text-align:{{ page.align }};"
-                                        oninput="msgOnInput(this);">{{ page.text }}</textarea>
-                                    <small class="bm-md-legend">
-                                        Markdown:
-                                        <code>#</code>
-                                        <h1 style="display:inline;font-size:1em;margin:0;">Header1</h1><span
-                                            class="sep">·</span>
-                                        <code>##</code>
-                                        <h2 style="display:inline;font-size:1em;margin:0;">Header2</h2><span
-                                            class="sep">·</span>
-                                        <code>###</code>
-                                        <h3 style="display:inline;font-size:1em;margin:0;">Header3</h3><span
-                                            class="sep">·</span>
-                                        <code>####</code>
-                                        <h4 style="display:inline;font-size:1em;margin:0;">Header4</h4><span
-                                            class="sep">·</span>
-                                        <code>**</code><strong>Bold</strong><code>**</code><span class="sep">·</span>
-                                        <code>*</code><em>Italic</em><code>*</code><span class="sep">·</span>
-                                        <code>_</code><u>Underline</u><code>_</code><span class="sep">·</span>
-                                        <code>~~</code><s>Strike</s><code>~~</code><span class="sep">·</span>
-                                        <code>`</code><code>Code</code><code>`</code><span class="sep">·</span>
-                                        <code>1.</code> Numbered<span class="sep">·</span>
-                                        <code>-</code> Bulleted
-                                    </small>
+                                        oninput="msgOnInput(this);"
+                                        onkeyup="fmtUpdateToolbar({{ loop.index0 }})"
+                                        onclick="fmtUpdateToolbar({{ loop.index0 }})">{{ page.text }}</textarea>
                                 </div>
         
                             </div>
@@ -699,6 +796,409 @@
                         group.querySelectorAll('.justify-btn').forEach(function (b) { b.classList.remove('active'); });
                         btn.classList.add('active');
                     };
+
+                    // ── Markdown formatting toolbar ──────────────────────────
+
+                    var FMT = {
+                        bold:      { wrap: ['**', '**'] },
+                        italic:    { wrap: ['*', '*'] },
+                        underline: { wrap: ['_', '_'] },
+                        strike:    { wrap: ['~~', '~~'] },
+                        code:      { wrap: ['`', '`'] },
+                        ul:        { prefix: '- ' },
+                        ol:        { prefix: '1. ' }
+                    };
+
+                    function _getTA(idx) {
+                        return document.querySelector('#msg_panel_' + idx + ' textarea');
+                    }
+
+                    function _getCurrentLine(ta) {
+                        var val = ta.value;
+                        var pos = ta.selectionStart;
+                        var lineStart = val.lastIndexOf('\n', pos - 1) + 1;
+                        var lineEnd = val.indexOf('\n', pos);
+                        if (lineEnd === -1) lineEnd = val.length;
+                        return { start: lineStart, end: lineEnd, text: val.substring(lineStart, lineEnd) };
+                    }
+
+                    function _getSelectedLines(ta) {
+                        var val = ta.value;
+                        var ss = ta.selectionStart, se = ta.selectionEnd;
+                        var lineStart = val.lastIndexOf('\n', ss - 1) + 1;
+                        var lineEnd = val.indexOf('\n', se - 1);
+                        if (lineEnd === -1 || lineEnd < se) lineEnd = val.indexOf('\n', se);
+                        if (lineEnd === -1) lineEnd = val.length;
+                        return { start: lineStart, end: lineEnd, text: val.substring(lineStart, lineEnd) };
+                    }
+
+                    function _detectHeading(lineText) {
+                        var m = lineText.match(/^(#{1,4})\s/);
+                        return m ? m[1].length : 0;
+                    }
+
+                    // Detect all active inline formats at the cursor position.
+                    // Scans the current line character-by-character so that
+                    // nested / combined markers like _*~~**`text`**~~*_ work.
+                    function _detectFormats(ta) {
+                        var result = { bold: false, italic: false, underline: false, strike: false, code: false };
+                        var line = _getCurrentLine(ta);
+                        var lt = line.text;
+                        var cp = ta.selectionStart - line.start;
+                        if (cp < 0) cp = 0;
+                        if (cp > lt.length) cp = lt.length;
+
+                        // Step 1 — scan left of cursor to find which formats are open
+                        var state = { bold: false, italic: false, underline: false, strike: false, code: false };
+                        var pos = 0;
+                        while (pos < cp) {
+                            if (lt[pos] === '`') {
+                                state.code = !state.code;
+                                pos++;
+                            } else if (state.code) {
+                                pos++;                       // inside code, skip
+                            } else if (pos + 1 < cp && lt[pos] === '~' && lt[pos + 1] === '~') {
+                                state.strike = !state.strike;
+                                pos += 2;
+                            } else if (lt[pos] === '*') {
+                                var ss = pos;
+                                while (pos < cp && lt[pos] === '*') pos++;
+                                var n = pos - ss;
+                                if (Math.floor(n / 2) % 2 === 1) state.bold = !state.bold;
+                                if (n % 2 === 1) state.italic = !state.italic;
+                            } else if (lt[pos] === '_') {
+                                state.underline = !state.underline;
+                                pos++;
+                            } else {
+                                pos++;
+                            }
+                        }
+
+                        // Step 2 — verify each open format has a closing marker on the right
+                        var right = lt.substring(cp);
+
+                        if (state.code) {
+                            var bi = right.indexOf('`');
+                            if (bi >= 0) {
+                                result.code = true;
+                                // other closing markers live after the closing backtick
+                                var after = right.substring(bi + 1);
+                                if (state.bold)      result.bold      = after.indexOf('**') >= 0;
+                                if (state.italic)    { var s = after.replace(/\*\*/g, ''); result.italic = s.indexOf('*') >= 0; }
+                                if (state.strike)    result.strike    = after.indexOf('~~') >= 0;
+                                if (state.underline) result.underline = after.indexOf('_') >= 0;
+                            }
+                        } else {
+                            // blank out code-span interiors so markers inside `…` are ignored
+                            var clean = right.replace(/`[^`]*`/g, function (m) {
+                                return '`' + ' '.repeat(Math.max(0, m.length - 2)) + '`';
+                            });
+                            if (state.bold)      result.bold      = clean.indexOf('**') >= 0;
+                            if (state.italic)    { var s = clean.replace(/\*\*/g, ''); result.italic = s.indexOf('*') >= 0; }
+                            if (state.strike)    result.strike    = clean.indexOf('~~') >= 0;
+                            if (state.underline) result.underline = clean.indexOf('_') >= 0;
+                        }
+
+                        return result;
+                    }
+
+                    function _detectPrefix(ta, prefix) {
+                        var line = _getCurrentLine(ta);
+                        return line.text.indexOf(prefix) === 0 || /^\s*/.exec(line.text)[0].length + prefix.length <= line.text.length && line.text.trimStart().indexOf(prefix) === 0;
+                    }
+
+                    window.fmtToggle = function(idx, fmt) {
+                        var ta = _getTA(idx);
+                        if (!ta) return;
+                        var def = FMT[fmt];
+                        ta.focus();
+
+                        if (def.wrap) {
+                            _toggleWrap(ta, def.wrap);
+                        } else if (def.prefix) {
+                            _togglePrefix(ta, def.prefix, fmt);
+                        }
+                        enforce(ta);
+                        fmtUpdateToolbar(idx);
+                    };
+
+                    function _toggleWrap(ta, wrapDef) {
+                        var open = wrapDef[0], close = wrapDef[1];
+
+                        // Star-based formats need special handling for combinations
+                        if (open[0] === '*') {
+                            return _toggleStarWrap(ta, open.length);
+                        }
+
+                        // Non-star formats (_, ~~, `) — markers are distinct chars
+                        var ss = ta.selectionStart, se = ta.selectionEnd;
+                        var val = ta.value;
+
+                        if (ss === se) {
+                            // No selection — check if cursor is inside a formatted span
+                            var line = _getCurrentLine(ta);
+                            var lt = line.text;
+                            var cursorInLine = ss - line.start;
+                            var re;
+                            if (open === '_') {
+                                re = /(?<!_)_(?!_)([^_\n]+)_(?!_)/g;
+                            } else if (open === '~~') {
+                                re = /~~([^~\n]+)~~/g;
+                            } else if (open === '`') {
+                                re = /`([^`\n]+)`/g;
+                            }
+                            if (re) {
+                                var match;
+                                while ((match = re.exec(lt)) !== null) {
+                                    var mStart = line.start + match.index;
+                                    var mEnd = mStart + match[0].length;
+                                    if (cursorInLine >= match.index && cursorInLine <= match.index + match[0].length) {
+                                        var inner = match[1];
+                                        ta.value = val.substring(0, mStart) + inner + val.substring(mEnd);
+                                        ta.selectionStart = ta.selectionEnd = ss - open.length;
+                                        return;
+                                    }
+                                }
+                            }
+                            // Not inside — insert placeholder
+                            ta.value = val.substring(0, ss) + open + close + val.substring(se);
+                            ta.selectionStart = ta.selectionEnd = ss + open.length;
+                        } else {
+                            // Has selection — check if already wrapped
+                            if (ss >= open.length && se + close.length <= val.length &&
+                                val.substring(ss - open.length, ss) === open &&
+                                val.substring(se, se + close.length) === close) {
+                                ta.value = val.substring(0, ss - open.length) + val.substring(ss, se) + val.substring(se + close.length);
+                                ta.selectionStart = ss - open.length;
+                                ta.selectionEnd = se - open.length;
+                            } else {
+                                var sel = val.substring(ss, se);
+                                ta.value = val.substring(0, ss) + open + sel + close + val.substring(se);
+                                ta.selectionStart = ss + open.length;
+                                ta.selectionEnd = se + open.length;
+                            }
+                        }
+                    }
+
+                    function _toggleStarWrap(ta, starCount) {
+                        var val = ta.value;
+                        var ss = ta.selectionStart, se = ta.selectionEnd;
+                        var marker = '*'.repeat(starCount);
+
+                        if (ss !== se) {
+                            // Selection: check stars immediately adjacent to selection
+                            var pos = ss;
+                            while (pos > 0 && val[pos - 1] === '*') pos--;
+                            var leftStarStart = pos;
+                            var leftStarCount = ss - pos;
+
+                            pos = se;
+                            while (pos < val.length && val[pos] === '*') pos++;
+                            var rightStarEnd = pos;
+                            var rightStarCount = pos - se;
+
+                            var minS = Math.min(leftStarCount, rightStarCount);
+                            var isActive = (starCount === 2) ? minS >= 2 : minS % 2 === 1;
+
+                            if (isActive) {
+                                var newLeft = leftStarCount - starCount;
+                                var newRight = rightStarCount - starCount;
+                                var content = val.substring(ss, se);
+                                ta.value = val.substring(0, leftStarStart) +
+                                    '*'.repeat(Math.max(0, newLeft)) + content +
+                                    '*'.repeat(Math.max(0, newRight)) + val.substring(rightStarEnd);
+                                var newSS = leftStarStart + Math.max(0, newLeft);
+                                ta.selectionStart = newSS;
+                                ta.selectionEnd = newSS + content.length;
+                            } else {
+                                ta.value = val.substring(0, ss) + marker +
+                                    val.substring(ss, se) + marker + val.substring(se);
+                                ta.selectionStart = ss + starCount;
+                                ta.selectionEnd = se + starCount;
+                            }
+                            return;
+                        }
+
+                        // Collapsed cursor
+                        var line = _getCurrentLine(ta);
+                        var lt = line.text;
+                        var cp = ss - line.start;
+
+                        // Check if cursor is adjacent to / inside a star run
+                        pos = cp;
+                        while (pos > 0 && lt[pos - 1] === '*') pos--;
+                        var leftStarsAtCursor = cp - pos;
+
+                        if (leftStarsAtCursor > 0) {
+                            var leftStart = pos;
+                            var rPos = cp;
+                            while (rPos < lt.length && lt[rPos] === '*') rPos++;
+                            var rightStarsAtCursor = rPos - cp;
+                            var minStars = Math.min(leftStarsAtCursor, rightStarsAtCursor);
+                            var active = (starCount === 2) ? minStars >= 2 : minStars % 2 === 1;
+
+                            if (active) {
+                                var lStart = line.start + leftStart;
+                                var rEnd = line.start + rPos;
+                                var newL = leftStarsAtCursor - starCount;
+                                var newR = rightStarsAtCursor - starCount;
+                                ta.value = val.substring(0, lStart) +
+                                    '*'.repeat(Math.max(0, newL)) +
+                                    '*'.repeat(Math.max(0, newR)) +
+                                    val.substring(rEnd);
+                                ta.selectionStart = ta.selectionEnd = lStart + Math.max(0, newL);
+                            } else {
+                                ta.value = val.substring(0, ss) + marker + marker + val.substring(ss);
+                                ta.selectionStart = ta.selectionEnd = ss + starCount;
+                            }
+                        } else {
+                            // Cursor is in content — scan outward to find enclosing stars
+                            var contentLeft = cp;
+                            while (contentLeft > 0 && lt[contentLeft - 1] !== '*') contentLeft--;
+                            var starLeft = contentLeft;
+                            while (starLeft > 0 && lt[starLeft - 1] === '*') starLeft--;
+                            var leftCount = contentLeft - starLeft;
+
+                            var contentRight = cp;
+                            while (contentRight < lt.length && lt[contentRight] !== '*') contentRight++;
+                            var starRight = contentRight;
+                            while (starRight < lt.length && lt[starRight] === '*') starRight++;
+                            var rightCount = starRight - contentRight;
+
+                            var minC = Math.min(leftCount, rightCount);
+                            var active2 = (starCount === 2) ? minC >= 2 : minC % 2 === 1;
+
+                            if (active2 && leftCount > 0 && rightCount > 0) {
+                                var lS = line.start + starLeft;
+                                var lE = line.start + contentLeft;
+                                var rS = line.start + contentRight;
+                                var rE = line.start + starRight;
+                                var nL = leftCount - starCount;
+                                var nR = rightCount - starCount;
+                                var inner = val.substring(lE, rS);
+                                ta.value = val.substring(0, lS) +
+                                    '*'.repeat(Math.max(0, nL)) + inner +
+                                    '*'.repeat(Math.max(0, nR)) + val.substring(rE);
+                                ta.selectionStart = ta.selectionEnd = lS + Math.max(0, nL) + (cp - contentLeft);
+                            } else {
+                                // Not inside — insert markers at cursor
+                                ta.value = val.substring(0, ss) + marker + marker + val.substring(ss);
+                                ta.selectionStart = ta.selectionEnd = ss + starCount;
+                            }
+                        }
+                    }
+
+                    function _togglePrefix(ta, prefix, fmt) {
+                        var info = _getSelectedLines(ta);
+                        var val = ta.value;
+                        var lines = info.text.split('\n');
+                        var allHavePrefix = lines.every(function(l) {
+                            var stripped = l.replace(/^\s*/, '');
+                            return stripped.indexOf(prefix) === 0 || (fmt === 'ol' && /^\s*\d+\.\s/.test(l));
+                        });
+                        var newLines;
+                        if (allHavePrefix) {
+                            // Remove prefix
+                            newLines = lines.map(function(l) {
+                                if (fmt === 'ol') return l.replace(/^\s*\d+\.\s/, '');
+                                return l.replace(new RegExp('^(\\s*)' + prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), '$1');
+                            });
+                        } else {
+                            // Add prefix
+                            newLines = lines.map(function(l, i) {
+                                var indent = /^(\s*)/.exec(l)[1];
+                                var content = l.substring(indent.length);
+                                // Remove existing list prefix if switching types
+                                content = content.replace(/^(\d+\.\s|[-*]\s)/, '');
+                                if (fmt === 'ol') return indent + (i + 1) + '. ' + content;
+                                return indent + prefix + content;
+                            });
+                        }
+                        var result = newLines.join('\n');
+                        ta.value = val.substring(0, info.start) + result + val.substring(info.end);
+                        ta.selectionStart = info.start;
+                        ta.selectionEnd = info.start + result.length;
+                    }
+
+                    // ── Heading dropdown ──────────────────────────────────────
+
+                    window.fmtToggleHeadingMenu = function(idx) {
+                        // Close all other menus first
+                        document.querySelectorAll('.fmt-heading-menu').forEach(function(m) {
+                            if (m.id !== 'fmt_heading_menu_' + idx) m.classList.remove('open');
+                        });
+                        var menu = document.getElementById('fmt_heading_menu_' + idx);
+                        menu.classList.toggle('open');
+                        if (menu.classList.contains('open')) {
+                            // Update active option
+                            var ta = _getTA(idx);
+                            var line = _getCurrentLine(ta);
+                            var level = _detectHeading(line.text);
+                            menu.querySelectorAll('.fmt-heading-option').forEach(function(opt) {
+                                opt.classList.toggle('active', parseInt(opt.getAttribute('data-level')) === level);
+                            });
+                            // Close on outside click
+                            setTimeout(function() {
+                                document.addEventListener('click', function closeMenu(e) {
+                                    if (!menu.contains(e.target) && !menu.previousElementSibling.contains(e.target)) {
+                                        menu.classList.remove('open');
+                                        document.removeEventListener('click', closeMenu);
+                                    }
+                                });
+                            }, 0);
+                        }
+                    };
+
+                    window.fmtSetHeading = function(idx, level) {
+                        var ta = _getTA(idx);
+                        if (!ta) return;
+                        ta.focus();
+                        var line = _getCurrentLine(ta);
+                        var val = ta.value;
+                        var lineText = line.text;
+                        // Remove existing heading prefix
+                        var stripped = lineText.replace(/^#{1,4}\s+/, '');
+                        var newLine = level > 0 ? ('#'.repeat(level) + ' ' + stripped) : stripped;
+                        ta.value = val.substring(0, line.start) + newLine + val.substring(line.end);
+                        ta.selectionStart = ta.selectionEnd = line.start + newLine.length;
+                        enforce(ta);
+                        // Close menu and update toolbar
+                        document.getElementById('fmt_heading_menu_' + idx).classList.remove('open');
+                        fmtUpdateToolbar(idx);
+                    };
+
+                    // ── Toolbar state update ─────────────────────────────────
+
+                    window.fmtUpdateToolbar = function(idx) {
+                        var ta = _getTA(idx);
+                        if (!ta) return;
+                        var panel = document.getElementById('msg_panel_' + idx);
+                        if (!panel) return;
+
+                        // Update wrap-format buttons
+                        var formats = _detectFormats(ta);
+                        panel.querySelectorAll('.fmt-btn').forEach(function(btn) {
+                            var fmt = btn.getAttribute('data-fmt');
+                            if (!fmt) return;
+                            var def = FMT[fmt];
+                            if (def && def.wrap) {
+                                btn.classList.toggle('active', !!formats[fmt]);
+                            } else if (def && def.prefix) {
+                                btn.classList.toggle('active', _detectPrefix(ta, def.prefix));
+                            }
+                        });
+
+                        // Update heading button
+                        var line = _getCurrentLine(ta);
+                        var level = _detectHeading(line.text);
+                        var headingBtn = panel.querySelector('.fmt-heading-btn');
+                        if (headingBtn) {
+                            var labels = ['Normal', 'H1', 'H2', 'H3', 'H4'];
+                            headingBtn.querySelector('.fmt-heading-label').textContent = labels[level];
+                            headingBtn.classList.toggle('active', level > 0);
+                        }
+                    };
+
                     window.msgSelectTab = function (idx) {
                         activeTab = idx;
                         var tabs = document.querySelectorAll('.msg-tab');
@@ -736,8 +1236,36 @@
                         panel.innerHTML =
                             '<div class="form-group">' +
                             '<div class="msg-toolbar">' +
-                            '<div class="msg-toolbar-left">' +
+                            '<div class="msg-toolbar-top">' +
                             '<label style="margin:0;font-size:0.85em;color:#666;">Message (max 10 lines × 60 visible chars)</label>' +
+                            '<div class="msg-toolbar-right">' +
+                            '<span style="font-size:0.85em;color:#666;">Enabled</span>' +
+                            '<label class="toggle-switch" title="Enable this page"><input type="checkbox" name="page_enabled_' + idx + '"><span class="toggle-slider"></span></label>' +
+                            '</div></div>' +
+                            '<div class="msg-toolbar-bottom" onmousedown="event.preventDefault()"><div class="msg-toolbar-left">' +
+                            '<div class="fmt-heading-wrap" data-idx="' + idx + '">' +
+                            '<button type="button" class="fmt-heading-btn" title="Heading level" onclick="fmtToggleHeadingMenu(' + idx + ')">' +
+                            '<span class="fmt-heading-label">Normal</span><span class="caret"></span></button>' +
+                            '<div class="fmt-heading-menu" id="fmt_heading_menu_' + idx + '">' +
+                            '<button type="button" class="fmt-heading-option" data-level="0" onclick="fmtSetHeading(' + idx + ',0)">Normal text</button>' +
+                            '<button type="button" class="fmt-heading-option" data-level="1" onclick="fmtSetHeading(' + idx + ',1)">Heading 1</button>' +
+                            '<button type="button" class="fmt-heading-option" data-level="2" onclick="fmtSetHeading(' + idx + ',2)">Heading 2</button>' +
+                            '<button type="button" class="fmt-heading-option" data-level="3" onclick="fmtSetHeading(' + idx + ',3)">Heading 3</button>' +
+                            '<button type="button" class="fmt-heading-option" data-level="4" onclick="fmtSetHeading(' + idx + ',4)">Heading 4</button>' +
+                            '</div></div>' +
+                            '<div class="fmt-btn-group" data-idx="' + idx + '">' +
+                            '<button type="button" class="fmt-btn" data-fmt="bold" title="Bold" onclick="fmtToggle(' + idx + ',\'bold\')"><strong>B</strong></button>' +
+                            '<button type="button" class="fmt-btn" data-fmt="italic" title="Italic" onclick="fmtToggle(' + idx + ',\'italic\')"><em>I</em></button>' +
+                            '<button type="button" class="fmt-btn" data-fmt="underline" title="Underline" onclick="fmtToggle(' + idx + ',\'underline\')"><u>U</u></button>' +
+                            '<button type="button" class="fmt-btn" data-fmt="strike" title="Strikethrough" onclick="fmtToggle(' + idx + ',\'strike\')"><s>S</s></button>' +
+                            '<button type="button" class="fmt-btn" data-fmt="code" title="Code" onclick="fmtToggle(' + idx + ',\'code\')" style="font-family:monospace;">&lt;/&gt;</button>' +
+                            '</div>' +
+                            '<div class="fmt-btn-group" data-idx="' + idx + '">' +
+                            '<button type="button" class="fmt-btn" data-fmt="ul" title="Bulleted list" onclick="fmtToggle(' + idx + ',\'ul\')">' +
+                            '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><circle cx="2" cy="4" r="1.5"/><rect x="5" y="3" width="10" height="2"/><circle cx="2" cy="8" r="1.5"/><rect x="5" y="7" width="10" height="2"/><circle cx="2" cy="12" r="1.5"/><rect x="5" y="11" width="10" height="2"/></svg></button>' +
+                            '<button type="button" class="fmt-btn" data-fmt="ol" title="Numbered list" onclick="fmtToggle(' + idx + ',\'ol\')">' +
+                            '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><text x="0" y="5.5" font-size="5" font-family="sans-serif">1.</text><rect x="5" y="3" width="10" height="2"/><text x="0" y="9.5" font-size="5" font-family="sans-serif">2.</text><rect x="5" y="7" width="10" height="2"/><text x="0" y="13.5" font-size="5" font-family="sans-serif">3.</text><rect x="5" y="11" width="10" height="2"/></svg></button>' +
+                            '</div>' +
                             '<div class="justify-btn-group" data-idx="' + idx + '">' +
                             '<button type="button" class="justify-btn active" data-align="left" title="Align left" onclick="msgSetAlign(' + idx + ',\'left\',this);">' +
                             '<svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="1" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="1" y="14" width="8" height="2"/></svg></button>' +
@@ -747,15 +1275,9 @@
                             '<svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="5" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="7" y="14" width="8" height="2"/></svg></button>' +
                             '</div>' +
                             '<input type="hidden" name="page_align_' + idx + '" id="page_align_' + idx + '" value="left">' +
-                            '</div>' +
-                            '<div class="msg-toolbar-right">' +
-                            '<span style="font-size:0.85em;color:#666;">Enabled</span>' +
-                            '<label class="toggle-switch" title="Enable this page"><input type="checkbox" name="page_enabled_' + idx + '"><span class="toggle-slider"></span></label>' +
-                            '</div>' +
-                            '</div>' +
-                            '<textarea name="page_text_' + idx + '" rows="10" cols="60" maxlength="2000" class="form-control msg-textarea" data-idx="' + idx + '" style="font-family:\'Overpass Mono\',monospace;white-space:pre;overflow:auto;" oninput="msgOnInput(this);"></textarea>' +
-                            '</div>' +
-                            '';
+                            '</div></div></div>' +
+                            '<textarea name="page_text_' + idx + '" rows="10" cols="60" maxlength="2000" class="form-control msg-textarea" data-idx="' + idx + '" style="font-family:\'Overpass Mono\',monospace;white-space:pre;overflow:auto;" oninput="msgOnInput(this);" onkeyup="fmtUpdateToolbar(' + idx + ')" onclick="fmtUpdateToolbar(' + idx + ')"></textarea>' +
+                            '</div>';
                         container.appendChild(panel);
                         msgSelectTab(idx);
                     };
@@ -799,7 +1321,7 @@
                             panels[i].id = 'msg_panel_' + i;
                             // Rename form fields
                             var ta = panels[i].querySelector('textarea');
-                            if (ta) { ta.name = 'page_text_' + i; ta.setAttribute('data-idx', i); ta.setAttribute('oninput', 'msgOnInput(this)'); }
+                            if (ta) { ta.name = 'page_text_' + i; ta.setAttribute('data-idx', i); ta.setAttribute('oninput', 'msgOnInput(this)'); ta.setAttribute('onkeyup', 'fmtUpdateToolbar(' + i + ')'); ta.setAttribute('onclick', 'fmtUpdateToolbar(' + i + ')'); }
                             var hidden = panels[i].querySelector('input[type=hidden][name^=page_align_]');
                             if (hidden) { hidden.name = 'page_align_' + i; hidden.id = 'page_align_' + i; }
                             var justifyGroup = panels[i].querySelector('.justify-btn-group');
@@ -810,6 +1332,27 @@
                                     b.setAttribute('onclick', 'msgSetAlign(' + i + ',\'' + al + '\',this)');
                                 });
                             }
+                            // Re-index formatting toolbar elements
+                            var headingWrap = panels[i].querySelector('.fmt-heading-wrap');
+                            if (headingWrap) {
+                                headingWrap.setAttribute('data-idx', i);
+                                var hBtn = headingWrap.querySelector('.fmt-heading-btn');
+                                if (hBtn) hBtn.setAttribute('onclick', 'fmtToggleHeadingMenu(' + i + ')');
+                                var hMenu = headingWrap.querySelector('.fmt-heading-menu');
+                                if (hMenu) {
+                                    hMenu.id = 'fmt_heading_menu_' + i;
+                                    hMenu.querySelectorAll('.fmt-heading-option').forEach(function(opt) {
+                                        opt.setAttribute('onclick', 'fmtSetHeading(' + i + ',' + opt.getAttribute('data-level') + ')');
+                                    });
+                                }
+                            }
+                            panels[i].querySelectorAll('.fmt-btn-group').forEach(function(g) {
+                                g.setAttribute('data-idx', i);
+                                g.querySelectorAll('.fmt-btn').forEach(function(b) {
+                                    var fmt = b.getAttribute('data-fmt');
+                                    if (fmt) b.setAttribute('onclick', 'fmtToggle(' + i + ',\'' + fmt + '\')');
+                                });
+                            });
                             var cb = panels[i].querySelector('.toggle-switch input[type=checkbox]');
                             if (cb) cb.name = 'page_enabled_' + i;
                         }
