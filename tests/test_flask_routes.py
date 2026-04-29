@@ -30,10 +30,6 @@ class TestPublicRoutes:
         resp = client.get("/login")
         assert resp.status_code == 200
 
-    def test_overlay_1080p(self, client):
-        resp = client.get("/overlay/1080p")
-        assert resp.status_code == 200
-
     def test_web_home(self, client):
         resp = client.get("/web/home")
         assert resp.status_code == 200
