@@ -924,135 +924,154 @@
 
                     function _toggleWrap(ta, wrapDef) {
                         var open = wrapDef[0], close = wrapDef[1];
-
-                        // Star-based formats need special handling for combinations
-                        if (open[0] === '*') {
-                            return _toggleStarWrap(ta, open.length);
-                        }
-
-                        // Non-star formats (_, ~~, `) — markers are distinct chars
                         var ss = ta.selectionStart, se = ta.selectionEnd;
                         var val = ta.value;
+                        var line = _getCurrentLine(ta);
 
                         if (ss === se) {
-                            // No selection — check if cursor is inside a formatted span
-                            var line = _getCurrentLine(ta);
-                            var lt = line.text;
-                            var cursorInLine = ss - line.start;
-                            var re;
-                            if (open === '_') {
-                                re = /(?<!_)_(?!_)([^_\n]+)_(?!_)/g;
-                            } else if (open === '~~') {
-                                re = /~~([^~\n]+)~~/g;
-                            } else if (open === '`') {
-                                re = /`([^`\n]+)`/g;
-                            }
-                            if (re) {
-                                var match;
-                                while ((match = re.exec(lt)) !== null) {
-                                    var mStart = line.start + match.index;
-                                    var mEnd = mStart + match[0].length;
-                                    if (cursorInLine >= match.index && cursorInLine <= match.index + match[0].length) {
-                                        var inner = match[1];
-                                        ta.value = val.substring(0, mStart) + inner + val.substring(mEnd);
-                                        ta.selectionStart = ta.selectionEnd = ss - open.length;
-                                        return;
-                                    }
-                                }
-                            }
-                            // Not inside — insert placeholder
-                            ta.value = val.substring(0, ss) + open + close + val.substring(se);
-                            ta.selectionStart = ta.selectionEnd = ss + open.length;
-                        } else {
-                            // Has selection — check if already wrapped
-                            if (ss >= open.length && se + close.length <= val.length &&
-                                val.substring(ss - open.length, ss) === open &&
-                                val.substring(se, se + close.length) === close) {
-                                ta.value = val.substring(0, ss - open.length) + val.substring(ss, se) + val.substring(se + close.length);
-                                ta.selectionStart = ss - open.length;
-                                ta.selectionEnd = se - open.length;
+                            // Collapsed cursor — use _detectFormats to check if active
+                            var fmts = _detectFormats(ta);
+                            var fmtName = open === '**' ? 'bold' : open === '*' ? 'italic'
+                                        : open === '_' ? 'underline' : open === '~~' ? 'strike' : 'code';
+                            if (fmts[fmtName]) {
+                                // Remove: find & delete the innermost matching marker pair
+                                _removeMarkerPair(ta, open, close, line);
                             } else {
-                                var sel = val.substring(ss, se);
-                                ta.value = val.substring(0, ss) + open + sel + close + val.substring(se);
-                                ta.selectionStart = ss + open.length;
-                                ta.selectionEnd = se + open.length;
-                            }
-                        }
-                    }
-
-                    function _toggleStarWrap(ta, starCount) {
-                        var val = ta.value;
-                        var ss = ta.selectionStart, se = ta.selectionEnd;
-                        var marker = '*'.repeat(starCount);
-
-                        if (ss !== se) {
-                            // Selection: check stars immediately adjacent to selection
-                            var pos = ss;
-                            while (pos > 0 && val[pos - 1] === '*') pos--;
-                            var leftStarStart = pos;
-                            var leftStarCount = ss - pos;
-
-                            pos = se;
-                            while (pos < val.length && val[pos] === '*') pos++;
-                            var rightStarEnd = pos;
-                            var rightStarCount = pos - se;
-
-                            var minS = Math.min(leftStarCount, rightStarCount);
-                            var isActive = (starCount === 2) ? minS >= 2 : minS % 2 === 1;
-
-                            if (isActive) {
-                                var newLeft = leftStarCount - starCount;
-                                var newRight = rightStarCount - starCount;
-                                var content = val.substring(ss, se);
-                                ta.value = val.substring(0, leftStarStart) +
-                                    '*'.repeat(Math.max(0, newLeft)) + content +
-                                    '*'.repeat(Math.max(0, newRight)) + val.substring(rightStarEnd);
-                                var newSS = leftStarStart + Math.max(0, newLeft);
-                                ta.selectionStart = newSS;
-                                ta.selectionEnd = newSS + content.length;
-                            } else {
-                                ta.value = val.substring(0, ss) + marker +
-                                    val.substring(ss, se) + marker + val.substring(se);
-                                ta.selectionStart = ss + starCount;
-                                ta.selectionEnd = se + starCount;
+                                // Insert empty markers at cursor
+                                ta.value = val.substring(0, ss) + open + close + val.substring(ss);
+                                ta.selectionStart = ta.selectionEnd = ss + open.length;
                             }
                             return;
                         }
 
-                        // Collapsed cursor
-                        var line = _getCurrentLine(ta);
-                        var lt = line.text;
-                        var cp = ss - line.start;
-
-                        // Check if cursor is adjacent to / inside a star run
-                        pos = cp;
-                        while (pos > 0 && lt[pos - 1] === '*') pos--;
-                        var leftStarsAtCursor = cp - pos;
-
-                        if (leftStarsAtCursor > 0) {
-                            var leftStart = pos;
-                            var rPos = cp;
-                            while (rPos < lt.length && lt[rPos] === '*') rPos++;
-                            var rightStarsAtCursor = rPos - cp;
-                            var minStars = Math.min(leftStarsAtCursor, rightStarsAtCursor);
-                            var active = (starCount === 2) ? minStars >= 2 : minStars % 2 === 1;
-
-                            if (active) {
-                                var lStart = line.start + leftStart;
-                                var rEnd = line.start + rPos;
-                                var newL = leftStarsAtCursor - starCount;
-                                var newR = rightStarsAtCursor - starCount;
-                                ta.value = val.substring(0, lStart) +
-                                    '*'.repeat(Math.max(0, newL)) +
-                                    '*'.repeat(Math.max(0, newR)) +
-                                    val.substring(rEnd);
-                                ta.selectionStart = ta.selectionEnd = lStart + Math.max(0, newL);
+                        // Has selection — scan outward from selection edges to find marker
+                        var found = _findMarkerPair(val, ss, se, open, close, line);
+                        if (found) {
+                            if (found.removeCount !== undefined) {
+                                // Star markers: subtract removeCount from each star run
+                                var newLeftStars = found.leftStars - found.removeCount;
+                                var newRightStars = found.rightStars - found.removeCount;
+                                var content = val.substring(found.openEnd, found.closeStart);
+                                ta.value = val.substring(0, found.openStart) +
+                                    '*'.repeat(Math.max(0, newLeftStars)) + content +
+                                    '*'.repeat(Math.max(0, newRightStars)) + val.substring(found.closeEnd);
+                                var shift = found.leftStars - Math.max(0, newLeftStars);
+                                ta.selectionStart = ss - shift;
+                                ta.selectionEnd = se - shift;
                             } else {
-                                ta.value = val.substring(0, ss) + marker + marker + val.substring(ss);
-                                ta.selectionStart = ta.selectionEnd = ss + starCount;
+                                // Non-star: remove entire marker
+                                var before = val.substring(0, found.openStart);
+                                var mid = val.substring(found.openEnd, found.closeStart);
+                                var after = val.substring(found.closeEnd);
+                                ta.value = before + mid + after;
+                                ta.selectionStart = ss - (found.openEnd - found.openStart);
+                                ta.selectionEnd = se - (found.openEnd - found.openStart);
                             }
                         } else {
-                            // Cursor is in content — scan outward to find enclosing stars
+                            // Add wrapping immediately around selection
+                            var sel = val.substring(ss, se);
+                            ta.value = val.substring(0, ss) + open + sel + close + val.substring(se);
+                            ta.selectionStart = ss + open.length;
+                            ta.selectionEnd = se + open.length;
+                        }
+                    }
+
+                    // Find a matching open/close marker pair that surrounds the selection.
+                    // Scans outward from selection edges, skipping over other markers.
+                    function _findMarkerPair(val, ss, se, open, close, line) {
+                        var lineStart = line.start;
+                        var lineEnd = line.end;
+
+                        if (open[0] === '*') {
+                            return _findStarMarkerPair(val, ss, se, open.length, lineStart, lineEnd);
+                        }
+
+                        // Non-star: scan left from selection start for opening marker
+                        var left = ss;
+                        while (left >= lineStart + open.length) {
+                            if (val.substring(left - open.length, left) === open) {
+                                // Verify it's not escaped or part of a longer same-char run
+                                break;
+                            }
+                            left--;
+                        }
+                        var openStart = left - open.length;
+                        if (openStart < lineStart) return null;
+
+                        // Scan right from selection end for closing marker
+                        var right = se;
+                        while (right + close.length <= lineEnd) {
+                            if (val.substring(right, right + close.length) === close) {
+                                break;
+                            }
+                            right++;
+                        }
+                        if (right + close.length > lineEnd) return null;
+
+                        return {
+                            openStart: openStart,
+                            openEnd: openStart + open.length,
+                            closeStart: right,
+                            closeEnd: right + close.length
+                        };
+                    }
+
+                    function _findStarMarkerPair(val, ss, se, starCount, lineStart, lineEnd) {
+                        // Scan left: find star run that ends at or before ss
+                        var left = ss;
+                        while (left > lineStart && val[left - 1] !== '*') left--;
+                        // left now points to char after the non-star (or lineStart)
+                        var starEnd = left;
+                        while (left > lineStart && val[left - 1] === '*') left--;
+                        var leftStars = starEnd - left;
+
+                        // Scan right: find star run that starts at or after se
+                        var right = se;
+                        while (right < lineEnd && val[right] !== '*') right++;
+                        var rightStarStart = right;
+                        while (right < lineEnd && val[right] === '*') right++;
+                        var rightStars = right - rightStarStart;
+
+                        var minS = Math.min(leftStars, rightStars);
+                        var isActive = (starCount === 2) ? minS >= 2 : minS % 2 === 1;
+                        if (!isActive || leftStars === 0 || rightStars === 0) return null;
+
+                        // Calculate which stars to remove
+                        if (starCount === 2) {
+                            // Bold: remove 2 from each side (outermost of the run for this pair)
+                            return {
+                                openStart: left,
+                                openEnd: left + leftStars,
+                                closeStart: rightStarStart,
+                                closeEnd: rightStarStart + rightStars,
+                                leftStars: leftStars,
+                                rightStars: rightStars,
+                                removeCount: 2
+                            };
+                        } else {
+                            // Italic: remove 1 from each side
+                            return {
+                                openStart: left,
+                                openEnd: left + leftStars,
+                                closeStart: rightStarStart,
+                                closeEnd: rightStarStart + rightStars,
+                                leftStars: leftStars,
+                                rightStars: rightStars,
+                                removeCount: 1
+                            };
+                        }
+                    }
+
+                    // Remove the innermost matching marker pair around the cursor
+                    function _removeMarkerPair(ta, open, close, line) {
+                        var val = ta.value;
+                        var ss = ta.selectionStart;
+                        var cp = ss - line.start;
+                        var lt = line.text;
+
+                        if (open[0] === '*') {
+                            var starCount = open.length;
+                            // Find enclosing stars by scanning outward from cursor
                             var contentLeft = cp;
                             while (contentLeft > 0 && lt[contentLeft - 1] !== '*') contentLeft--;
                             var starLeft = contentLeft;
@@ -1065,27 +1084,44 @@
                             while (starRight < lt.length && lt[starRight] === '*') starRight++;
                             var rightCount = starRight - contentRight;
 
-                            var minC = Math.min(leftCount, rightCount);
-                            var active2 = (starCount === 2) ? minC >= 2 : minC % 2 === 1;
-
-                            if (active2 && leftCount > 0 && rightCount > 0) {
+                            if (leftCount >= starCount && rightCount >= starCount) {
                                 var lS = line.start + starLeft;
-                                var lE = line.start + contentLeft;
-                                var rS = line.start + contentRight;
                                 var rE = line.start + starRight;
                                 var nL = leftCount - starCount;
                                 var nR = rightCount - starCount;
-                                var inner = val.substring(lE, rS);
+                                var inner = val.substring(line.start + contentLeft, line.start + contentRight);
                                 ta.value = val.substring(0, lS) +
                                     '*'.repeat(Math.max(0, nL)) + inner +
                                     '*'.repeat(Math.max(0, nR)) + val.substring(rE);
                                 ta.selectionStart = ta.selectionEnd = lS + Math.max(0, nL) + (cp - contentLeft);
-                            } else {
-                                // Not inside — insert markers at cursor
-                                ta.value = val.substring(0, ss) + marker + marker + val.substring(ss);
-                                ta.selectionStart = ta.selectionEnd = ss + starCount;
                             }
+                            return;
                         }
+
+                        // Non-star: find innermost pair by scanning outward from cursor
+                        var leftPos = cp - 1;
+                        while (leftPos >= 0) {
+                            if (lt.substring(leftPos, leftPos + open.length) === open) break;
+                            leftPos--;
+                        }
+                        if (leftPos < 0) return;
+
+                        var rightPos = cp;
+                        while (rightPos + close.length <= lt.length) {
+                            if (lt.substring(rightPos, rightPos + close.length) === close) break;
+                            rightPos++;
+                        }
+                        if (rightPos + close.length > lt.length) return;
+
+                        var mStart = line.start + leftPos;
+                        var mEnd = line.start + rightPos + close.length;
+                        var inner = val.substring(mStart + open.length, line.start + rightPos);
+                        ta.value = val.substring(0, mStart) + inner + val.substring(mEnd);
+                        ta.selectionStart = ta.selectionEnd = ss - open.length;
+                    }
+
+                    function _toggleStarWrap(ta, starCount) {
+                        return _toggleWrap(ta, ['*'.repeat(starCount), '*'.repeat(starCount)]);
                     }
 
                     function _togglePrefix(ta, prefix, fmt) {
