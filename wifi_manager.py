@@ -14,7 +14,7 @@ def _run(args, timeout=30):
     """Run an nmcli command and return (returncode, stdout, stderr)."""
     try:
         r = subprocess.run(
-            ['nmcli'] + args,
+            ['sudo', 'nmcli'] + args,
             capture_output=True, text=True, timeout=timeout,
         )
         return r.returncode, r.stdout, r.stderr
