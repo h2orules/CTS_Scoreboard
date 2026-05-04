@@ -34,6 +34,52 @@
     .input-group {
         width: 100%;
     }
+
+    /* ── Page header ───────────────────────────── */
+    .page-header-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 0 12px;
+        margin-bottom: 8px;
+        border-bottom: 1px solid #e5e5e5;
+    }
+    .page-header-bar .page-titles {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+    }
+    .page-header-bar h1 {
+        font-size: 22px;
+        font-weight: 600;
+        margin: 0;
+        color: #333;
+    }
+    .page-header-bar h2 {
+        font-size: 16px;
+        font-weight: 400;
+        margin: 0;
+        color: #888;
+    }
+    .page-header-bar .btn {
+        font-size: 13px;
+    }
+
+    /* ── Global section spacing ────────────────── */
+    .settings-section {
+        margin-bottom: 24px;
+    }
+    .settings-section > h3 {
+        margin-top: 24px;
+        margin-bottom: 12px;
+        padding-bottom: 6px;
+        border-bottom: 1px solid #eee;
+    }
+    .settings-section > .section-hint {
+        font-size: 13px;
+        color: #777;
+        margin-bottom: 10px;
+    }
     .team-clear-btn {
         background: none;
         border: none;
@@ -220,15 +266,18 @@
 <body>
 
     <div class="container">
-        <div class="jumbotron">
-            <h1>CTS Scoreboard</h1>
-            <h2>Settings</h2>
-            <a href="/" class="btn btn-default">Back to Site Map</a>
+        <div class="page-header-bar">
+            <div class="page-titles">
+                <h1>CTS Scoreboard</h1>
+                <h2>Settings</h2>
+            </div>
+            <a href="/" class="btn btn-default btn-sm">Back to Site Map</a>
         </div>
 
+        <div class="settings-section">
         <h3>Meet Settings</h3>
         <div class="row">
-            <div class="col-lg-8">
+            <div class="col-lg-6">
                 <form action="/settings" method="POST">
                     <div class="input-group">
                         <label for="meet_title">Meet Title</label>
@@ -245,7 +294,9 @@
                 </form>
             </div>
         </div>
+        </div>
 
+        <div class="settings-section">
         <h3>Pool Settings</h3>
         <div class="row">
             <div class="col-lg-6">
@@ -272,7 +323,9 @@
                 </form>
             </div>
         </div>
+        </div>
 
+        <div class="settings-section">
         <h3>Display Options</h3>
         <div class="row">
             <div class="col-lg-6">
@@ -317,7 +370,9 @@
                 </form>
             </div>
         </div>
+        </div>
 
+        <div class="settings-section">
         <h3>Message Board</h3>
         <div class="row">
             <div class="col-lg-8">
@@ -325,7 +380,7 @@
                     .msg-tab-bar {
                         display: flex;
                         gap: 4px;
-                        margin-bottom: 8px;
+                        margin-bottom: 0;
                         align-items: center;
                     }
         
@@ -381,7 +436,8 @@
                         cursor: pointer;
                         background: none;
                         border: 1px dashed #aaa;
-                        border-radius: 4px;
+                        border-bottom: none;
+                        border-radius: 4px 4px 0 0;
                         font-size: 0.9em;
                         color: #666;
                     }
@@ -1119,12 +1175,13 @@
                 </script>
             </div>
         </div>
+        </div>
 
-        
+        <div class="settings-section">
         <h3>Team Names</h3>
-        <div>Clear team names to prevent showing scores for that team.</div>
+        <div class="section-hint">Clear team names to prevent showing scores for that team.</div>
         <div class="row">
-            <div class="col-lg-8">
+            <div class="col-lg-6">
                 <form action="/settings" method="POST">
                     {% for team_key, team_label, team_val, tag_key, tag_val in [
                     ('team_home', 'Home', team_home, 'team_home_tag', team_home_tag),
@@ -1148,10 +1205,12 @@
                 </form>
             </div>
         </div>
+        </div>
 
+        <div class="settings-section">
         <h3>Meet Manager (Hytek/Active) Data</h3>
         <div class="row">
-            <div class="col-lg-8">
+            <div class="col-lg-6">
                 <form action="/settings" method="POST" enctype="multipart/form-data">
                     <div class="input-group">
                         <label for="meet_schedule">Hytek Schedule (.hy3)</label>
@@ -1188,7 +1247,7 @@
         </div>
 
         <div class="row">
-            <div class="col-lg-8">
+            <div class="col-lg-6">
                 <form action="/settings" method="POST" enctype="multipart/form-data">
                     <div class="input-group">
                         <label for="time_standards_file">Hytek Time Standards (.st2)</label>
@@ -1223,7 +1282,7 @@
 
         {% if standards_loaded and std_tag_info %}
         <div class="row">
-            <div class="col-lg-8">
+            <div class="col-lg-6">
                 <form action="/settings" method="POST" enctype="multipart/form-data">
                     <table style="width: auto; border-collapse: separate; border-spacing: 2ch 2px;">
                         <tr><th>Tag</th><th>Description</th><th></th></tr>
@@ -1273,7 +1332,7 @@
         </div>
         {% if rec_set_info %}
         <div class="row">
-            <div class="col-lg-10">
+            <div class="col-lg-8">
                 <table class="table table-condensed" style="margin-top: 8px; width: auto;">
                     <thead>
                         <tr>
@@ -1317,7 +1376,9 @@
             </div>
         </div>
         {% endif %}
+        </div>
 
+        <div class="settings-section">
         <h3>Ad Display</h3>
         <div class="row">
             <div class="col-lg-6">
@@ -1345,9 +1406,13 @@
             </div>
         </div>
         {% if ad_url and (ad_url != '') %}
-        <img src="{{url_for('static', filename='ad/'+ad_url)}}" width='400px' />
+        <div class="row"><div class="col-lg-6">
+        <img src="{{url_for('static', filename='ad/'+ad_url)}}" style="max-width:100%;border-radius:4px;margin-top:6px;" />
+        </div></div>
         {% endif %}
+        </div>
 
+        <div class="settings-section">
         <h3>WiFi Network</h3>
         {% if wifi_available %}
         <div class="row">
@@ -1389,7 +1454,9 @@
             </div>
         </div>
         {% endif %}
+        </div>
  
+        <div class="settings-section">
         <h3>Advanced Settings</h3>
         <div class="row">
             <div class="col-lg-6">
@@ -1417,7 +1484,7 @@
             </div>
         </div>
         <div class="row">
-            <div class="col-md-4">
+            <div class="col-lg-6">
                 <form action="/settings" method="POST">
                     <div class="input-group">
                         <label for="user_name">User Name</label>
@@ -1434,7 +1501,7 @@
             </div>
         </div>
         <div class="row">
-            <div class="col-md-4">
+            <div class="col-lg-6">
                 <form action="/settings" method="POST">
                     <div class="input-group">
                         <label for="password">Change Password</label>
@@ -1453,17 +1520,29 @@
             </div>
         </div>
         <div class="row">
-            <div class="col-md-4">
+            <div class="col-lg-6">
                 <form action="/logout">
                     <input type="submit" value="Log Out" class="btn btn-default" />
                 </form>
             </div>
         </div>
-        <div class="row" style="margin-top: 20px;">
-            <div class="col-md-4">
-                <button class="btn btn-danger" type="button" onclick="document.getElementById('shutdown-overlay').style.display='flex';">Stop Server</button>
+        </div>
+
+        <div class="settings-section">
+        <h3 style="color:#a94442;">Danger Zone</h3>
+        <div class="row">
+            <div class="col-lg-6">
+                <div style="border:1px solid #ebccd1;border-radius:4px;padding:12px 16px;background:#fff;">
+                    <p style="margin:0 0 8px;font-size:13px;color:#8a6d3b;">
+                        <strong>Warning:</strong> Only advanced users who know how to maintain the Raspberry Pi should use this.
+                        Stopping the server will require manual intervention to restart it.
+                    </p>
+                    <button class="btn btn-danger" type="button" onclick="document.getElementById('shutdown-overlay').style.display='flex';">Stop Server</button>
+                </div>
             </div>
         </div>
+        </div>
+        <div style="height:32px;"></div>
     </div>
 
     <!-- Shutdown confirmation overlay -->
