@@ -1,5 +1,11 @@
 {
     "ad_url": "dolphins-logo.jpg",
+    "azure_audience": "",
+    "azure_client_id": "",
+    "azure_enabled": false,
+    "azure_relay_url": "",
+    "azure_template_path": "web/home",
+    "azure_tenant_id": "",
     "blank_message": "## Warmups\n**High Woodlands**: 4:30pm-5:00pm\n**Kingsgate**:      5:00pm-5:30pm\n## Meet Start\nPromptly at 6:00pm\n## Volunteer Meetings\n***Timers*** 5:30pm, ***Officials*** 5:45pm, ***Coaches*** 5:30pm",
     "blank_message_align": "center",
     "blank_message_visible": false,

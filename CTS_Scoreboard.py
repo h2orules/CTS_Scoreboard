@@ -24,6 +24,7 @@ import hashlib
 import sim
 import wifi_manager
 import settings_routes
+from azure_relay import AzureRelayClient
 
 DEBUG = False
 #DEBUG = True
@@ -61,7 +62,14 @@ settings = {
     'team_guest2_tag': '',
     'team_guest3': '',
     'team_guest3_tag': '',
-    'std_desc_overrides': {}
+    'std_desc_overrides': {},
+    # Azure relay (Phase 2)
+    'azure_enabled': False,
+    'azure_tenant_id': '',
+    'azure_client_id': '',
+    'azure_audience': '',
+    'azure_relay_url': '',
+    'azure_template_path': 'web/home',
     }
 in_file = None
 out_file = None
@@ -953,6 +961,16 @@ def ws_set_event_heat(d):
 # Register simulation handlers
 import sys
 sim.register(socketio, sys.modules[__name__])
+
+# Azure relay client (Phase 2). Constructed eagerly so settings/azure routes
+# can introspect status, but not started unless settings.azure_enabled is True
+# (Phase 3 will wire actual data forwarding).
+azure_relay_client = AzureRelayClient(
+    creds_file='azure_credentials.json',
+    relay_url=settings.get('azure_relay_url', ''),
+)
+if settings.get('azure_enabled') and azure_relay_client.meet_id:
+    azure_relay_client.start()
 
 # Register settings/admin routes
 settings_routes.register(app, sys.modules[__name__])
