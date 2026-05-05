@@ -1,0 +1,98 @@
+name: azure-promote-prod
+
+# Promote a previously-deployed pre-prod image to prod. Requires a manual
+# approval on the `production` GitHub Environment (configure required
+# reviewers in repo settings).
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_digest:
+        description: 'Full image reference with @sha256: digest from the pre-prod deploy'
+        required: true
+      revision_suffix:
+        description: 'Optional revision suffix (defaults to short SHA)'
+        required: false
+        default: ''
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  RG_PROD: ${{ secrets.RG_PROD }}
+  ACR_PROD: ctssbprodacr
+  APP_PROD: cts-sb-prod-app
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    environment: production    # required-reviewer gate
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Compute revision suffix
+        id: rev
+        run: |
+          SUFFIX="${{ github.event.inputs.revision_suffix }}"
+          if [[ -z "$SUFFIX" ]]; then
+            SUFFIX="r$(echo ${{ github.sha }} | cut -c1-8)"
+          fi
+          echo "suffix=$SUFFIX" >> $GITHUB_OUTPUT
+
+      - name: Import image from pre-prod ACR to prod ACR
+        run: |
+          # Strip @sha256:... back to repo:tag-style for the import; az acr
+          # import accepts digests on --source.
+          az acr import \
+            --name $ACR_PROD \
+            --source "${{ github.event.inputs.image_digest }}" \
+            --image "cts-relay@${GITHUB_SHA}" \
+            --force
+
+      - name: Update prod Container App
+        run: |
+          az containerapp update \
+            -g $RG_PROD -n $APP_PROD \
+            --image "$ACR_PROD.azurecr.io/cts-relay:${{ github.sha }}" \
+            --revision-suffix "${{ steps.rev.outputs.suffix }}"
+
+      - name: Health probe
+        run: |
+          FQDN=$(az containerapp show -g $RG_PROD -n $APP_PROD --query properties.configuration.ingress.fqdn -o tsv)
+          for i in 1 2 3 4 5 6 7 8; do
+            if curl -fsS "https://$FQDN/healthz"; then
+              echo "OK"
+              echo "::notice title=Prod URL::https://$FQDN"
+              exit 0
+            fi
+            echo "Not ready yet (attempt $i), sleeping 15s..."
+            sleep 15
+          done
+          echo "Prod health probe failed; consider rollback."
+          exit 1
+
+      - name: Summary
+        run: |
+          FQDN=$(az containerapp show -g $RG_PROD -n $APP_PROD --query properties.configuration.ingress.fqdn -o tsv)
+          {
+            echo "## Promotion to prod"
+            echo "- URL: https://$FQDN"
+            echo "- Promoted digest: \`${{ github.event.inputs.image_digest }}\`"
+            echo ""
+            echo "To roll back, run:"
+            echo '```'
+            echo "az containerapp revision list -g $RG_PROD -n $APP_PROD -o table"
+            echo "az containerapp revision activate -g $RG_PROD -n $APP_PROD --revision <previous>"
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
