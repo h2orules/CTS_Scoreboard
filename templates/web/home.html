@@ -94,7 +94,7 @@
             <img src="{{url_for('static', filename='ad/'+ad_url)}}" />
             {% endif %}
         </div>
-        {% if test_background %}
+        {% if test_background and is_dev_mode and serving_context == 'pi' %}
         <div class="controls">
             <button type="button" onclick="changeEvent(-1);">◀ Event</button>
             <button type="button" onclick="changeEvent(1);">Event ▶</button>
@@ -623,7 +623,7 @@
 
     var socket = io.connect('http://' + document.domain + ':' + location.port + '/scoreboard');
     socket.on('connect', function () {
-        {% if test_event %}
+        {% if test_event and is_dev_mode and serving_context == 'pi' %}
         socket.emit('set_event_heat', { event: {{ test_event }}, heat: {{ test_heat or 1 }}});
     {% endif %}
     });

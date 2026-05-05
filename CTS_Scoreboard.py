@@ -10,6 +10,7 @@ import serial.tools.list_ports
 import re
 import time
 import json
+import os
 import os.path
 import glob
 from hytek_event_loader import HytekEventLoader
@@ -27,6 +28,15 @@ import settings_routes
 DEBUG = False
 #DEBUG = True
 settings_file = './settings.json'
+
+
+def is_dev_mode():
+    """True when running outside production (gunicorn).
+
+    Controlled by env var SCOREBOARD_MODE; defaults to 'production'.
+    Set SCOREBOARD_MODE=development for `flask run`, pytest, or VS Code launch.
+    """
+    return os.environ.get('SCOREBOARD_MODE', 'production').lower() == 'development'
 
 settings = {
     'meet_title': '',
@@ -977,6 +987,15 @@ def api_message_page(index):
     return resp
 
         
+@app.route("/test")
+@flask_login.login_required
+def route_test():
+    """Local-only test/simulator page. Disabled in production."""
+    if not is_dev_mode():
+        return flask.abort(404)
+    return flask.render_template('test.html', meet_title=settings.get('meet_title', ''))
+
+
 # Scoreboard Templates    
 @app.route('/web/<name>')
 def route_web(name):
@@ -1014,6 +1033,8 @@ def route_web(name):
     return flask.render_template(web_name,
         meet_title=settings['meet_title'],
         test_background='test' in flask.request.args.keys(),
+        is_dev_mode=is_dev_mode(),
+        serving_context='pi',
         num_lanes=num_lanes,
         test_event=test_event,
         test_heat=test_heat,
