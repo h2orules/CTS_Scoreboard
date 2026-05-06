@@ -18,6 +18,7 @@ import socketio
 from app import PROTOCOL_VERSION_CURRENT, PROTOCOL_VERSION_MIN_SUPPORTED
 from app.auth import InvalidPiTokenError, validate_pi_token
 from app.state import MeetStateStore
+from app.telemetry import get_metrics
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ def register_handlers(
     validator = token_validator or (
         lambda token: validate_pi_token(token, tenant_id=tenant_id, audience=audience)
     )
+    metrics = get_metrics()
 
     # ============================================================
     # /pi namespace - upstream from the Raspberry Pi
@@ -104,6 +106,7 @@ def register_handlers(
             protocol_version=int(payload.get("protocol_version", PROTOCOL_VERSION_CURRENT)),
             pi_account_id=sess.get(_SESSION_PI_OID, ""),
         )
+        metrics.meet_opened.add(1, {"meet_id": meet_id})
         # Notify any already-connected viewers that the feed is live.
         await sio.emit("feed_status", {"status": "live"}, room=meet_id, namespace="/scoreboard")
         return {"ok": True}
@@ -115,6 +118,7 @@ def register_handlers(
         if not meet_id:
             return
         store.put_state(meet_id, payload)
+        metrics.relay_event_processed.add(1, {"event": "update_scoreboard"})
         await sio.emit("update_scoreboard", payload, room=meet_id, namespace="/scoreboard")
 
     @sio.on("event_info", namespace="/pi")
@@ -227,6 +231,7 @@ def register_handlers(
             raise socketio.exceptions.ConnectionRefusedError("unknown_meet")
         await sio.enter_room(sid, meet_id, namespace="/scoreboard")
         await sio.save_session(sid, {_SESSION_BROWSER_MEET: meet_id}, namespace="/scoreboard")
+        metrics.browser_connected.add(1, {"meet_id": meet_id})
         # Hydrate the freshly connected browser with the latest state.
         state = store.get_state(meet_id)
         if state:
@@ -240,4 +245,8 @@ def register_handlers(
 
     @sio.event(namespace="/scoreboard")
     async def disconnect(sid: str) -> None:  # noqa: F811
+        sess = await sio.get_session(sid, namespace="/scoreboard")
+        meet_id = sess.get(_SESSION_BROWSER_MEET)
+        if meet_id:
+            metrics.browser_disconnected.add(1, {"meet_id": meet_id})
         return None
