@@ -26,6 +26,7 @@ import wifi_manager
 import settings_routes
 from azure_relay import AzureRelayClient
 from template_bundle import build_bundle
+from qr_utils import build_meet_url, render_overlay_svg, substitute_qr_tokens
 
 DEBUG = False
 #DEBUG = True
@@ -71,6 +72,10 @@ settings = {
     'azure_audience': '',
     'azure_relay_url': '',
     'azure_template_path': 'web/home',
+    'azure_public_url': '',  # Public URL viewers see (often == azure_relay_url).
+    # QR (Phase 5)
+    'qr_overlay_enabled': False,
+    'qr_overlay_corner': 'top-right',
     }
 in_file = None
 out_file = None
@@ -780,9 +785,14 @@ def _render_and_cache_message_pages():
     Returns a list of content keys (one per page).
     """
     pages = settings.get('message_pages', [])
+    qr_target = build_meet_url(
+        public_base=settings.get('azure_public_url') or settings.get('azure_relay_url', ''),
+        meet_id=getattr(azure_relay_client, 'meet_id', '') if 'azure_relay_client' in globals() else '',
+    )
     keys = []
     for i, page in enumerate(pages):
         html = _render_blank_message_html(page.get('text', ''))
+        html = substitute_qr_tokens(html, target_url=qr_target)
         key = _cache_put('message_page_%d' % i, html)
         keys.append(key)
     return keys
@@ -995,6 +1005,16 @@ def _build_render_context():
         for i, p in enumerate(pages)
     ]
 
+    qr_target = build_meet_url(
+        public_base=settings.get('azure_public_url') or settings.get('azure_relay_url', ''),
+        meet_id=getattr(azure_relay_client, 'meet_id', '') if 'azure_relay_client' in globals() else '',
+    )
+    qr_overlay_svg = (
+        render_overlay_svg(qr_target)
+        if settings.get('qr_overlay_enabled') and qr_target
+        else ''
+    )
+
     return dict(
         meet_title=settings['meet_title'],
         num_lanes=num_lanes,
@@ -1018,6 +1038,8 @@ def _build_render_context():
         initial_race_state=race_fsm.state_name,
         initial_message_pages=initial_message_pages,
         initial_active_message_page=_message_rotation_index,
+        initial_qr_overlay_svg=qr_overlay_svg,
+        initial_qr_overlay_corner=settings.get('qr_overlay_corner', 'top-right'),
         initial_settings={
             'show_pr_tags': settings.get('show_pr_tags', True),
             'show_confetti': settings.get('show_confetti', True),
