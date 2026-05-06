@@ -48,6 +48,10 @@ class MeetKeys:
     def current_template(self) -> str:
         return f"meet:{self.meet_id}:current_template"
 
+    @property
+    def context(self) -> str:
+        return f"meet:{self.meet_id}:context"
+
     def fragment(self, name: str) -> str:
         return f"meet:{self.meet_id}:fragment:{name}"
 
@@ -211,3 +215,22 @@ class MeetStateStore:
         self.mark_status(meet_id, "closed")
         k = MeetKeys(meet_id)
         self._r.delete(k.state, k.current_template)
+
+    # ---------- render context (Phase 4) ----------
+
+    def put_context(self, meet_id: str, context: dict[str, Any]) -> None:
+        """Store the initial render context. Replaces the previous snapshot."""
+        self._r.set(
+            MeetKeys(meet_id).context,
+            json.dumps(context, default=str),
+            ex=METADATA_TTL,
+        )
+
+    def get_context(self, meet_id: str) -> dict[str, Any] | None:
+        raw = _maybe_str(self._r.get(MeetKeys(meet_id).context))
+        if not raw:
+            return None
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            return None

@@ -235,3 +235,20 @@ async def test_pi_disconnect_marks_meet_degraded():
     degraded = [e for e in emits
                 if e["event"] == "feed_status" and e["data"] == {"status": "degraded"}]
     assert degraded
+
+
+@pytest.mark.asyncio
+async def test_meet_context_stored_in_redis():
+    sio, _, _, _ = _make_sio_with_spies()
+    store = _store()
+    register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
+    )
+    res = await _handler(sio, "/pi", "meet_context")(
+        "sidPi", {"meet_title": "Foo", "num_lanes": 6}
+    )
+    assert res == {"ok": True}
+    ctx = store.get_context(MEET)
+    assert ctx == {"meet_title": "Foo", "num_lanes": 6}
