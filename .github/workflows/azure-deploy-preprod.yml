@@ -78,10 +78,12 @@ jobs:
           echo "url=$URL" >> $GITHUB_OUTPUT
           echo "::notice title=Pre-prod URL::$URL"
 
-      - name: Smoke test /healthz
+      - name: Smoke test /healthz and /readyz
+        id: smoke
         run: |
           for i in 1 2 3 4 5 6; do
-            if curl -fsS "${{ steps.fqdn.outputs.url }}/healthz"; then
+            if curl -fsS "${{ steps.fqdn.outputs.url }}/healthz" \
+                && curl -fsS "${{ steps.fqdn.outputs.url }}/readyz" >/dev/null; then
               echo "OK"
               exit 0
             fi
@@ -90,6 +92,18 @@ jobs:
           done
           echo "Health probe failed."
           exit 1
+
+      - name: Auto-rollback on smoke failure
+        if: failure() && steps.smoke.conclusion == 'failure'
+        run: |
+          PREV=$(az containerapp revision list -g $RG -n $APP \
+            --query "sort_by([?properties.active==\`false\`], &properties.createdTime)[-1].name" -o tsv)
+          if [[ -n "$PREV" ]]; then
+            echo "Rolling back to previous revision: $PREV"
+            az containerapp revision activate -g $RG -n $APP --revision "$PREV"
+          else
+            echo "No previous revision to roll back to."
+          fi
 
       - name: Summary
         run: |

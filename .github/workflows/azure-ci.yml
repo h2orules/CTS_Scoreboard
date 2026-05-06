@@ -45,8 +45,11 @@ jobs:
         run: mypy app
         continue-on-error: true   # strict mypy; downgraded to warning until app grows beyond scaffold
 
-      - name: Pytest (unit + integration)
-        run: pytest -v --cov=app --cov-report=term-missing
+      - name: Pytest unit
+        run: pytest tests/unit -v --cov=app --cov-report=term-missing
+
+      - name: Pytest integration (fakeredis, in-process)
+        run: pytest tests/integration -v
 
   container-build:
     runs-on: ubuntu-latest
