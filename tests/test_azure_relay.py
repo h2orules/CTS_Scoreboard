@@ -207,22 +207,24 @@ class TestBackoffLoop:
         path = str(tmp_path / "creds.json")
         save_credentials(path, _sample_creds())
 
-        # Use a tight backoff schedule so the test runs fast.
+        # Use a tight backoff schedule so the test runs fast. Empty relay_url
+        # makes _connect_and_serve raise immediately ("relay_url is not
+        # configured") so we don't hit the network.
         client = AzureRelayClient(
             creds_file=path,
-            relay_url="http://invalid.invalid",
+            relay_url="",
             backoff_schedule=(0, 0, 0),
         )
         client.start()
         # Give the loop a moment to attempt + fail.
         deadline = time.time() + 2.0
-        while time.time() < deadline and client.status != STATE_BACKOFF:
+        while time.time() < deadline and client.snapshot()["attempt"] < 1:
             time.sleep(0.05)
         client.stop(timeout=1.0)
-        assert client.status == STATE_STOPPED  # stopped takes precedence
+        assert client.status == STATE_STOPPED
         snap = client.snapshot()
         assert snap["attempt"] >= 1
-        assert "Phase 3" in (snap["last_error"] or "")
+        assert "relay_url" in (snap["last_error"] or "")
 
 
 class TestForceReconnect:

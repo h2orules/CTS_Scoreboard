@@ -1,0 +1,108 @@
+"""Tests for the Redis-backed MeetStateStore using fakeredis."""
+from __future__ import annotations
+
+import fakeredis
+import pytest
+
+from app.state import MeetStateStore
+
+
+@pytest.fixture
+def store():
+    r = fakeredis.FakeRedis()
+    return MeetStateStore(r, clock=lambda: 1700000000.0)
+
+
+def test_open_meet_writes_metadata(store):
+    store.open_meet("m" * 15, host_team_name="HostU", protocol_version=1, pi_account_id="oid-1")
+    meta = store.get_metadata("m" * 15)
+    assert meta is not None
+    assert meta["host_team_name"] == "HostU"
+    assert meta["status"] == "live"
+    assert meta["pi_account_id"] == "oid-1"
+    assert meta["opened_at"] == 1700000000.0
+
+
+def test_open_meet_idempotent_keeps_opened_at(store):
+    store.open_meet("m" * 15, host_team_name="A", protocol_version=1, pi_account_id="oid")
+    # Second call after a clock bump shouldn't move opened_at.
+    store._clock = lambda: 1700001000.0
+    store.open_meet("m" * 15, host_team_name="A", protocol_version=1, pi_account_id="oid")
+    meta = store.get_metadata("m" * 15)
+    assert meta["opened_at"] == 1700000000.0
+    assert meta["last_heartbeat"] == 1700001000.0
+
+
+def test_state_merges_partial_updates(store):
+    mid = "m" * 15
+    store.put_state(mid, {"clock": "00:30.50", "lanes": [1, 2, 3]})
+    store.put_state(mid, {"clock": "00:31.00", "event": "100 Free"})
+    s = store.get_state(mid)
+    assert s == {"clock": "00:31.00", "lanes": [1, 2, 3], "event": "100 Free"}
+
+
+def test_fragments_round_trip(store):
+    mid = "m" * 15
+    store.put_fragment(mid, "qualifying_info", "abc123", "<div>QT</div>")
+    got = store.get_fragment(mid, "qualifying_info")
+    assert got == ("abc123", "<div>QT</div>")
+
+
+def test_invalidate_fragments_removes_them(store):
+    mid = "m" * 15
+    store.put_fragment(mid, "f1", "k1", "<a/>")
+    store.put_fragment(mid, "f2", "k2", "<b/>")
+    removed = store.invalidate_fragments(mid, ["f1", "f2", "missing"])
+    assert removed == 2
+    assert store.get_fragment(mid, "f1") is None
+    assert store.get_fragment(mid, "f2") is None
+
+
+def test_template_storage_idempotent_on_bundle_id(store):
+    mid = "m" * 15
+    bundle = {"bundle_id": "bid1", "template_text": "<html></html>",
+              "static_files": {}, "partial_files": {}, "template_path": "web/home.html"}
+    bid = store.put_template(mid, bundle)
+    assert bid == "bid1"
+    cur = store.get_current_template(mid)
+    assert cur is not None and cur["bundle_id"] == "bid1"
+
+
+def test_two_meets_do_not_share_state(store):
+    a, b = "a" * 15, "b" * 15
+    store.open_meet(a, host_team_name="A", protocol_version=1, pi_account_id="oid-a")
+    store.open_meet(b, host_team_name="B", protocol_version=1, pi_account_id="oid-b")
+    store.put_state(a, {"clock": "1"})
+    store.put_state(b, {"clock": "2"})
+    assert store.get_state(a) == {"clock": "1"}
+    assert store.get_state(b) == {"clock": "2"}
+
+
+def test_close_meet_drops_state_and_marks_status(store):
+    mid = "m" * 15
+    store.open_meet(mid, host_team_name="A", protocol_version=1, pi_account_id="oid")
+    store.put_state(mid, {"clock": "00:30"})
+    store.close_meet(mid)
+    assert store.get_state(mid) is None
+    meta = store.get_metadata(mid)
+    assert meta["status"] == "closed"
+    assert "closed_at" in meta
+
+
+def test_heartbeat_recovers_from_degraded(store):
+    mid = "m" * 15
+    store.open_meet(mid, host_team_name="A", protocol_version=1, pi_account_id="oid")
+    store.mark_status(mid, "degraded")
+    store._clock = lambda: 1700001000.0
+    store.heartbeat(mid)
+    meta = store.get_metadata(mid)
+    assert meta["status"] == "live"
+    assert meta["last_heartbeat"] == 1700001000.0
+
+
+def test_get_metadata_missing_returns_none(store):
+    assert store.get_metadata("zzzzzzzzzzzzzzz") is None
+
+
+def test_get_state_missing_returns_none(store):
+    assert store.get_state("zzzzzzzzzzzzzzz") is None

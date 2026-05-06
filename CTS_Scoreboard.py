@@ -25,6 +25,7 @@ import sim
 import wifi_manager
 import settings_routes
 from azure_relay import AzureRelayClient
+from template_bundle import build_bundle
 
 DEBUG = False
 #DEBUG = True
@@ -300,7 +301,7 @@ def parse_line(l, out = None):
         if "current_event" in update or "running_time" in update:
             race_fsm.evaluate_update(channel_running, update)
             update["race_state"] = race_fsm.state_name
-            socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+            broadcast_scoreboard(update)
             update.clear()
             
         if (datetime.datetime.now() > next_update) and debug_console:
@@ -837,10 +838,10 @@ def _message_rotation_tick():
         # Broadcast page change
         page_keys = _render_and_cache_message_pages()
         key = page_keys[_message_rotation_index] if _message_rotation_index < len(page_keys) else None
-        socketio.emit('update_scoreboard', {
+        broadcast_scoreboard({
             'active_message_page': _message_rotation_index,
             'active_message_key': key,
-        }, namespace='/scoreboard')
+        })
 
 
 def _update_message_rotation():
@@ -894,7 +895,7 @@ def send_event_info():
     update["active_message_page"] = _message_rotation_index
     update["race_state"] = race_fsm.state_name
 
-    socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+    broadcast_scoreboard(update)
 
 def send_scores_info():
     update = {}
@@ -903,7 +904,7 @@ def send_scores_info():
     update["score_guest2"] = team_scores['score_guest2']
     update["score_guest3"] = team_scores['score_guest3']
     update["race_state"] = race_fsm.state_name
-    socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+    broadcast_scoreboard(update)
 
 def send_message_overlay_state():
     """Broadcast message overlay state to all scoreboard clients."""
@@ -919,7 +920,7 @@ def send_message_overlay_state():
         'message_rotation_interval': settings.get('message_rotation_interval', 30),
         'active_message_page': _message_rotation_index,
     }
-    socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+    broadcast_scoreboard(update)
             
 @socketio.on('connect', namespace='/scoreboard')
 def ws_scoreboard():
@@ -965,12 +966,50 @@ sim.register(socketio, sys.modules[__name__])
 # Azure relay client (Phase 2). Constructed eagerly so settings/azure routes
 # can introspect status, but not started unless settings.azure_enabled is True
 # (Phase 3 will wire actual data forwarding).
+def _azure_bundle_provider():
+    """Build the current template bundle for the relay to push to Azure.
+
+    Returns a JSON-serializable dict, or None if bundling fails (the relay
+    will treat None as 'no template change')."""
+    try:
+        rel = settings.get('azure_template_path', 'web/home') or 'web/home'
+        if not rel.endswith('.html'):
+            rel = rel + '.html'
+        repo_root = os.path.dirname(os.path.abspath(__file__))
+        bundle = build_bundle(
+            template_root=os.path.join(repo_root, 'templates'),
+            static_root=os.path.join(repo_root, 'static'),
+            template_relpath=rel,
+        )
+        return bundle.to_dict()
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
 azure_relay_client = AzureRelayClient(
     creds_file='azure_credentials.json',
     relay_url=settings.get('azure_relay_url', ''),
+    bundle_provider=_azure_bundle_provider,
 )
 if settings.get('azure_enabled') and azure_relay_client.meet_id:
     azure_relay_client.start()
+
+
+def broadcast_scoreboard(update):
+    """Emit an update_scoreboard payload to local browsers AND forward to Azure.
+
+    The local emit happens unconditionally on the /scoreboard namespace. The
+    Azure forward is fire-and-forget: it enqueues the payload on the relay's
+    background thread queue, which delivers it once the relay is connected.
+    Events enqueued while disconnected are kept until the queue is full
+    (bounded at 1000) and the most recent ones win when full.
+    """
+    socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+    if settings.get('azure_enabled'):
+        # forward_event() is non-blocking and thread-safe.
+        azure_relay_client.forward_event('update_scoreboard', dict(update))
+
 
 # Register settings/admin routes
 settings_routes.register(app, sys.modules[__name__])
