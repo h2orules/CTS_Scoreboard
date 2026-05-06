@@ -160,6 +160,7 @@ class AzureRelayClient:
         protocol_version: int = 1,
         backoff_schedule: tuple[int, ...] = BACKOFF_SCHEDULE,
         msal_app_factory: Callable[..., Any] | None = None,
+        bundle_provider: Callable[[], dict[str, Any] | None] | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.creds_file = creds_file
@@ -167,6 +168,7 @@ class AzureRelayClient:
         self.protocol_version = protocol_version
         self.backoff_schedule = backoff_schedule
         self._msal_factory = msal_app_factory
+        self._bundle_provider = bundle_provider
         self._clock = clock
 
         self._lock = threading.RLock()
@@ -185,6 +187,7 @@ class AzureRelayClient:
         self._attempt: int = 0
         self._active_client_count: int = 0
         self._device_flow: DeviceCodeFlow | None = None
+        self._last_pushed_bundle_id: str | None = None
 
     # ---------------- public API ----------------
 
@@ -432,11 +435,144 @@ class AzureRelayClient:
     def _connect_and_serve(self, creds: AzureCredentials) -> None:
         """Open the Socket.IO connection and serve until disconnected.
 
-        Phase 2 leaves this as a stub (raising ConnectionError) so the backoff
-        loop is exercised by tests without needing a real Azure endpoint.
-        Phase 3 fills in a ``socketio.Client`` connection, ``meet_open``
-        handshake, heartbeat loop, and queue drain.
+        Acquires a fresh access token via msal (using the cached refresh token),
+        connects to the relay's ``/pi`` namespace, sends ``meet_open``, then
+        runs the event-pump loop:
+          - drain self._queue and emit() each event
+          - send periodic heartbeats
+          - if no heartbeat ack within HEARTBEAT_DEGRADED_AFTER_S, mark degraded
+          - on disconnect / exception, raise so the outer loop backs off
+
+        For testability, the socketio client and msal app can be injected via
+        the constructor's ``msal_app_factory`` and the protected
+        ``_socketio_client_factory`` hook (overridden in tests).
         """
-        raise ConnectionError(
-            "Phase 3 will wire socketio.Client(...).connect(self.relay_url)"
+        if not self.relay_url:
+            raise ConnectionError("relay_url is not configured")
+
+        access_token = self._acquire_access_token(creds)
+        client = self._socketio_client_factory()
+
+        connected_evt = threading.Event()
+        ack_evt = threading.Event()
+        ack_evt.set()  # don't trip degraded immediately
+        last_ack_time = [self._clock()]
+
+        @client.event(namespace="/pi")  # type: ignore[misc]
+        def connect() -> None:  # noqa: ARG001
+            connected_evt.set()
+
+        @client.event(namespace="/pi")  # type: ignore[misc]
+        def heartbeat_ack(data: dict[str, Any]) -> None:  # noqa: ARG001
+            last_ack_time[0] = self._clock()
+            ack_evt.set()
+            if isinstance(data, dict) and "active_client_count" in data:
+                with self._lock:
+                    self._active_client_count = int(data["active_client_count"])
+
+        @client.event(namespace="/pi")  # type: ignore[misc]
+        def disconnect() -> None:  # noqa: ARG001
+            connected_evt.clear()
+
+        # Connect with bearer token in the auth payload.
+        client.connect(
+            self.relay_url,
+            namespaces=["/pi"],
+            auth={
+                "access_token": access_token,
+                "meet_id": creds.meet_id,
+                "protocol_version": self.protocol_version,
+            },
+            wait_timeout=10,
         )
+
+        # Send meet_open handshake so Azure registers the meet.
+        client.emit("meet_open", {
+            "meet_id": creds.meet_id,
+            "protocol_version": self.protocol_version,
+        }, namespace="/pi")
+
+        # Push the current template bundle, if a provider is registered. The
+        # bundle is content-addressed; Azure will skip re-storing if the
+        # bundle_id matches what it already has.
+        bundle = self._bundle_provider() if self._bundle_provider else None
+        if bundle is not None:
+            client.emit("template_push", bundle, namespace="/pi")
+            with self._lock:
+                self._last_pushed_bundle_id = bundle.get("bundle_id")
+
+        with self._lock:
+            self._set_state(STATE_CONNECTED)
+            self._last_connected_at = self._clock()
+            self._last_heartbeat_at = self._clock()
+            self._attempt = 0
+            self._next_retry_at = None
+            self._last_error = None
+
+        last_heartbeat = self._clock()
+        try:
+            while not self._stop.is_set() and connected_evt.is_set():
+                # Drain the outbound queue.
+                try:
+                    name, payload = self._queue.get(timeout=0.5)
+                    if name != "__noop__":
+                        client.emit(name, payload, namespace="/pi")
+                except Empty:
+                    pass
+
+                now = self._clock()
+                if now - last_heartbeat >= HEARTBEAT_INTERVAL_S:
+                    client.emit("heartbeat", {"ts": now}, namespace="/pi")
+                    last_heartbeat = now
+
+                if now - last_ack_time[0] > HEARTBEAT_DEGRADED_AFTER_S:
+                    with self._lock:
+                        if self._state == STATE_CONNECTED:
+                            self._set_state(STATE_DEGRADED)
+                else:
+                    with self._lock:
+                        if self._state == STATE_DEGRADED:
+                            self._set_state(STATE_CONNECTED)
+
+                with self._lock:
+                    self._last_heartbeat_at = now
+        finally:
+            try:
+                client.disconnect()
+            except Exception:
+                pass
+            with self._lock:
+                if self._state in (STATE_CONNECTED, STATE_DEGRADED):
+                    self._set_state(STATE_DISCONNECTED)
+
+        # If we exited because the server closed us, raise so the outer loop
+        # treats it as a disconnect that needs backoff.
+        if not self._stop.is_set():
+            raise ConnectionError("relay connection closed")
+
+    def _acquire_access_token(self, creds: AzureCredentials) -> str:
+        """Use the cached refresh token to mint a fresh access token."""
+        if self._msal_factory is not None:
+            app = self._msal_factory(client_id=creds.client_id, tenant_id=creds.tenant_id)
+        else:
+            from msal import PublicClientApplication
+
+            authority = f"https://login.microsoftonline.com/{creds.tenant_id}"
+            app = PublicClientApplication(creds.client_id, authority=authority)
+
+        # acquire_token_by_refresh_token is the explicit refresh flow.
+        result = app.acquire_token_by_refresh_token(
+            refresh_token=creds.refresh_token,
+            scopes=creds.scopes or [f"{creds.audience}/.default"],
+        )
+        if "access_token" not in result:
+            err = result.get("error_description") or result.get("error") or "unknown"
+            raise ConnectionError(f"refresh token rejected: {err}")
+        return str(result["access_token"])
+
+    def _socketio_client_factory(self):
+        """Return a fresh socketio.Client. Override in tests."""
+        import socketio  # type: ignore[import-not-found]
+
+        return socketio.Client(reconnection=False, logger=False, engineio_logger=False)
+
