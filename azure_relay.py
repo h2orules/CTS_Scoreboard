@@ -161,6 +161,7 @@ class AzureRelayClient:
         backoff_schedule: tuple[int, ...] = BACKOFF_SCHEDULE,
         msal_app_factory: Callable[..., Any] | None = None,
         bundle_provider: Callable[[], dict[str, Any] | None] | None = None,
+        context_provider: Callable[[], dict[str, Any] | None] | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.creds_file = creds_file
@@ -169,6 +170,7 @@ class AzureRelayClient:
         self.backoff_schedule = backoff_schedule
         self._msal_factory = msal_app_factory
         self._bundle_provider = bundle_provider
+        self._context_provider = context_provider
         self._clock = clock
 
         self._lock = threading.RLock()
@@ -500,6 +502,12 @@ class AzureRelayClient:
             client.emit("template_push", bundle, namespace="/pi")
             with self._lock:
                 self._last_pushed_bundle_id = bundle.get("bundle_id")
+
+        # Push the current render context (Phase 4) so Azure can render the
+        # /m/{meet_id} page immediately on first browser hit.
+        context = self._context_provider() if self._context_provider else None
+        if context is not None:
+            client.emit("meet_context", context, namespace="/pi")
 
         with self._lock:
             self._set_state(STATE_CONNECTED)

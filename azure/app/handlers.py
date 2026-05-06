@@ -161,6 +161,15 @@ def register_handlers(
         )
         return {"ok": True, "bundle_id": bundle_id}
 
+    @sio.on("meet_context", namespace="/pi")
+    async def on_meet_context(sid: str, context: dict[str, Any]) -> dict[str, Any]:
+        sess = await sio.get_session(sid, namespace="/pi")
+        meet_id = sess.get(_SESSION_PI_MEET)
+        if not meet_id:
+            return {"ok": False, "error": "no meet"}
+        store.put_context(meet_id, context)
+        return {"ok": True}
+
     @sio.on("invalidate", namespace="/pi")
     async def on_invalidate(sid: str, payload: dict[str, Any]) -> dict[str, Any]:
         sess = await sio.get_session(sid, namespace="/pi")

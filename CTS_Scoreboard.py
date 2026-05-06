@@ -963,9 +963,74 @@ def ws_set_event_heat(d):
 import sys
 sim.register(socketio, sys.modules[__name__])
 
+def _build_render_context():
+    """Build the dict of variables home.html needs.
+
+    Shared between Flask's route_web (which adds dev/test-mode flags on top)
+    and the Azure relay (which forwards a frozen copy after meet_open).
+    """
+    ev = last_event_sent[0]
+    ht = last_event_sent[1]
+    qt_results, qt_show_age = _get_qualifying_times(ev)
+    rec_set_results, rec_show_age = _get_matching_records(ev)
+    show_age_codes = qt_show_age or rec_show_age
+    qt_key = _render_qualifying_html(qt_results, rec_set_results)
+    page_keys = _render_and_cache_message_pages()
+    _, qt_html = _cache_get('qualifying_info')
+    num_lanes = settings['num_lanes']
+
+    initial_lanes = {}
+    for i in range(1, num_lanes + 1):
+        initial_lanes[i] = {
+            'name': event_info.get_display_string(ev, ht, i),
+            'team': event_info.get_team_code(ev, ht, i),
+            'age_code': event_info.get_age_code(ev, ht, i) if show_age_codes else '',
+            'seed_time': event_info.get_seed_time(ev, ht, i),
+        }
+
+    pages = settings.get('message_pages', [])
+    initial_message_pages = [
+        {'text': p.get('text', ''), 'align': p.get('align', 'left'),
+         'enabled': p.get('enabled', False), 'key': page_keys[i] if i < len(page_keys) else None}
+        for i, p in enumerate(pages)
+    ]
+
+    return dict(
+        meet_title=settings['meet_title'],
+        num_lanes=num_lanes,
+        ad_url=settings['ad_url'],
+        schedule_has_names=event_info.has_names,
+        team_names=[
+            ('score_home', settings.get('team_home', '')),
+            ('score_guest1', settings.get('team_guest1', '')),
+            ('score_guest2', settings.get('team_guest2', '')),
+            ('score_guest3', settings.get('team_guest3', '')),
+        ],
+        initial_event=str(ev),
+        initial_heat=str(ht),
+        initial_event_name=event_info.get_event_name(ev),
+        initial_qt_groups=qt_results,
+        initial_rec_sets=rec_set_results,
+        initial_qt_key=qt_key,
+        initial_qt_html=qt_html or '',
+        initial_lanes=initial_lanes,
+        initial_scores=team_scores,
+        initial_race_state=race_fsm.state_name,
+        initial_message_pages=initial_message_pages,
+        initial_active_message_page=_message_rotation_index,
+        initial_settings={
+            'show_pr_tags': settings.get('show_pr_tags', True),
+            'show_confetti': settings.get('show_confetti', True),
+            'show_time_decorations': settings.get('show_time_decorations', False),
+            'seed_time_label': settings.get('seed_time_label', 'Seed Time'),
+            'message_overlay_enabled': settings.get('message_overlay_enabled', False),
+            'message_rotation_interval': settings.get('message_rotation_interval', 30),
+        },
+    )
+
+
 # Azure relay client (Phase 2). Constructed eagerly so settings/azure routes
-# can introspect status, but not started unless settings.azure_enabled is True
-# (Phase 3 will wire actual data forwarding).
+# can introspect status, but not started unless settings.azure_enabled is True.
 def _azure_bundle_provider():
     """Build the current template bundle for the relay to push to Azure.
 
@@ -987,10 +1052,32 @@ def _azure_bundle_provider():
         return None
 
 
+def _azure_context_provider():
+    """Build the initial render context for the Azure relay (Phase 4).
+
+    Mirrors the kwargs passed to render_template in route_web, minus dev-mode
+    fields. Returns a JSON-serializable dict, or None if the snapshot can't
+    be built."""
+    try:
+        ctx = _build_render_context()
+        # Force browser-friendly defaults: dev-only gates off; serving_context
+        # marks the page as served via Azure.
+        ctx['is_dev_mode'] = False
+        ctx['serving_context'] = 'azure'
+        ctx['test_background'] = False
+        ctx['test_event'] = None
+        ctx['test_heat'] = None
+        return ctx
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
 azure_relay_client = AzureRelayClient(
     creds_file='azure_credentials.json',
     relay_url=settings.get('azure_relay_url', ''),
     bundle_provider=_azure_bundle_provider,
+    context_provider=_azure_context_provider,
 )
 if settings.get('azure_enabled') and azure_relay_client.meet_id:
     azure_relay_client.start()
@@ -1060,69 +1147,14 @@ def route_web(name):
     test_event = flask.request.args.get('event', None)
     test_heat = flask.request.args.get('heat', None)
 
-    # Pre-populate initial page state so content appears immediately
-    ev = last_event_sent[0]
-    ht = last_event_sent[1]
-    qt_results, qt_show_age = _get_qualifying_times(ev)
-    rec_set_results, rec_show_age = _get_matching_records(ev)
-    show_age_codes = qt_show_age or rec_show_age
-    qt_key = _render_qualifying_html(qt_results, rec_set_results)
-    page_keys = _render_and_cache_message_pages()
-    _, qt_html = _cache_get('qualifying_info')
-    num_lanes = settings['num_lanes']
-
-    initial_lanes = {}
-    for i in range(1, num_lanes + 1):
-        initial_lanes[i] = {
-            'name': event_info.get_display_string(ev, ht, i),
-            'team': event_info.get_team_code(ev, ht, i),
-            'age_code': event_info.get_age_code(ev, ht, i) if show_age_codes else '',
-            'seed_time': event_info.get_seed_time(ev, ht, i),
-        }
-
-    pages = settings.get('message_pages', [])
-    initial_message_pages = [
-        {'text': p.get('text', ''), 'align': p.get('align', 'left'),
-         'enabled': p.get('enabled', False), 'key': page_keys[i] if i < len(page_keys) else None}
-        for i, p in enumerate(pages)
-    ]
-
+    ctx = _build_render_context()
     return flask.render_template(web_name,
-        meet_title=settings['meet_title'],
         test_background='test' in flask.request.args.keys(),
         is_dev_mode=is_dev_mode(),
         serving_context='pi',
-        num_lanes=num_lanes,
         test_event=test_event,
         test_heat=test_heat,
-        ad_url=settings['ad_url'],
-        schedule_has_names=event_info.has_names,
-        team_names=[
-            ('score_home', settings.get('team_home', '')),
-            ('score_guest1', settings.get('team_guest1', '')),
-            ('score_guest2', settings.get('team_guest2', '')),
-            ('score_guest3', settings.get('team_guest3', '')),
-        ],
-        initial_event=str(ev),
-        initial_heat=str(ht),
-        initial_event_name=event_info.get_event_name(ev),
-        initial_qt_groups=qt_results,
-        initial_rec_sets=rec_set_results,
-        initial_qt_key=qt_key,
-        initial_qt_html=qt_html or '',
-        initial_lanes=initial_lanes,
-        initial_scores=team_scores,
-        initial_race_state=race_fsm.state_name,
-        initial_message_pages=initial_message_pages,
-        initial_active_message_page=_message_rotation_index,
-        initial_settings={
-            'show_pr_tags': settings.get('show_pr_tags', True),
-            'show_confetti': settings.get('show_confetti', True),
-            'show_time_decorations': settings.get('show_time_decorations', False),
-            'seed_time_label': settings.get('seed_time_label', 'Seed Time'),
-            'message_overlay_enabled': settings.get('message_overlay_enabled', False),
-            'message_rotation_interval': settings.get('message_rotation_interval', 30),
-        },
+        **ctx,
     )
 
 def has_no_empty_params(rule):

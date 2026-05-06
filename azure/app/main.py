@@ -16,6 +16,7 @@ from app import (
 )
 from app.config import get_settings
 from app.handlers import register_handlers
+from app.routes import build_router
 from app.state import MeetStateStore
 
 
@@ -61,6 +62,8 @@ def build_app(
         audience=settings.entra_audience,
         token_validator=token_validator,
     )
+
+    fastapi_app.include_router(build_router(store=store))
 
     @fastapi_app.get("/healthz", response_class=PlainTextResponse, include_in_schema=False)
     async def healthz() -> str:
