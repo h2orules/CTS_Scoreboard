@@ -17,6 +17,7 @@ import time
 from collections.abc import Awaitable, Callable
 
 from app.state import MeetStateStore
+from app.telemetry import get_metrics
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ class MeetWatchdog:
     async def tick(self) -> None:
         """One pass over all active meets. Public for unit tests."""
         now = self._clock()
+        metrics = get_metrics()
         for meet_id in list(self.store.iter_active_meet_ids()):
             meta = self.store.get_metadata(meet_id)
             if not meta:
@@ -75,6 +77,7 @@ class MeetWatchdog:
             age = now - last_hb
             if age >= self.close_after_s:
                 self.store.close_meet(meet_id)
+                metrics.meet_closed.add(1, {"meet_id": meet_id, "reason": "heartbeat_timeout"})
                 await self._emit(
                     "meet_closed",
                     {"meet_id": meet_id, "reason": "heartbeat_timeout"},
@@ -87,6 +90,7 @@ class MeetWatchdog:
                 )
             elif age >= self.degraded_after_s and status != "degraded":
                 self.store.mark_status(meet_id, "degraded")
+                metrics.meet_degraded.add(1, {"meet_id": meet_id})
                 await self._emit(
                     "feed_status",
                     {"status": "degraded"},

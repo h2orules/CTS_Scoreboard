@@ -252,3 +252,24 @@ async def test_meet_context_stored_in_redis():
     assert res == {"ok": True}
     ctx = store.get_context(MEET)
     assert ctx == {"meet_title": "Foo", "num_lanes": 6}
+
+
+@pytest.mark.asyncio
+async def test_meet_open_increments_meet_opened_metric():
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    metrics = get_metrics()
+    starting_total = metrics.meet_opened.total
+
+    sio, _, _, _ = _make_sio_with_spies()
+    store = _store()
+    register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
+    )
+    await _handler(sio, "/pi", "meet_open")(
+        "sidPi", {"meet_id": MEET, "host_team_name": "X", "protocol_version": 1}
+    )
+    assert metrics.meet_opened.total == starting_total + 1
+    reset_for_tests()

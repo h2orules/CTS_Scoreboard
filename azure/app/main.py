@@ -18,6 +18,7 @@ from app.config import get_settings
 from app.handlers import register_handlers
 from app.routes import build_router
 from app.state import MeetStateStore
+from app.telemetry import configure_telemetry
 from app.watchdog import MeetWatchdog
 
 
@@ -32,6 +33,10 @@ def build_app(
     inject ``fakeredis.FakeRedis`` and stub auth.
     """
     settings = get_settings()
+    configure_telemetry(
+        connection_string=settings.applicationinsights_connection_string,
+        environment=settings.environment,
+    )
     redis_handle = redis_client or redis_sync.from_url(settings.redis_url, decode_responses=False)
     store = MeetStateStore(redis_handle)
 
