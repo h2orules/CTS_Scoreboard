@@ -18,6 +18,7 @@ from app.config import get_settings
 from app.handlers import register_handlers
 from app.routes import build_router
 from app.state import MeetStateStore
+from app.watchdog import MeetWatchdog
 
 
 def build_app(
@@ -63,6 +64,23 @@ def build_app(
         token_validator=token_validator,
     )
 
+    watchdog = MeetWatchdog(
+        store=store,
+        emitter=sio.emit,
+        degraded_after_s=settings.heartbeat_degraded_seconds,
+        close_after_s=settings.heartbeat_close_seconds,
+    )
+
+    @asynccontextmanager
+    async def lifespan_with_watchdog(app: FastAPI):
+        async with lifespan(app):
+            watchdog.start()
+            try:
+                yield
+            finally:
+                await watchdog.stop()
+
+    fastapi_app.router.lifespan_context = lifespan_with_watchdog
     fastapi_app.include_router(build_router(store=store))
 
     @fastapi_app.get("/healthz", response_class=PlainTextResponse, include_in_schema=False)

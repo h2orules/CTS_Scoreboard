@@ -217,7 +217,6 @@ class MeetStateStore:
         self._r.delete(k.state, k.current_template)
 
     # ---------- render context (Phase 4) ----------
-
     def put_context(self, meet_id: str, context: dict[str, Any]) -> None:
         """Store the initial render context. Replaces the previous snapshot."""
         self._r.set(
@@ -234,3 +233,18 @@ class MeetStateStore:
             return json.loads(raw)
         except json.JSONDecodeError:
             return None
+
+    # ---------- enumeration (Phase 6) ----------
+
+    def iter_active_meet_ids(self):
+        """Yield the meet IDs of every meet whose metadata is still in store.
+
+        Uses SCAN (via redis-py / fakeredis ``scan_iter``) so it's safe on
+        production Redis even with many keys.
+        """
+        for raw_key in self._r.scan_iter(match="meet:*:metadata"):
+            key = _maybe_str(raw_key) or ""
+            # key shape: meet:<id>:metadata
+            parts = key.split(":")
+            if len(parts) >= 3 and parts[0] == "meet" and parts[-1] == "metadata":
+                yield ":".join(parts[1:-1])
