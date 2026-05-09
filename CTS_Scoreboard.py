@@ -1347,6 +1347,12 @@ def load_user(userid):
 # app is ready whether launched via ``python CTS_Scoreboard.py`` (dev) or
 # imported by gunicorn (production).
 load_settings()
+# azure_relay_client was constructed above settings load, so its relay_url
+# was empty. Push the now-loaded URL into it.
+azure_relay_client.update_relay_url(_active_azure_urls()[0])
+if settings.get('azure_enabled') and azure_relay_client.meet_id \
+        and azure_relay_client.status in ('disconnected', 'needs_auth'):
+    azure_relay_client.start()
 _update_message_rotation()
 
 
