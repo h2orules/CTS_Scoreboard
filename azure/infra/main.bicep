@@ -218,7 +218,9 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         }
       ]
       secrets: [
-        { name: 'redis-conn', value: '${redis.properties.hostName}:${redis.properties.sslPort},password=${redis.listKeys().primaryKey},ssl=True,abortConnect=False' }
+        // redis-py expects a URL like rediss://:<key>@<host>:<sslPort>/0.
+        // The raw password is URL-encoded (it can contain '+', '/', '=').
+        { name: 'redis-conn', value: 'rediss://:${uriComponent(redis.listKeys().primaryKey)}@${redis.properties.hostName}:${redis.properties.sslPort}/0' }
         { name: 'storage-conn', value: 'DefaultEndpointsProtocol=https;AccountName=${storage.name};AccountKey=${storage.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}' }
         { name: 'webpubsub-conn', value: webPubSub.listKeys().primaryConnectionString }
         { name: 'appinsights-conn', value: ai.properties.ConnectionString }

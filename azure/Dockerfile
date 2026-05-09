@@ -23,10 +23,11 @@ FROM python:3.12-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PORT=8000
+    PORT=8000 \
+    HOME=/tmp
 
 RUN groupadd --system --gid 1000 app \
- && useradd --system --uid 1000 --gid app --no-create-home app
+ && useradd --system --uid 1000 --gid app --no-create-home --home-dir /tmp app
 
 COPY --from=builder /install /usr/local
 COPY --from=builder /build/app /srv/app
