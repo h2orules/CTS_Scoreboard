@@ -190,6 +190,24 @@ def register_handlers(
         )
         return {"ok": True, "removed": removed}
 
+    @sio.on("fragment", namespace="/pi")
+    async def on_fragment(sid: str, payload: dict[str, Any]) -> None:
+        """Pi pushed a rendered HTML fragment (e.g. message_page_0).
+
+        Stored in Redis so the browser can fetch it via /m/{meet_id}/api/...
+        instead of trying to reach the Pi directly.
+        """
+        sess = await sio.get_session(sid, namespace="/pi")
+        meet_id = sess.get(_SESSION_PI_MEET)
+        if not meet_id:
+            return
+        name = payload.get("name")
+        key = payload.get("key")
+        html = payload.get("html")
+        if not name or not key or html is None:
+            return
+        store.put_fragment(meet_id, str(name), str(key), str(html))
+
     @sio.on("heartbeat", namespace="/pi")
     async def on_heartbeat(sid: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         sess = await sio.get_session(sid, namespace="/pi")

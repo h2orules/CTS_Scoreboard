@@ -76,7 +76,7 @@
                     <tr class="{{ 'scoreboard_row_odd' if i % 2 == 1 else 'scoreboard_row_eve' }}">
                         <td align="center">{{ i }}</td>
                         <td id="lane_place{{ i }}" align="center"></td>
-                        <td id="lane_name{{ i }}" class="lane_name"><div class="lane_name-inner"><span class="lane_swimmer_name" id="lane_swimmer_name{{ i }}">{{ initial_lanes[i].name if initial_lanes and i in initial_lanes else '&nbsp;' }}</span><span class="lane_age_code" id="lane_age_code{{ i }}">{{ initial_lanes[i].age_code if initial_lanes and i in initial_lanes else '' }}</span><span class="lane_team_code" id="lane_team{{ i }}">{{ initial_lanes[i].team if initial_lanes and i in initial_lanes else '' }}</span></div></td>
+                        <td id="lane_name{{ i }}" class="lane_name"><div class="lane_name-inner"><span class="lane_swimmer_name" id="lane_swimmer_name{{ i }}">{{ initial_lanes[i].name if initial_lanes and i in initial_lanes else '&nbsp;'|safe }}</span><span class="lane_age_code" id="lane_age_code{{ i }}">{{ initial_lanes[i].age_code if initial_lanes and i in initial_lanes else '' }}</span><span class="lane_team_code" id="lane_team{{ i }}">{{ initial_lanes[i].team if initial_lanes and i in initial_lanes else '' }}</span></div></td>
                         <td align="right"><span id="lane_time{{ i }}"></span><span class="lane_qt_tag" id="lane_qt_tag{{ i }}"></span>&nbsp;</td>
                     </tr>
                     {% endfor %}
