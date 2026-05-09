@@ -64,7 +64,6 @@ var caName = '${prefix}-app'
 var uamiName = '${prefix}-uami'
 var redisName = '${prefix}-redis'
 var storageName = take(replace('${prefix}st', '-', ''), 24)
-var pubsubName = '${prefix}-wps'
 var actionGroupName = '${prefix}-ag'
 
 // ---------- observability ----------
@@ -165,25 +164,6 @@ resource redis 'Microsoft.Cache/redis@2023-08-01' = {
   }
 }
 
-// ---------- Web PubSub for Socket.IO ----------
-resource webPubSub 'Microsoft.SignalRService/webPubSub@2024-03-01' = {
-  name: pubsubName
-  location: location
-  sku: {
-    name: environmentName == 'prod' ? 'Standard_S1' : 'Free_F1'
-    capacity: 1
-    tier: environmentName == 'prod' ? 'Standard' : 'Free'
-  }
-  kind: 'SocketIO'
-  properties: {
-    publicNetworkAccess: 'Enabled'
-    disableLocalAuth: false
-    socketIO: {
-      serviceMode: 'Default'
-    }
-  }
-}
-
 // ---------- container apps environment ----------
 resource caEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: caEnvName
@@ -233,7 +213,6 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         // The raw password is URL-encoded (it can contain '+', '/', '=').
         { name: 'redis-conn', value: 'rediss://:${uriComponent(redis.listKeys().primaryKey)}@${redis.properties.hostName}:${redis.properties.sslPort}/0' }
         { name: 'storage-conn', value: 'DefaultEndpointsProtocol=https;AccountName=${storage.name};AccountKey=${storage.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}' }
-        { name: 'webpubsub-conn', value: webPubSub.listKeys().primaryConnectionString }
         { name: 'appinsights-conn', value: ai.properties.ConnectionString }
       ]
     }
@@ -251,7 +230,6 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'LOG_LEVEL', value: 'INFO' }
             { name: 'REDIS_URL', secretRef: 'redis-conn' }
             { name: 'STORAGE_CONNECTION_STRING', secretRef: 'storage-conn' }
-            { name: 'WEBPUBSUB_CONNECTION_STRING', secretRef: 'webpubsub-conn' }
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', secretRef: 'appinsights-conn' }
             { name: 'ENTRA_TENANT_ID', value: entraTenantId }
             { name: 'ENTRA_AUDIENCE', value: entraAudience }
@@ -358,6 +336,5 @@ resource alertReconnects 'Microsoft.Insights/scheduledQueryRules@2023-03-15-prev
 output containerAppFqdn string = containerApp.properties.configuration.ingress.fqdn
 output acrLoginServer string = '${acrName}.azurecr.io'
 output appInsightsConnectionString string = ai.properties.ConnectionString
-output webPubSubName string = webPubSub.name
 output redisHost string = redis.properties.hostName
 output storageAccountName string = storage.name

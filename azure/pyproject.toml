@@ -1,7 +1,7 @@
 [project]
 name = "cts-scoreboard-azure"
 version = "0.1.0"
-description = "Azure relay front-end for CTS Scoreboard. Bridges Pi-hosted scoreboards to remote viewers via Web PubSub for Socket.IO."
+description = "Azure relay front-end for CTS Scoreboard. Bridges Pi-hosted scoreboards to remote viewers via Container Apps + Socket.IO with Redis fanout."
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
@@ -15,7 +15,6 @@ dependencies = [
     "azure-data-tables>=12.5",
     "azure-storage-blob>=12.23",
     "azure-identity>=1.19",
-    "azure-messaging-webpubsubservice>=1.2",
     "msal>=1.31",
     "pyjwt[crypto]>=2.9",
     "httpx>=0.27",
