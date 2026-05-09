@@ -173,6 +173,27 @@ az role assignment create --assignee "$GH_APP_ID" --role AcrPush \
 az role assignment create --assignee "$GH_APP_ID" --role AcrPush \
   --scope "/subscriptions/$SUB_ID/resourceGroups/$RG_PROD"
 
+# Role Based Access Control Administrator (constrained) so the
+# azure-infra-deploy workflow can (re)create the AcrPull role assignment
+# the Bicep template declares for the user-assigned managed identity.
+# Without this, `az deployment group create` fails with:
+#   Authorization failed ... action 'Microsoft.Authorization/roleAssignments/write'
+# The condition restricts the SP to assigning ONLY the AcrPull role
+# (7f951dda-4ed3-4680-a7ca-43fe172d538d), so a compromised CI token
+# can't grant itself Owner.
+ACR_PULL_ROLE_ID="7f951dda-4ed3-4680-a7ca-43fe172d538d"
+RBAC_ADMIN_ROLE_ID="f58310d9-a9f6-439a-9e8d-f62e7b41a168"
+RBAC_CONDITION="((!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})) OR (@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$ACR_PULL_ROLE_ID})) AND ((!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})) OR (@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {$ACR_PULL_ROLE_ID}))"
+for RG in "$RG_PREPROD" "$RG_PROD"; do
+  az role assignment create \
+    --assignee "$GH_APP_ID" \
+    --role "$RBAC_ADMIN_ROLE_ID" \
+    --scope "/subscriptions/$SUB_ID/resourceGroups/$RG" \
+    --description "Allow GH Actions to create AcrPull role assignments only" \
+    --condition "$RBAC_CONDITION" \
+    --condition-version "2.0"
+done
+
 # Federated credentials — one per GitHub Environment.
 GH_REPO="h2orules/CTS_Scoreboard"
 
