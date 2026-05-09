@@ -18,6 +18,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # Opt every JS action into Node 24 (default after 2026-06-02). Silences
+  # deprecation warnings for actions still shipping a Node 20 runtime.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest
@@ -25,10 +30,10 @@ jobs:
       run:
         working-directory: azure
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
@@ -55,7 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint-and-test
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Build (no push)

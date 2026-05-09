@@ -23,6 +23,9 @@ env:
   RG: ${{ secrets.RG_PREPROD }}
   ACR: ctssbpreprodacr
   APP: cts-sb-preprod-app
+  # Opt every JS action into Node 24 (default after 2026-06-02). Lets us
+  # keep azure/login@v2 (no v3 yet) without the deprecation warning.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   deploy:
@@ -32,7 +35,7 @@ jobs:
       image_digest: ${{ steps.build.outputs.digest }}
       url: ${{ steps.fqdn.outputs.url }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Azure login (OIDC)
         uses: azure/login@v2
