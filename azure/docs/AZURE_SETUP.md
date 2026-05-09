@@ -102,6 +102,43 @@ echo "TENANT_ID=$TENANT_ID"
 echo "RELAY_APP_ID=$RELAY_APP_ID"
 ```
 
+> **Re-running on an existing app?** If the `Pi.Connect` scope already
+> exists, the PATCH above fails with
+> `CannotDeleteOrUpdateEnabledEntitlement` — Graph won't replace an
+> *enabled* scope in one shot. Skip the PATCH (the scope is already
+> there) and continue with the grant below. To genuinely modify the
+> existing scope, PATCH it once with `"isEnabled": false`, then PATCH
+> again with the new shape and `"isEnabled": true`.
+
+### 3a. Grant the relay app the `Pi.Connect` scope on itself
+
+The Pi requests a token for the relay app using its own client id (i.e. it
+asks for a token whose resource is itself). MSAL/AAD requires that
+combination of audience+scope to be listed under the app's API permissions
+*and* admin-consented; otherwise sign-in fails with `AADSTS650057 Invalid
+resource ... List of valid resources from app registration: .` (note the
+empty list).
+
+```bash
+# Look up the scope id (works whether the scope was just created or already existed).
+SCOPE_ID=$(az ad app show --id "$RELAY_APP_ID" \
+  --query "api.oauth2PermissionScopes[?value=='Pi.Connect'].id | [0]" -o tsv)
+echo "SCOPE_ID=$SCOPE_ID"
+
+# Make sure a service principal exists for the app in this tenant.
+az ad sp create --id "$RELAY_APP_ID" 2>/dev/null || true
+
+# Add Pi.Connect as a required delegated permission ON ITSELF.
+az ad app permission add --id "$RELAY_APP_ID" \
+  --api "$RELAY_APP_ID" \
+  --api-permissions "${SCOPE_ID}=Scope"
+
+# Admin-consent so `.default` has something to issue.
+az ad app permission grant --id "$RELAY_APP_ID" \
+  --api "$RELAY_APP_ID" \
+  --scope "Pi.Connect"
+```
+
 Record `TENANT_ID` and `RELAY_APP_ID` — you'll set them as Bicep parameters
 (`entraTenantId`, `entraAudience`) in steps 7 and 8. The Pi-side settings UI
 also asks for these once at sign-in time.
