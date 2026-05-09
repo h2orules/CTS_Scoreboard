@@ -16,7 +16,8 @@ COPY pyproject.toml ./
 COPY app ./app
 
 RUN pip install --upgrade pip build \
- && pip install --prefix=/install .
+ && pip install --prefix=/install . \
+ && pip install --prefix=/install --no-deps --force-reinstall "packaging>=24"
 
 # ---------- runtime ----------
 FROM python:3.12-slim AS runtime
