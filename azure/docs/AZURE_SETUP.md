@@ -115,7 +115,7 @@ secrets to rotate.
 
 ```bash
 # Service principal app registration for GH Actions.
-GH_APP=$(az ad app create --display-name "CTS Scoreboard GH OIDC")
+GH_APP=$(az ad app create --display-name "CTS Scoreboard - AquaGnome Apps")
 GH_APP_ID=$(echo "$GH_APP" | jq -r .appId)
 GH_SP=$(az ad sp create --id "$GH_APP_ID")
 GH_SP_OBJECT_ID=$(echo "$GH_SP" | jq -r .id)
@@ -133,7 +133,7 @@ az role assignment create --assignee "$GH_APP_ID" --role AcrPush \
   --scope "/subscriptions/$SUB_ID/resourceGroups/$RG_PROD"
 
 # Federated credentials — one per GitHub Environment.
-GH_REPO="STU940652/CTS_Scoreboard"
+GH_REPO="h2orules/CTS_Scoreboard"
 
 for ENV_NAME in preprod production; do
   az ad app federated-credential create --id "$GH_APP_ID" --parameters "{
