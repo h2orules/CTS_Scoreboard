@@ -238,12 +238,14 @@ class AzureRelayClient:
         """Start the background worker thread (idempotent)."""
         with self._lock:
             if self._thread and self._thread.is_alive():
+                logger.info("relay: start() called; worker already running")
                 return
             self._stop.clear()
             self._thread = threading.Thread(
                 target=self._run, name="AzureRelayClient", daemon=True
             )
             self._thread.start()
+            logger.info("relay: worker thread started")
 
     def stop(self, timeout: float = 5.0) -> None:
         """Signal the background thread to stop and wait briefly."""
@@ -263,12 +265,19 @@ class AzureRelayClient:
             return False
 
     def force_reconnect(self) -> None:
-        """Reset backoff so the next loop iteration tries to reconnect immediately."""
+        """Reset backoff so the next loop iteration tries to reconnect immediately.
+
+        Also (re)starts the worker thread if it has died or never been started,
+        so this method is safe to call from a UI 'Reconnect' button regardless
+        of the prior state.
+        """
         with self._lock:
             self._attempt = 0
             self._next_retry_at = None
             if self._state in (STATE_BACKOFF, STATE_DEGRADED, STATE_DISCONNECTED):
                 self._set_state(STATE_CONNECTING)
+        # Ensure the worker thread is alive. start() is idempotent.
+        self.start()
         # Wake the queue.
         self.forward_event("__noop__", {})
 
@@ -308,14 +317,36 @@ class AzureRelayClient:
         refresh token.
         """
         if self._msal_factory is None:
-            from msal import PublicClientApplication
+            from msal import PublicClientApplication, SerializableTokenCache
 
             authority = f"https://login.microsoftonline.com/{tenant_id}"
-            app = PublicClientApplication(client_id, authority=authority)
+            # Use a SerializableTokenCache so we can extract the refresh
+            # token after the device flow completes. The default in-memory
+            # TokenCache has no .serialize() method.
+            app = PublicClientApplication(
+                client_id, authority=authority,
+                token_cache=SerializableTokenCache(),
+            )
         else:
             app = self._msal_factory(client_id=client_id, tenant_id=tenant_id)
 
-        flow_scopes = scopes or [f"{audience}/.default"]
+        if scopes:
+            flow_scopes = scopes
+        else:
+            # Ask AAD for the explicit named scope rather than `.default`.
+            #
+            # `.default` means "every API permission listed on the client
+            # app's registration, all at once" — which forces tenant-wide
+            # admin consent if anything on that list isn't already
+            # user-consented. For a Pi talking to its own relay app, a
+            # single `type: User` delegated scope is plenty: AAD will
+            # prompt for user consent on first sign-in and that's it.
+            #
+            # The scope value is `api://<client_id>/Pi.Connect`. AAD
+            # accepts the api:// form for delegated named scopes even in
+            # the same-app case (the `.default` self-token rule
+            # AADSTS90009 doesn't apply here).
+            flow_scopes = [f"api://{client_id}/Pi.Connect"]
         flow = app.initiate_device_flow(scopes=flow_scopes)
         if "user_code" not in flow:
             raise RuntimeError(f"failed to start device flow: {flow}")
@@ -358,16 +389,21 @@ class AzureRelayClient:
         # Pull the cached account so we can extract a refresh token.
         accounts = app.get_accounts()
         account = accounts[0] if accounts else None
-        token_cache = app.token_cache.serialize()
-        # Extract refresh token from the cache JSON.
+        # Extract refresh token from the cache. SerializableTokenCache exposes
+        # .serialize(); the default TokenCache does not, so fall back to the
+        # internal _cache dict if needed.
         refresh_token = ""
         try:
-            cache_obj = json.loads(token_cache)
-            for entry in cache_obj.get("RefreshToken", {}).values():
+            cache = app.token_cache
+            if hasattr(cache, "serialize"):
+                cache_obj = json.loads(cache.serialize() or "{}")
+            else:
+                cache_obj = getattr(cache, "_cache", {}) or {}
+            for entry in (cache_obj.get("RefreshToken") or {}).values():
                 refresh_token = entry.get("secret", "")
                 if refresh_token:
                     break
-        except (json.JSONDecodeError, AttributeError):
+        except (json.JSONDecodeError, AttributeError, TypeError):
             pass
 
         creds = AzureCredentials(
@@ -399,6 +435,35 @@ class AzureRelayClient:
             self._creds = None
             self._set_state(STATE_NEEDS_AUTH)
 
+    def cancel_login(self) -> bool:
+        """Abort an in-flight device-code flow.
+
+        Clears the pending flow + MSAL handle and resets state. Any concurrent
+        ``complete_login()`` call still blocking inside MSAL is signalled to
+        give up by zeroing the flow's ``expires_at``; it will return False on
+        its next poll. Returns True if a flow was actually in progress.
+        """
+        with self._lock:
+            had_flow = self._device_flow is not None or getattr(
+                self, "_pending_msal", None
+            ) is not None
+            # Tell any in-flight acquire_token_by_device_flow loop to exit
+            # at its next poll (MSAL checks expires_at against time.time()).
+            if self._device_flow is not None:
+                try:
+                    self._device_flow._flow["expires_at"] = 0
+                except Exception:
+                    pass
+            self._device_flow = None
+            self._pending_msal = None  # type: ignore[assignment]
+            # Restore a sensible state: if we already had creds we go back to
+            # DISCONNECTED so the run loop can pick up; otherwise NEEDS_AUTH.
+            if self._creds is not None:
+                self._set_state(STATE_DISCONNECTED)
+            else:
+                self._set_state(STATE_NEEDS_AUTH)
+        return had_flow
+
     def rotate_meet_id(self) -> str | None:
         """Generate a new meet ID, persist, and force a reconnect.
 
@@ -429,31 +494,46 @@ class AzureRelayClient:
 
     def _run(self) -> None:
         """Main worker loop. Runs in a daemon thread."""
-        while not self._stop.is_set():
-            with self._lock:
-                creds = self._creds
-                state = self._state
-                next_retry = self._next_retry_at
-
-            if state == STATE_NEEDS_AUTH or creds is None:
-                # Wait for the operator to log in; check periodically.
-                self._stop.wait(1.0)
-                continue
-
-            if next_retry is not None and self._clock() < next_retry:
-                self._stop.wait(0.5)
-                continue
-
-            try:
-                self._connect_and_serve(creds)
-            except Exception as e:
-                logger.warning("relay connection failed: %s", e)
+        logger.info("relay: worker loop entered")
+        _last_logged_state: str | None = None
+        try:
+            while not self._stop.is_set():
                 with self._lock:
-                    self._last_error = str(e)
-                    delay = compute_backoff(self._attempt, self.backoff_schedule)
-                    self._next_retry_at = self._clock() + delay
-                    self._attempt += 1
-                    self._set_state(STATE_BACKOFF)
+                    creds = self._creds
+                    state = self._state
+                    next_retry = self._next_retry_at
+
+                if state != _last_logged_state:
+                    logger.info(
+                        "relay: loop tick state=%s creds=%s next_retry=%s",
+                        state, "yes" if creds else "no", next_retry,
+                    )
+                    _last_logged_state = state
+
+                if state == STATE_NEEDS_AUTH or creds is None:
+                    # Wait for the operator to log in; check periodically.
+                    self._stop.wait(1.0)
+                    continue
+
+                if next_retry is not None and self._clock() < next_retry:
+                    self._stop.wait(0.5)
+                    continue
+
+                try:
+                    self._connect_and_serve(creds)
+                except Exception as e:
+                    logger.exception("relay connection failed: %s", e)
+                    with self._lock:
+                        self._last_error = str(e)
+                        delay = compute_backoff(self._attempt, self.backoff_schedule)
+                        self._next_retry_at = self._clock() + delay
+                        self._attempt += 1
+                        self._set_state(STATE_BACKOFF)
+        except BaseException:
+            logger.exception("relay: worker loop crashed")
+            raise
+        finally:
+            logger.info("relay: worker loop exited")
 
     def _connect_and_serve(self, creds: AzureCredentials) -> None:
         """Open the Socket.IO connection and serve until disconnected.
@@ -473,7 +553,11 @@ class AzureRelayClient:
         if not self.relay_url:
             raise ConnectionError("relay_url is not configured")
 
+        logger.info("relay: acquiring access token (tenant=%s, audience=%s)",
+                    creds.tenant_id, creds.audience)
         access_token = self._acquire_access_token(creds)
+        logger.info("relay: connecting to %s (meet_id=%s)",
+                    self.relay_url, creds.meet_id)
         client = self._socketio_client_factory()
 
         connected_evt = threading.Event()
@@ -508,6 +592,7 @@ class AzureRelayClient:
             },
             wait_timeout=10,
         )
+        logger.info("relay: socket connected, sending meet_open")
 
         # Send meet_open handshake so Azure registers the meet.
         client.emit("meet_open", {
@@ -592,7 +677,7 @@ class AzureRelayClient:
         # acquire_token_by_refresh_token is the explicit refresh flow.
         result = app.acquire_token_by_refresh_token(
             refresh_token=creds.refresh_token,
-            scopes=creds.scopes or [f"{creds.audience}/.default"],
+            scopes=creds.scopes or [f"api://{creds.client_id}/Pi.Connect"],
         )
         if "access_token" not in result:
             err = result.get("error_description") or result.get("error") or "unknown"

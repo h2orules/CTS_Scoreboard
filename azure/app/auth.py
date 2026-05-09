@@ -75,12 +75,24 @@ def validate_pi_token(
         f"https://login.microsoftonline.com/{tenant_id}/v2.0",
         f"https://sts.windows.net/{tenant_id}/",
     )
+    # Accept the audience in either form. Operators configure ENTRA_AUDIENCE
+    # as the bare client-id GUID, but with a named delegated scope
+    # (api://<guid>/Pi.Connect) AAD's v2.0 endpoint writes aud=api://<guid>
+    # — the resource URI form. Allowing both keeps validation robust to
+    # whichever shape the token actually carries.
+    accepted_audiences: list[str] = []
+    if audience:
+        accepted_audiences.append(audience)
+        if audience.startswith("api://"):
+            accepted_audiences.append(audience[len("api://"):])
+        else:
+            accepted_audiences.append(f"api://{audience}")
     try:
         claims: dict[str, Any] = jwt.decode(
             token,
             signing_key,
             algorithms=["RS256"],
-            audience=audience,
+            audience=accepted_audiences or audience,
             issuer=issuers,
             leeway=leeway_s,
             options={"require": ["exp", "iat", "iss", "aud"]},
