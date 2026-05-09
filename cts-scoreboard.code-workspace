@@ -1,0 +1,16 @@
+{
+    "folders": [
+        {
+            "name": "scoreboard (Pi)",
+            "path": "."
+        },
+        {
+            "name": "scoreboard (Azure relay)",
+            "path": "azure"
+        }
+    ],
+    "settings": {
+        "python.testing.pytestEnabled": true,
+        "python.testing.unittestEnabled": false
+    }
+}
