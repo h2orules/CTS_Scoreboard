@@ -18,11 +18,6 @@ on:
 permissions:
   contents: read
 
-env:
-  # Opt every JS action into Node 24 (default after 2026-06-02). Silences
-  # deprecation warnings for actions still shipping a Node 20 runtime.
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 jobs:
   lint-and-test:
     runs-on: ubuntu-latest

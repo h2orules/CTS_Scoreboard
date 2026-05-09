@@ -16,7 +16,8 @@ COPY pyproject.toml ./
 COPY app ./app
 
 RUN pip install --upgrade pip build \
- && pip install --prefix=/install .
+ && pip install --prefix=/install . \
+ && pip install --prefix=/install --no-deps --force-reinstall "packaging>=24"
 
 # ---------- runtime ----------
 FROM python:3.12-slim AS runtime
@@ -36,7 +37,13 @@ WORKDIR /srv
 USER app
 EXPOSE 8000
 
-# Uvicorn workers via gunicorn; one worker per CPU is standard, override via env.
+# Two uvicorn workers per replica.
+#
+# Cross-worker fanout is handled by socketio.AsyncRedisManager (configured
+# in app/main.py), and clients are forced to websocket-only transport so we
+# don't need sticky sessions on the ingress to keep engine.io polling
+# requests pinned to the same worker. This means we can run multiple
+# workers per replica AND multiple Container Apps replicas safely.
 CMD ["gunicorn", "app.main:asgi_app", \
      "--worker-class", "uvicorn.workers.UvicornWorker", \
      "--bind", "0.0.0.0:8000", \

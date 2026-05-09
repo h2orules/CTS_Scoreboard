@@ -25,6 +25,12 @@ param minReplicas int = environmentName == 'preprod' ? 0 : 1
 @description('Max replicas for the Container App.')
 @minValue(1)
 @maxValue(30)
+// Socket.IO fanout across replicas works because the app uses
+// socketio.AsyncRedisManager (backed by the same Redis instance defined
+// below). Clients connect with websocket-only transport, so we don't
+// need sticky sessions on the ingress: each connection lives on
+// whichever worker accepts the upgrade for its lifetime, and broadcasts
+// to rooms reach clients on every other worker/replica via Redis.
 param maxReplicas int = environmentName == 'prod' ? 10 : 2
 
 @description('Entra tenant ID used to validate Pi access tokens.')
@@ -206,10 +212,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         targetPort: targetPort
         transport: 'auto'
         allowInsecure: false
-        // No stickySessions: Web PubSub for Socket.IO terminates the
-        // websocket on the Web PubSub side, so the Container App ingress
-        // sees stateless HTTP. (Sticky sessions also aren't supported in
-        // Multiple revision mode anyway.)
+        // No stickySessions: not supported in Multiple-revision mode, and
+        // not needed because clients use websocket-only transport (see
+        // _rewrite_io_connect in app/routes.py and the Pi client's
+        // transports=['websocket'] in azure_relay.py). Cross-worker /
+        // cross-replica fanout is handled by socketio.AsyncRedisManager.
       }
       registries: [
         {

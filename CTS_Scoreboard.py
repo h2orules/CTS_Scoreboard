@@ -1365,6 +1365,11 @@ logging.basicConfig(
 # socketio + engineio are extremely chatty at DEBUG; cap them at INFO.
 logging.getLogger('engineio').setLevel(logging.INFO)
 logging.getLogger('socketio').setLevel(logging.INFO)
+# geventwebsocket logs every poll request as 'Initializing WebSocket' /
+# 'Validating WebSocket request' at DEBUG. Cap at INFO so polling endpoints
+# (/azure/status, /wifi/status) don't drown out real signal.
+logging.getLogger('geventwebsocket').setLevel(logging.INFO)
+logging.getLogger('geventwebsocket.handler').setLevel(logging.INFO)
 # azure_relay was constructed above settings load, so its relay_url
 # was empty. Push the now-loaded URL into it.
 azure_relay_client.update_relay_url(_active_azure_urls()[0])
