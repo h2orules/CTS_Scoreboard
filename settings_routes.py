@@ -504,6 +504,82 @@ def register(flask_app, app_module):
                     events=_app.event_info.events,
                     show_combine_select=False)
 
+    # -- Azure relay (Phase 2) ----------------------------------------------
+
+    @flask_app.route('/azure/status', methods=['GET'])
+    @flask_login.login_required
+    def route_azure_status():
+        """Return current relay client status as JSON. Polled by the settings page."""
+        return flask.jsonify(_app.azure_relay_client.snapshot())
+
+    @flask_app.route('/azure/login', methods=['POST'])
+    @flask_login.login_required
+    def route_azure_login():
+        """Initiate the Entra device-code flow.
+
+        Body (JSON): {tenant_id, client_id, audience}. On success returns the
+        device code + verification URL for the operator to use on a phone.
+        """
+        body = flask.request.get_json(silent=True) or {}
+        tenant_id = (body.get('tenant_id') or _app.settings.get('azure_tenant_id') or '').strip()
+        client_id = (body.get('client_id') or _app.settings.get('azure_client_id') or '').strip()
+        audience = (body.get('audience') or _app.settings.get('azure_audience') or '').strip()
+        if not (tenant_id and client_id and audience):
+            return flask.jsonify({'error': 'tenant_id, client_id, audience are required'}), 400
+        try:
+            flow = _app.azure_relay_client.request_login(
+                tenant_id=tenant_id, client_id=client_id, audience=audience,
+            )
+        except Exception as e:
+            return flask.jsonify({'error': str(e)}), 500
+        # Persist the issuer details so future sign-ins prefill them.
+        _app.settings['azure_tenant_id'] = tenant_id
+        _app.settings['azure_client_id'] = client_id
+        _app.settings['azure_audience'] = audience
+        with open(_app.settings_file, 'wt') as f:
+            json.dump(_app.settings, f, sort_keys=True, indent=4)
+        return flask.jsonify({
+            'user_code': flow.user_code,
+            'verification_uri': flow.verification_uri,
+            'expires_at': flow.expires_at,
+            'message': flow.message,
+        })
+
+    @flask_app.route('/azure/login/complete', methods=['POST'])
+    @flask_login.login_required
+    def route_azure_login_complete():
+        """Block until the device-code flow finishes. Returns final status."""
+        ok = _app.azure_relay_client.complete_login()
+        if ok:
+            _app.settings['azure_enabled'] = True
+            with open(_app.settings_file, 'wt') as f:
+                json.dump(_app.settings, f, sort_keys=True, indent=4)
+            _app.azure_relay_client.start()
+        return flask.jsonify({'ok': ok, 'status': _app.azure_relay_client.snapshot()})
+
+    @flask_app.route('/azure/logout', methods=['POST'])
+    @flask_login.login_required
+    def route_azure_logout():
+        _app.azure_relay_client.logout()
+        _app.settings['azure_enabled'] = False
+        with open(_app.settings_file, 'wt') as f:
+            json.dump(_app.settings, f, sort_keys=True, indent=4)
+        return flask.jsonify({'ok': True, 'status': _app.azure_relay_client.snapshot()})
+
+    @flask_app.route('/azure/reconnect', methods=['POST'])
+    @flask_login.login_required
+    def route_azure_reconnect():
+        _app.azure_relay_client.force_reconnect()
+        return flask.jsonify({'ok': True, 'status': _app.azure_relay_client.snapshot()})
+
+    @flask_app.route('/azure/rotate_id', methods=['POST'])
+    @flask_login.login_required
+    def route_azure_rotate_id():
+        new_id = _app.azure_relay_client.rotate_meet_id()
+        if new_id is None:
+            return flask.jsonify({'error': 'not signed in to Azure'}), 400
+        return flask.jsonify({'ok': True, 'meet_id': new_id, 'status': _app.azure_relay_client.snapshot()})
+
     # -- Login / logout ------------------------------------------------------
 
     @flask_app.route("/login", methods=["GET", "POST"])

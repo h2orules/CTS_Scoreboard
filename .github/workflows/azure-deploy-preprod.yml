@@ -1,0 +1,116 @@
+name: azure-deploy-preprod
+
+# On-demand pre-prod deploy. Builds image, pushes to pre-prod ACR, updates
+# the Container App revision, runs smoke tests against the deployed URL.
+# Outputs the image digest for promotion to prod.
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision_suffix:
+        description: 'Optional revision suffix (defaults to short SHA)'
+        required: false
+        default: ''
+
+permissions:
+  id-token: write   # OIDC federated credential
+  contents: read
+
+env:
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  RG: ${{ secrets.RG_PREPROD }}
+  ACR: ctssbpreprodacr
+  APP: cts-sb-preprod-app
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: preprod
+    outputs:
+      image_digest: ${{ steps.build.outputs.digest }}
+      url: ${{ steps.fqdn.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Compute revision suffix
+        id: rev
+        run: |
+          SUFFIX="${{ github.event.inputs.revision_suffix }}"
+          if [[ -z "$SUFFIX" ]]; then
+            SUFFIX="r$(echo ${{ github.sha }} | cut -c1-8)"
+          fi
+          echo "suffix=$SUFFIX" >> $GITHUB_OUTPUT
+
+      - name: ACR login
+        run: az acr login --name $ACR
+
+      - name: Build & push image
+        id: build
+        run: |
+          IMAGE_TAG=$ACR.azurecr.io/cts-relay:${{ github.sha }}
+          docker build -t $IMAGE_TAG ./azure
+          docker push $IMAGE_TAG
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' $IMAGE_TAG)
+          echo "image=$IMAGE_TAG" >> $GITHUB_OUTPUT
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+
+      - name: Update Container App
+        run: |
+          az containerapp update \
+            -g $RG -n $APP \
+            --image "${{ steps.build.outputs.digest }}" \
+            --revision-suffix "${{ steps.rev.outputs.suffix }}"
+
+      - name: Get app FQDN
+        id: fqdn
+        run: |
+          FQDN=$(az containerapp show -g $RG -n $APP --query properties.configuration.ingress.fqdn -o tsv)
+          URL="https://$FQDN"
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          echo "::notice title=Pre-prod URL::$URL"
+
+      - name: Smoke test /healthz and /readyz
+        id: smoke
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS "${{ steps.fqdn.outputs.url }}/healthz" \
+                && curl -fsS "${{ steps.fqdn.outputs.url }}/readyz" >/dev/null; then
+              echo "OK"
+              exit 0
+            fi
+            echo "Not ready yet (attempt $i), sleeping 10s..."
+            sleep 10
+          done
+          echo "Health probe failed."
+          exit 1
+
+      - name: Auto-rollback on smoke failure
+        if: failure() && steps.smoke.conclusion == 'failure'
+        run: |
+          PREV=$(az containerapp revision list -g $RG -n $APP \
+            --query "sort_by([?properties.active==\`false\`], &properties.createdTime)[-1].name" -o tsv)
+          if [[ -n "$PREV" ]]; then
+            echo "Rolling back to previous revision: $PREV"
+            az containerapp revision activate -g $RG -n $APP --revision "$PREV"
+          else
+            echo "No previous revision to roll back to."
+          fi
+
+      - name: Summary
+        run: |
+          {
+            echo "## Pre-prod deploy"
+            echo "- URL: ${{ steps.fqdn.outputs.url }}"
+            echo "- Image digest: \`${{ steps.build.outputs.digest }}\`"
+            echo ""
+            echo "To promote to prod, run **azure-promote-prod** with this digest."
+          } >> $GITHUB_STEP_SUMMARY

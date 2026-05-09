@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Test Controls — {{ meet_title or 'CTS Scoreboard' }}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: #1e1e1e;
+            color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 { margin-top: 0; }
+        h2 {
+            margin-top: 28px;
+            margin-bottom: 8px;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: #aaa;
+        }
+        .nav a {
+            color: #66b3ff;
+            margin-right: 16px;
+            text-decoration: none;
+        }
+        .nav a:hover { text-decoration: underline; }
+        .col {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-width: 320px;
+        }
+        button {
+            background: #2d2d2d;
+            color: #f0f0f0;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 10px 14px;
+            font-size: 14px;
+            cursor: pointer;
+            text-align: left;
+        }
+        button:hover { background: #3a3a3a; border-color: #888; }
+        button:active { background: #444; }
+        .status {
+            margin-top: 24px;
+            padding: 8px 12px;
+            background: #2a2a2a;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #888;
+        }
+        .status .ok { color: #6f6; }
+        .status .bad { color: #f66; }
+    </style>
+</head>
+<body>
+    <h1>Scoreboard Test Controls</h1>
+    <div class="nav">
+        <a href="/">&larr; Site map</a>
+        <a href="/settings">Settings</a>
+        <a href="/web/home" target="_blank">Open scoreboard &rarr;</a>
+    </div>
+
+    <h2>Event / Heat</h2>
+    <div class="col">
+        <button type="button" onclick="changeEvent(-1);">&#9664; Event</button>
+        <button type="button" onclick="changeEvent(1);">Event &#9654;</button>
+        <button type="button" onclick="changeHeat(-1);">&#9664; Heat</button>
+        <button type="button" onclick="changeHeat(1);">Heat &#9654;</button>
+        <button type="button" onclick="socket.emit('next_heat', {});">Next (Sequential)</button>
+    </div>
+
+    <h2>Simulator</h2>
+    <div class="col">
+        <button type="button" onclick="socket.emit('sim_load_event', {});">Load Test Event</button>
+        <button type="button" onclick="socket.emit('sim_step', {step:'start'});">&#9654; Start</button>
+        <button type="button" onclick="socket.emit('sim_step', {step:'finish'});">&#127937; Finish</button>
+        <button type="button" onclick="socket.emit('sim_step', {step:'clear'});">Clear</button>
+        <button type="button" onclick="socket.emit('sim_step', {step:'blank'});">Blank</button>
+        <button type="button" onclick="socket.emit('sim_step', {step:'total_blank'});">Total Blank</button>
+        <button type="button" onclick="runFullSequence();">&#9654;&#9654; Full Sequence</button>
+    </div>
+
+    <div class="status" id="status">socket: <span id="conn">connecting&hellip;</span></div>
+
+    <script src="{{url_for('static', filename='socket.io.4.8.3.min.js')}}"></script>
+    <script>
+        var socket = io.connect('http://' + document.domain + ':' + location.port + '/scoreboard');
+        var connEl = document.getElementById('conn');
+        socket.on('connect', function () {
+            connEl.textContent = 'connected';
+            connEl.className = 'ok';
+        });
+        socket.on('disconnect', function () {
+            connEl.textContent = 'disconnected';
+            connEl.className = 'bad';
+        });
+
+        var currentEvent = 1;
+        var currentHeat = 1;
+
+        function changeEvent(delta) {
+            currentEvent = Math.max(1, currentEvent + delta);
+            currentHeat = 1;
+            socket.emit('set_event_heat', { event: currentEvent, heat: currentHeat });
+        }
+
+        function changeHeat(delta) {
+            currentHeat = Math.max(1, currentHeat + delta);
+            socket.emit('set_event_heat', { event: currentEvent, heat: currentHeat });
+        }
+
+        function runFullSequence() {
+            var steps = [
+                {event: 'sim_load_event', delay: 3000},
+                {event: 'sim_step', data: {step: 'start'}, delay: 5000},
+                {event: 'sim_step', data: {step: 'finish'}, delay: 4000},
+                {event: 'sim_step', data: {step: 'clear'}, delay: 3000},
+                {event: 'sim_step', data: {step: 'blank'}, delay: 3000},
+                {event: 'sim_step', data: {step: 'total_blank'}, delay: 3000},
+            ];
+            var i = 0;
+            function next() {
+                if (i >= steps.length) return;
+                var s = steps[i++];
+                socket.emit(s.event, s.data || {});
+                setTimeout(next, s.delay);
+            }
+            next();
+        }
+    </script>
+</body>
+</html>
