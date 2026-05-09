@@ -46,7 +46,11 @@ class TestAzureStatus:
 
 
 class TestAzureLogin:
-    def test_login_requires_credentials(self, logged_in_client):
+    def test_login_requires_credentials(self, logged_in_client, monkeypatch):
+        # Clear any operator-supplied values so the empty POST body is what
+        # actually drives the validation path.
+        for k in ('azure_tenant_id', 'azure_client_id', 'azure_audience'):
+            monkeypatch.setitem(settings, k, '')
         resp = logged_in_client.post("/azure/login", json={})
         assert resp.status_code == 400
         assert "tenant_id" in resp.get_json()["error"]

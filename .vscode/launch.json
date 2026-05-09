@@ -9,7 +9,10 @@
             "python": "${workspaceFolder}/.venv/bin/python",
             "args": [],
             "console": "integratedTerminal",
-            "justMyCode": false
+            "justMyCode": false,
+            "env": {
+                "SCOREBOARD_MODE": "development"
+            }
         },
         {
             "name": "Scoreboard (Debug + Input File)",
@@ -22,7 +25,10 @@
                 "${input:inputFile}"
             ],
             "console": "integratedTerminal",
-            "justMyCode": false
+            "justMyCode": false,
+            "env": {
+                "SCOREBOARD_MODE": "development"
+            }
         }
     ],
     "inputs": [

@@ -102,9 +102,50 @@ echo "TENANT_ID=$TENANT_ID"
 echo "RELAY_APP_ID=$RELAY_APP_ID"
 ```
 
+> **Re-running on an existing app?** If the `Pi.Connect` scope already
+> exists, the PATCH above fails with
+> `CannotDeleteOrUpdateEnabledEntitlement` — Graph won't replace an
+> *enabled* scope in one shot. Skip the PATCH (the scope is already
+> there) and continue with the grant below. To genuinely modify the
+> existing scope, PATCH it once with `"isEnabled": false`, then PATCH
+> again with the new shape and `"isEnabled": true`.
+
+### 3a. Grant the relay app the `Pi.Connect` scope on itself
+
+The Pi requests a token for the relay app using its own client id (i.e. it
+asks for a token whose resource is itself). MSAL/AAD requires that
+combination of audience+scope to be listed under the app's API permissions
+*and* admin-consented; otherwise sign-in fails with `AADSTS650057 Invalid
+resource ... List of valid resources from app registration: .` (note the
+empty list).
+
+```bash
+# Look up the scope id (works whether the scope was just created or already existed).
+SCOPE_ID=$(az ad app show --id "$RELAY_APP_ID" \
+  --query "api.oauth2PermissionScopes[?value=='Pi.Connect'].id | [0]" -o tsv)
+echo "SCOPE_ID=$SCOPE_ID"
+
+# Make sure a service principal exists for the app in this tenant.
+az ad sp create --id "$RELAY_APP_ID" 2>/dev/null || true
+
+# Add Pi.Connect as a required delegated permission ON ITSELF.
+az ad app permission add --id "$RELAY_APP_ID" \
+  --api "$RELAY_APP_ID" \
+  --api-permissions "${SCOPE_ID}=Scope"
+
+# Admin-consent so `.default` has something to issue.
+az ad app permission grant --id "$RELAY_APP_ID" \
+  --api "$RELAY_APP_ID" \
+  --scope "Pi.Connect"
+```
+
 Record `TENANT_ID` and `RELAY_APP_ID` — you'll set them as Bicep parameters
-(`entraTenantId`, `entraAudience`) in steps 7 and 8. The Pi-side settings UI
-also asks for these once at sign-in time.
+(`entraTenantId`, `entraAudience`) in steps 7 and 8. `entraAudience` should
+be passed as `api://$RELAY_APP_ID` (the Application ID URI form), since
+that's the `aud` claim AAD writes when the Pi requests a token for the
+named `Pi.Connect` scope. The relay's validator also accepts the bare GUID
+form, so existing deployments will continue to work. The Pi-side settings
+UI also asks for these once at sign-in time.
 
 ---
 
@@ -161,7 +202,7 @@ gh secret set AZURE_CLIENT_ID         --body "$GH_APP_ID"
 gh secret set AZURE_TENANT_ID         --body "$TENANT_ID"
 gh secret set AZURE_SUBSCRIPTION_ID   --body "$SUB_ID"
 gh secret set ENTRA_TENANT_ID         --body "$TENANT_ID"
-gh secret set ENTRA_AUDIENCE          --body "$RELAY_APP_ID"
+gh secret set ENTRA_AUDIENCE          --body "api://$RELAY_APP_ID"
 
 # Alert recipients — never commit, only stored as secrets.
 gh secret set ALERT_EMAIL             --body "$ALERT_EMAIL"
@@ -226,7 +267,7 @@ az deployment group create \
       containerImage="$ACR_PREPROD.azurecr.io/cts-relay:bootstrap" \
       targetPort=80 \
       entraTenantId="$TENANT_ID" \
-      entraAudience="$RELAY_APP_ID" \
+      entraAudience="api://$RELAY_APP_ID" \
       alertEmail="$ALERT_EMAIL" \
       alertSmsCountryCode="$ALERT_SMS_COUNTRY_CODE" \
       alertSmsPhone="$ALERT_SMS_PHONE"
@@ -258,7 +299,7 @@ az deployment group create \
       containerImage="$ACR_PROD.azurecr.io/cts-relay:bootstrap" \
       targetPort=80 \
       entraTenantId="$TENANT_ID" \
-      entraAudience="$RELAY_APP_ID" \
+      entraAudience="api://$RELAY_APP_ID" \
       alertEmail="$ALERT_EMAIL" \
       alertSmsCountryCode="$ALERT_SMS_COUNTRY_CODE" \
       alertSmsPhone="$ALERT_SMS_PHONE"

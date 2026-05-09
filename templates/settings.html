@@ -1591,7 +1591,7 @@
                     </summary>
                     <p style="margin:10px 0 8px;font-size:13px;color:#8a6d3b;">
                         <strong>Warning:</strong> Wrong values here will lock the relay out of Azure
-                        until corrected. Get the tenant / client / audience values from your Azure
+                        until corrected. Get the tenant / client values from your Azure
                         admin (see <code>azure/docs/AZURE_SETUP.md</code>).
                     </p>
                     <div class="form-group" style="margin-bottom:8px;">
@@ -1607,14 +1607,18 @@
                     <div class="form-group" style="margin-bottom:6px;">
                         <label for="azure-cfg-tenant" style="margin-bottom:2px;">Tenant ID</label>
                         <input type="text" id="azure-cfg-tenant" class="form-control" oninput="azureMarkConfigDirty()" placeholder="GUID">
+                        <small class="text-muted" style="font-size:11px;">
+                            Your Entra <em>tenant</em> GUID (<code>az account show --query tenantId</code>).
+                        </small>
                     </div>
                     <div class="form-group" style="margin-bottom:6px;">
                         <label for="azure-cfg-client" style="margin-bottom:2px;">Client ID</label>
                         <input type="text" id="azure-cfg-client" class="form-control" oninput="azureMarkConfigDirty()" placeholder="GUID">
-                    </div>
-                    <div class="form-group" style="margin-bottom:6px;">
-                        <label for="azure-cfg-audience" style="margin-bottom:2px;">Audience</label>
-                        <input type="text" id="azure-cfg-audience" class="form-control" oninput="azureMarkConfigDirty()" placeholder="api://&lt;client-id&gt;">
+                        <small class="text-muted" style="font-size:11px;">
+                            App ID of the <strong>&ldquo;CTS Scoreboard Relay&rdquo;</strong> app
+                            registration &mdash; <em>not</em> the GitHub Actions service principal.
+                            The audience is derived as <code>api://&lt;Client&nbsp;ID&gt;</code>.
+                        </small>
                     </div>
                     <hr style="margin:10px 0;">
                     <div class="form-group" style="margin-bottom:6px;">
@@ -1711,8 +1715,27 @@
             </p>
             <p style="margin:6px 0;">
                 <strong>Code:</strong>
-                <code id="azure-device-code" style="font-size:18px;letter-spacing:2px;"></code>
-                <button type="button" class="btn btn-default btn-xs" onclick="azureCopyCode()" style="margin-left:8px;">Copy</button>
+                <span style="display:inline-flex;align-items:stretch;margin-left:6px;vertical-align:middle;">
+                    <code id="azure-device-code"
+                          title="Click to copy"
+                          onclick="azureCopyCode()"
+                          style="font-size:18px;letter-spacing:2px;padding:6px 10px;
+                                 background:#f5f5f5;border:1px solid #ccc;border-right:none;
+                                 border-radius:4px 0 0 4px;cursor:pointer;line-height:1.4;
+                                 min-width:120px;display:inline-block;"></code>
+                    <button type="button" id="azure-copy-btn"
+                            class="btn btn-default" onclick="azureCopyCode()"
+                            title="Copy code to clipboard"
+                            style="border-radius:0 4px 4px 0;padding:6px 12px;line-height:1.4;
+                                   border-left:1px solid #ccc;">
+                        <span aria-hidden="true" style="font-size:16px;">&#128203;</span>
+                        <span class="sr-only">Copy</span>
+                    </button>
+                </span>
+                <span id="azure-copy-feedback"
+                      style="margin-left:8px;color:#3c763d;font-size:13px;display:none;">
+                    Copied!
+                </span>
             </p>
             <p id="azure-device-msg" style="font-size:13px;color:#666;"></p>
             <p id="azure-device-status" style="font-size:13px;color:#31708f;">Waiting for sign-in to complete&hellip;</p>
@@ -1832,6 +1855,16 @@
                 .catch(function() { /* ignore transient errors */ });
         }
 
+        function refreshStatusOnce() {
+            // Like refreshStatus but always runs, returns the snapshot, and
+            // never throws — used by the sign-in recovery path to detect a
+            // successful login when /azure/login/complete returns non-JSON.
+            return fetch('/azure/status', { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(snap) { applyStatus(snap); return snap; })
+                .catch(function() { return null; });
+        }
+
         function startPolling() {
             if (pollTimer) return;
             refreshStatus();
@@ -1874,16 +1907,51 @@
                         signal: devicePollAbort.signal,
                     });
                 })
-                .then(function(r) { return r.json(); })
-                .then(function(result) {
-                    $('azure-device-overlay').style.display = 'none';
-                    if (result.ok) {
-                        showToast('Signed in to Azure.');
-                        applyStatus(result.status);
-                    } else {
-                        showToast('Sign-in failed.', 'error');
+                .then(function(r) {
+                    // The long poll can return non-JSON (proxy timeout HTML,
+                    // session-expired login redirect, debug error page).
+                    // Parse defensively so a malformed response doesn't mask
+                    // an actually-successful sign-in.
+                    var ct = (r.headers.get('content-type') || '').toLowerCase();
+                    if (ct.indexOf('application/json') !== -1) {
+                        return r.json().then(function(j) { return {kind: 'json', body: j, status: r.status}; });
                     }
-                    refreshStatus();
+                    return r.text().then(function(t) { return {kind: 'text', body: t, status: r.status}; });
+                })
+                .then(function(parsed) {
+                    $('azure-device-overlay').style.display = 'none';
+                    if (parsed.kind === 'json' && parsed.body && parsed.body.ok) {
+                        showToast('Signed in to Azure.');
+                        applyStatus(parsed.body.status);
+                        refreshStatus();
+                        return;
+                    }
+                    if (parsed.kind === 'json') {
+                        showToast('Sign-in failed.', 'error');
+                        refreshStatus();
+                        return;
+                    }
+                    // Non-JSON. Recover by polling /azure/status — if the
+                    // backend actually completed, we light up the UI; if not,
+                    // surface a short snippet of the HTML response.
+                    refreshStatusOnce().then(function(snap) {
+                        var connected = snap && (
+                            snap.state === 'connecting' ||
+                            snap.state === 'connected' ||
+                            snap.state === 'degraded'
+                        );
+                        if (connected) {
+                            showToast('Signed in to Azure.');
+                            return;
+                        }
+                        var snippet = (parsed.body || '').replace(/<[^>]+>/g, ' ')
+                            .replace(/\s+/g, ' ').trim().slice(0, 140);
+                        showToast(
+                            'Sign-in response not JSON (HTTP ' + parsed.status + '): ' +
+                            (snippet || '(empty)'),
+                            'error'
+                        );
+                    });
                 })
                 .catch(function(err) {
                     if (err && err.name === 'AbortError') return;
@@ -1895,15 +1963,53 @@
         window.azureCancelDeviceFlow = function() {
             if (devicePollAbort) try { devicePollAbort.abort(); } catch (e) {}
             $('azure-device-overlay').style.display = 'none';
+            // Tell the server to drop the in-flight flow so the next Sign In
+            // doesn't race against a stale one.
+            postJSON('/azure/login/cancel', {})
+                .then(function(r) { if (r && r.status) applyStatus(r.status); })
+                .catch(function() { /* best-effort */ })
+                .then(function() { refreshStatus(); });
         };
 
         window.azureCopyCode = function() {
             var code = $('azure-device-code').textContent;
             if (!code) return;
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(code);
+            var done = function(ok) {
+                var fb = $('azure-copy-feedback');
+                if (!fb) return;
+                fb.textContent = ok ? 'Copied!' : 'Copy failed';
+                fb.style.color = ok ? '#3c763d' : '#a94442';
+                fb.style.display = 'inline';
+                setTimeout(function() { fb.style.display = 'none'; }, 1500);
+            };
+            // Modern path — only available on HTTPS / localhost.
+            if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+                navigator.clipboard.writeText(code).then(
+                    function() { done(true); },
+                    function() { execCopyFallback(code, done); }
+                );
+                return;
             }
+            execCopyFallback(code, done);
         };
+
+        function execCopyFallback(text, done) {
+            // Plain-HTTP fallback: hidden textarea + execCommand('copy').
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.top = '0';
+            ta.style.left = '0';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            ta.setSelectionRange(0, text.length);
+            var ok = false;
+            try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+            document.body.removeChild(ta);
+            done(ok);
+        }
 
         window.azureSignOut = function() {
             postJSON('/azure/logout', {})
@@ -1941,7 +2047,6 @@
                     if (radio) radio.checked = true;
                     $('azure-cfg-tenant').value = cfg.tenant_id || '';
                     $('azure-cfg-client').value = cfg.client_id || '';
-                    $('azure-cfg-audience').value = cfg.audience || '';
                     $('azure-cfg-relay-preprod').value = cfg.relay_url_preprod || '';
                     $('azure-cfg-public-preprod').value = cfg.public_url_preprod || '';
                     $('azure-cfg-relay-prod').value = cfg.relay_url_prod || '';
@@ -1957,7 +2062,6 @@
                 environment: envEl ? envEl.value : 'preprod',
                 tenant_id: $('azure-cfg-tenant').value.trim(),
                 client_id: $('azure-cfg-client').value.trim(),
-                audience: $('azure-cfg-audience').value.trim(),
                 relay_url_preprod: $('azure-cfg-relay-preprod').value.trim(),
                 public_url_preprod: $('azure-cfg-public-preprod').value.trim(),
                 relay_url_prod: $('azure-cfg-relay-prod').value.trim(),

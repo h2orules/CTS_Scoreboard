@@ -7,6 +7,7 @@ import traceback
 import ctypes
 import serial
 import serial.tools.list_ports
+import logging
 import re
 import time
 import json
@@ -31,6 +32,26 @@ from qr_utils import build_meet_url, render_overlay_svg, substitute_qr_tokens
 DEBUG = False
 #DEBUG = True
 settings_file = './settings.json'
+# Azure-related settings live in a separate file that is git-ignored. Operator
+# values (tenant ID, relay URLs, etc.) are environment-specific and should
+# never be committed alongside the rest of the scoreboard configuration.
+azure_settings_file = './azure_settings.json'
+AZURE_SETTINGS_KEYS = (
+    'azure_enabled',
+    'azure_environment',
+    'azure_tenant_id',
+    'azure_client_id',
+    'azure_audience',
+    'azure_relay_url_preprod',
+    'azure_public_url_preprod',
+    'azure_relay_url_prod',
+    'azure_public_url_prod',
+    'azure_template_path',
+    # Legacy single-env keys are migrated out, but listed here so any
+    # straggler value gets routed to the right file on next save.
+    'azure_relay_url',
+    'azure_public_url',
+)
 
 
 def is_dev_mode():
@@ -146,9 +167,11 @@ def _cache_get(resource):
 
 def load_settings():
     global settings, time_standards, swim_record_sets, _next_rec_set_id
+    _raw_settings_on_disk = {}
     try:
         with open(settings_file, "rt") as f:
-            settings.update(json.load(f))
+            _raw_settings_on_disk = json.load(f)
+            settings.update(_raw_settings_on_disk)
         if 'event_info' in settings:
             event_info.from_object(settings['event_info'])
         if 'time_standards' in settings:
@@ -192,6 +215,43 @@ def load_settings():
             with open(settings_file, "wt") as f:
                 json.dump(settings, f, sort_keys=True, indent=4)
     except: pass
+    # Azure settings live in their own (git-ignored) file. Load it on top of
+    # whatever defaults / migrated values are already in `settings`.
+    azure_on_disk = {}
+    try:
+        with open(azure_settings_file, "rt") as f:
+            azure_on_disk = json.load(f) or {}
+        settings.update({k: v for k, v in azure_on_disk.items() if k in AZURE_SETTINGS_KEYS})
+    except FileNotFoundError:
+        pass
+    except Exception:
+        pass
+    # If settings.json still carries azure_* entries (older installs),
+    # split them out into azure_settings.json and strip from settings.json.
+    leaked = [k for k in AZURE_SETTINGS_KEYS if k in _raw_settings_on_disk]
+    if leaked:
+        for k in AZURE_SETTINGS_KEYS:
+            # Trust the value already in `settings` (azure_settings.json
+            # wins over a stale duplicate in settings.json).
+            azure_on_disk[k] = settings.get(k, '')
+        try:
+            save_azure_settings()
+        except Exception:
+            pass
+        # Rewrite settings.json without the azure keys.
+        cleaned = {k: v for k, v in _raw_settings_on_disk.items() if k not in AZURE_SETTINGS_KEYS}
+        try:
+            with open(settings_file, "wt") as f:
+                json.dump(cleaned, f, sort_keys=True, indent=4)
+        except Exception:
+            pass
+
+
+def save_azure_settings():
+    """Persist only the AZURE_SETTINGS_KEYS subset to ``azure_settings_file``."""
+    payload = {k: settings.get(k, '') for k in AZURE_SETTINGS_KEYS}
+    with open(azure_settings_file, "wt") as f:
+        json.dump(payload, f, sort_keys=True, indent=4)
 
 ## Stuff to move the cursor
 def print_at(r, c, s):
@@ -1113,9 +1173,13 @@ def _azure_context_provider():
 
     Mirrors the kwargs passed to render_template in route_web, minus dev-mode
     fields. Returns a JSON-serializable dict, or None if the snapshot can't
-    be built."""
+    be built. Runs inside a Flask app context because _build_render_context
+    calls render_template, which requires `current_app`. The relay worker
+    invokes this provider from a background thread that has no request or
+    app context of its own."""
     try:
-        ctx = _build_render_context()
+        with app.app_context():
+            ctx = _build_render_context()
         # Force browser-friendly defaults: dev-only gates off; serving_context
         # marks the page as served via Azure.
         ctx['is_dev_mode'] = False
@@ -1135,8 +1199,8 @@ azure_relay_client = AzureRelayClient(
     bundle_provider=_azure_bundle_provider,
     context_provider=_azure_context_provider,
 )
-if settings.get('azure_enabled') and azure_relay_client.meet_id:
-    azure_relay_client.start()
+# Worker thread is started later, after load_settings(), so the relay URL is
+# populated first. See the block near the bottom of this module.
 
 
 def broadcast_scoreboard(update):
@@ -1288,6 +1352,29 @@ def load_user(userid):
 # app is ready whether launched via ``python CTS_Scoreboard.py`` (dev) or
 # imported by gunicorn (production).
 load_settings()
+# Configure logging so azure_relay (and other module loggers) actually emit
+# to stderr. Honour SCOREBOARD_MODE=development for verbose DEBUG-level logs.
+_log_level = (
+    logging.DEBUG if os.environ.get('SCOREBOARD_MODE', '').lower() == 'development'
+    else logging.INFO
+)
+logging.basicConfig(
+    level=_log_level,
+    format='%(asctime)s %(levelname)s %(name)s: %(message)s',
+)
+# socketio + engineio are extremely chatty at DEBUG; cap them at INFO.
+logging.getLogger('engineio').setLevel(logging.INFO)
+logging.getLogger('socketio').setLevel(logging.INFO)
+# azure_relay was constructed above settings load, so its relay_url
+# was empty. Push the now-loaded URL into it.
+azure_relay_client.update_relay_url(_active_azure_urls()[0])
+# Start the worker thread whenever we have credentials. The worker just sits
+# in needs_auth/disconnected if there's nothing to do, but having it alive
+# means the Reconnect button and post-sign-in flow can work without a server
+# restart. (azure_enabled gates whether updates get forwarded to Azure;
+# see broadcast_scoreboard.)
+if azure_relay_client.meet_id:
+    azure_relay_client.start()
 _update_message_rotation()
 
 

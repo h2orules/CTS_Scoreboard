@@ -9,6 +9,7 @@ and all referenced globals exist.  This wires up ``/settings``, ``/wifi/*``,
 import flask
 import flask_login
 import json
+import logging
 import os
 import os.path
 import re
@@ -575,8 +576,7 @@ def register(flask_app, app_module):
             return flask.jsonify({'error': str(e)}), 400
 
         _app.settings.update(updates)
-        with open(_app.settings_file, 'wt') as f:
-            json.dump(_app.settings, f, sort_keys=True, indent=4)
+        _app.save_azure_settings()
 
         # Live-swap the relay URL if the active environment's URL changed.
         active_relay, _public = _app._active_azure_urls()
@@ -589,15 +589,19 @@ def register(flask_app, app_module):
     def route_azure_login():
         """Initiate the Entra device-code flow.
 
-        Body (JSON): {tenant_id, client_id, audience}. On success returns the
-        device code + verification URL for the operator to use on a phone.
+        Body (JSON): {tenant_id, client_id, audience?}. Audience defaults to
+        ``api://<client_id>`` when omitted (the standard identifier-URI shape
+        from ``az ad app update --identifier-uris api://<appId>``). Returns
+        the device code + verification URL for the operator to use on a phone.
         """
         body = flask.request.get_json(silent=True) or {}
         tenant_id = (body.get('tenant_id') or _app.settings.get('azure_tenant_id') or '').strip()
         client_id = (body.get('client_id') or _app.settings.get('azure_client_id') or '').strip()
+        if not (tenant_id and client_id):
+            return flask.jsonify({'error': 'tenant_id, client_id are required'}), 400
         audience = (body.get('audience') or _app.settings.get('azure_audience') or '').strip()
-        if not (tenant_id and client_id and audience):
-            return flask.jsonify({'error': 'tenant_id, client_id, audience are required'}), 400
+        if not audience:
+            audience = f'api://{client_id}'
         try:
             flow = _app.azure_relay_client.request_login(
                 tenant_id=tenant_id, client_id=client_id, audience=audience,
@@ -608,8 +612,7 @@ def register(flask_app, app_module):
         _app.settings['azure_tenant_id'] = tenant_id
         _app.settings['azure_client_id'] = client_id
         _app.settings['azure_audience'] = audience
-        with open(_app.settings_file, 'wt') as f:
-            json.dump(_app.settings, f, sort_keys=True, indent=4)
+        _app.save_azure_settings()
         return flask.jsonify({
             'user_code': flow.user_code,
             'verification_uri': flow.verification_uri,
@@ -622,20 +625,44 @@ def register(flask_app, app_module):
     def route_azure_login_complete():
         """Block until the device-code flow finishes. Returns final status."""
         ok = _app.azure_relay_client.complete_login()
+        warning = None
         if ok:
             _app.settings['azure_enabled'] = True
-            with open(_app.settings_file, 'wt') as f:
-                json.dump(_app.settings, f, sort_keys=True, indent=4)
-            _app.azure_relay_client.start()
-        return flask.jsonify({'ok': ok, 'status': _azure_status_payload()})
+            try:
+                _app.save_azure_settings()
+            except Exception as e:
+                warning = f'failed to persist azure_settings.json: {e}'
+                logging.exception('save_azure_settings failed after sign-in')
+            try:
+                _app.azure_relay_client.update_relay_url(
+                    _app._active_azure_urls()[0]
+                )
+                _app.azure_relay_client.start()
+            except Exception as e:
+                warning = (warning + '; ' if warning else '') + \
+                    f'failed to start relay worker: {e}'
+                logging.exception('azure_relay_client.start() failed after sign-in')
+        payload = {'ok': ok, 'status': _azure_status_payload()}
+        if warning:
+            payload['warning'] = warning
+        return flask.jsonify(payload)
+
+    @flask_app.route('/azure/login/cancel', methods=['POST'])
+    @flask_login.login_required
+    def route_azure_login_cancel():
+        """Abort an in-flight device-code flow and return to a clean state."""
+        cancelled = _app.azure_relay_client.cancel_login()
+        return flask.jsonify({
+            'ok': True, 'cancelled': cancelled,
+            'status': _azure_status_payload(),
+        })
 
     @flask_app.route('/azure/logout', methods=['POST'])
     @flask_login.login_required
     def route_azure_logout():
         _app.azure_relay_client.logout()
         _app.settings['azure_enabled'] = False
-        with open(_app.settings_file, 'wt') as f:
-            json.dump(_app.settings, f, sort_keys=True, indent=4)
+        _app.save_azure_settings()
         return flask.jsonify({'ok': True, 'status': _azure_status_payload()})
 
     @flask_app.route('/azure/reconnect', methods=['POST'])
