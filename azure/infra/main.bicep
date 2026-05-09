@@ -30,7 +30,7 @@ param maxReplicas int = environmentName == 'prod' ? 10 : 2
 @description('Entra tenant ID used to validate Pi access tokens.')
 param entraTenantId string
 
-@description('Application (client) ID of the relay app registration. Required audience for Pi access tokens.')
+@description('Audience expected on Pi access tokens. Set to the relay app registration\'s Application ID URI (e.g. `api://<client-id>`). The validator also accepts the bare GUID form for backward compatibility.')
 param entraAudience string
 
 @description('Email address for Azure Monitor alert receivers. Supplied at deploy time; not stored in source.')

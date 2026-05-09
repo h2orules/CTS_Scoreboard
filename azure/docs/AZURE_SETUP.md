@@ -140,8 +140,12 @@ az ad app permission grant --id "$RELAY_APP_ID" \
 ```
 
 Record `TENANT_ID` and `RELAY_APP_ID` — you'll set them as Bicep parameters
-(`entraTenantId`, `entraAudience`) in steps 7 and 8. The Pi-side settings UI
-also asks for these once at sign-in time.
+(`entraTenantId`, `entraAudience`) in steps 7 and 8. `entraAudience` should
+be passed as `api://$RELAY_APP_ID` (the Application ID URI form), since
+that's the `aud` claim AAD writes when the Pi requests a token for the
+named `Pi.Connect` scope. The relay's validator also accepts the bare GUID
+form, so existing deployments will continue to work. The Pi-side settings
+UI also asks for these once at sign-in time.
 
 ---
 
@@ -198,7 +202,7 @@ gh secret set AZURE_CLIENT_ID         --body "$GH_APP_ID"
 gh secret set AZURE_TENANT_ID         --body "$TENANT_ID"
 gh secret set AZURE_SUBSCRIPTION_ID   --body "$SUB_ID"
 gh secret set ENTRA_TENANT_ID         --body "$TENANT_ID"
-gh secret set ENTRA_AUDIENCE          --body "$RELAY_APP_ID"
+gh secret set ENTRA_AUDIENCE          --body "api://$RELAY_APP_ID"
 
 # Alert recipients — never commit, only stored as secrets.
 gh secret set ALERT_EMAIL             --body "$ALERT_EMAIL"
@@ -263,7 +267,7 @@ az deployment group create \
       containerImage="$ACR_PREPROD.azurecr.io/cts-relay:bootstrap" \
       targetPort=80 \
       entraTenantId="$TENANT_ID" \
-      entraAudience="$RELAY_APP_ID" \
+      entraAudience="api://$RELAY_APP_ID" \
       alertEmail="$ALERT_EMAIL" \
       alertSmsCountryCode="$ALERT_SMS_COUNTRY_CODE" \
       alertSmsPhone="$ALERT_SMS_PHONE"
@@ -295,7 +299,7 @@ az deployment group create \
       containerImage="$ACR_PROD.azurecr.io/cts-relay:bootstrap" \
       targetPort=80 \
       entraTenantId="$TENANT_ID" \
-      entraAudience="$RELAY_APP_ID" \
+      entraAudience="api://$RELAY_APP_ID" \
       alertEmail="$ALERT_EMAIL" \
       alertSmsCountryCode="$ALERT_SMS_COUNTRY_CODE" \
       alertSmsPhone="$ALERT_SMS_PHONE"
