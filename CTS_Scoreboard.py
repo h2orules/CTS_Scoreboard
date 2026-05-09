@@ -7,6 +7,7 @@ import traceback
 import ctypes
 import serial
 import serial.tools.list_ports
+import logging
 import re
 import time
 import json
@@ -1347,7 +1348,20 @@ def load_user(userid):
 # app is ready whether launched via ``python CTS_Scoreboard.py`` (dev) or
 # imported by gunicorn (production).
 load_settings()
-# azure_relay_client was constructed above settings load, so its relay_url
+# Configure logging so azure_relay (and other module loggers) actually emit
+# to stderr. Honour SCOREBOARD_MODE=development for verbose DEBUG-level logs.
+_log_level = (
+    logging.DEBUG if os.environ.get('SCOREBOARD_MODE', '').lower() == 'development'
+    else logging.INFO
+)
+logging.basicConfig(
+    level=_log_level,
+    format='%(asctime)s %(levelname)s %(name)s: %(message)s',
+)
+# socketio + engineio are extremely chatty at DEBUG; cap them at INFO.
+logging.getLogger('engineio').setLevel(logging.INFO)
+logging.getLogger('socketio').setLevel(logging.INFO)
+# azure_relay was constructed above settings load, so its relay_url
 # was empty. Push the now-loaded URL into it.
 azure_relay_client.update_relay_url(_active_azure_urls()[0])
 if settings.get('azure_enabled') and azure_relay_client.meet_id \

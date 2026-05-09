@@ -499,7 +499,7 @@ class AzureRelayClient:
             try:
                 self._connect_and_serve(creds)
             except Exception as e:
-                logger.warning("relay connection failed: %s", e)
+                logger.exception("relay connection failed: %s", e)
                 with self._lock:
                     self._last_error = str(e)
                     delay = compute_backoff(self._attempt, self.backoff_schedule)
@@ -525,7 +525,11 @@ class AzureRelayClient:
         if not self.relay_url:
             raise ConnectionError("relay_url is not configured")
 
+        logger.info("relay: acquiring access token (tenant=%s, audience=%s)",
+                    creds.tenant_id, creds.audience)
         access_token = self._acquire_access_token(creds)
+        logger.info("relay: connecting to %s (meet_id=%s)",
+                    self.relay_url, creds.meet_id)
         client = self._socketio_client_factory()
 
         connected_evt = threading.Event()
@@ -560,6 +564,7 @@ class AzureRelayClient:
             },
             wait_timeout=10,
         )
+        logger.info("relay: socket connected, sending meet_open")
 
         # Send meet_open handshake so Azure registers the meet.
         client.emit("meet_open", {
