@@ -308,10 +308,16 @@ class AzureRelayClient:
         refresh token.
         """
         if self._msal_factory is None:
-            from msal import PublicClientApplication
+            from msal import PublicClientApplication, SerializableTokenCache
 
             authority = f"https://login.microsoftonline.com/{tenant_id}"
-            app = PublicClientApplication(client_id, authority=authority)
+            # Use a SerializableTokenCache so we can extract the refresh
+            # token after the device flow completes. The default in-memory
+            # TokenCache has no .serialize() method.
+            app = PublicClientApplication(
+                client_id, authority=authority,
+                token_cache=SerializableTokenCache(),
+            )
         else:
             app = self._msal_factory(client_id=client_id, tenant_id=tenant_id)
 
@@ -370,16 +376,21 @@ class AzureRelayClient:
         # Pull the cached account so we can extract a refresh token.
         accounts = app.get_accounts()
         account = accounts[0] if accounts else None
-        token_cache = app.token_cache.serialize()
-        # Extract refresh token from the cache JSON.
+        # Extract refresh token from the cache. SerializableTokenCache exposes
+        # .serialize(); the default TokenCache does not, so fall back to the
+        # internal _cache dict if needed.
         refresh_token = ""
         try:
-            cache_obj = json.loads(token_cache)
-            for entry in cache_obj.get("RefreshToken", {}).values():
+            cache = app.token_cache
+            if hasattr(cache, "serialize"):
+                cache_obj = json.loads(cache.serialize() or "{}")
+            else:
+                cache_obj = getattr(cache, "_cache", {}) or {}
+            for entry in (cache_obj.get("RefreshToken") or {}).values():
                 refresh_token = entry.get("secret", "")
                 if refresh_token:
                     break
-        except (json.JSONDecodeError, AttributeError):
+        except (json.JSONDecodeError, AttributeError, TypeError):
             pass
 
         creds = AzureCredentials(
