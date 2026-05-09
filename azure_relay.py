@@ -584,6 +584,13 @@ class AzureRelayClient:
                 with self._lock:
                     self._active_client_count = int(data["active_client_count"])
 
+        # The relay returns the heartbeat reply as a Socket.IO callback ack
+        # (the server-side handler does `return {...}`), not as a separate
+        # event. Build a callback that funnels into the same handler so we
+        # treat both response shapes identically.
+        def _on_heartbeat_callback(data: dict[str, Any] | None = None) -> None:
+            heartbeat_ack(data or {})
+
         @client.event(namespace="/pi")  # type: ignore[misc]
         def disconnect() -> None:  # noqa: ARG001
             connected_evt.clear()
@@ -647,7 +654,12 @@ class AzureRelayClient:
 
                 now = self._clock()
                 if now - last_heartbeat >= HEARTBEAT_INTERVAL_S:
-                    client.emit("heartbeat", {"ts": now}, namespace="/pi")
+                    client.emit(
+                        "heartbeat",
+                        {"ts": now},
+                        namespace="/pi",
+                        callback=_on_heartbeat_callback,
+                    )
                     last_heartbeat = now
 
                 if now - last_ack_time[0] > HEARTBEAT_DEGRADED_AFTER_S:
