@@ -1743,11 +1743,18 @@
 
     <!-- Azure rotate-meet-id confirmation overlay -->
     <div id="azure-rotate-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
-        <div style="background:#fff; padding:24px 32px; border-radius:6px; max-width:400px; text-align:center;">
+        <div style="background:#fff; padding:24px 32px; border-radius:6px; max-width:460px; text-align:left;">
             <h4 style="margin-top:0;">Rotate Meet ID?</h4>
-            <p>This invalidates the current scoreboard URL. Anyone using the old link will see a "link expired" page.</p>
-            <button class="btn btn-warning" type="button" onclick="azureRotateMeetId()">Rotate</button>
-            <button class="btn btn-default" type="button" onclick="document.getElementById('azure-rotate-overlay').style.display='none';">Cancel</button>
+            <p>This generates a brand-new scoreboard URL and <strong>invalidates the current one</strong>. Anyone using the old link will see a &ldquo;Link expired&rdquo; page.</p>
+            <div style="background:#fcf8e3; border:1px solid #faebcc; color:#8a6d3b; padding:10px 14px; border-radius:4px; margin:12px 0; font-size:13px;">
+                <strong>&#x26A0; Printed QR codes will stop working.</strong>
+                If you printed signs, posters, or programs with the QR code for the current URL, families scanning them will see the expired page until you replace them with the new QR.
+            </div>
+            <p style="font-size:13px; color:#777; margin-bottom:16px;">The same meet ID is reused across reconnects, restarts, and outages, so you only need to rotate it if the URL has been compromised or you want to lock out previous viewers.</p>
+            <div style="text-align:right;">
+                <button class="btn btn-default" type="button" onclick="document.getElementById('azure-rotate-overlay').style.display='none';">Cancel</button>
+                <button class="btn btn-warning" type="button" onclick="azureRotateMeetId()">Rotate Meet ID</button>
+            </div>
         </div>
     </div>
 

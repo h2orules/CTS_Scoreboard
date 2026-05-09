@@ -90,7 +90,7 @@ def test_closed_meet_returns_closed_page(client, app_with_store):
     store.close_meet(MEET)
     r = client.get(f"/m/{MEET}")
     assert r.status_code == 200
-    assert "Meet closed" in r.text
+    assert "No meet in session" in r.text
     assert "HostU" in r.text
 
 
@@ -108,7 +108,7 @@ def test_meet_starting_up_when_no_template(client, app_with_store):
     _seed_live_meet(store, with_template=False)
     r = client.get(f"/m/{MEET}")
     assert r.status_code == 503
-    assert "starting up" in r.text
+    assert "Connecting" in r.text
 
 
 def test_meet_starting_up_when_no_context(client, app_with_store):

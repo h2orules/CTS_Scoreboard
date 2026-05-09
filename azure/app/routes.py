@@ -273,8 +273,10 @@ def build_router(*, store: MeetStateStore) -> APIRouter:
         if not meta:
             return _state_page(
                 title="No meet found",
-                body="That meet ID is unknown or has expired. Ask the host for "
-                     "an up-to-date link.",
+                body="That meet ID is unknown or has expired. If you scanned a "
+                     "printed QR code, the host may not have set up the "
+                     "scoreboard yet &mdash; try again closer to meet time, or "
+                     "ask the host for an up-to-date link.",
                 status_code=404,
                 kind="warning",
             )
@@ -282,28 +284,35 @@ def build_router(*, store: MeetStateStore) -> APIRouter:
         if status == "expired_id_rotated":
             return _state_page(
                 title="Link expired",
-                body="The host rotated the meet&rsquo;s sharing link. Ask them "
-                     "for the new one.",
+                body="The host updated this meet&rsquo;s sharing link, so the "
+                     "old URL no longer works. Ask the host for the new link "
+                     "or QR code.",
                 status_code=410,
                 kind="warning",
             )
         if status == "closed":
+            host = escape(meta.get("host_team_name", "")) or "the host"
             return _state_page(
-                title="Meet closed",
-                body=f"<strong>{escape(meta.get('host_team_name', ''))}</strong>&rsquo;s "
-                     "meet has finished. Final results may be available from the host.",
+                title="No meet in session",
+                body=f"There&rsquo;s no live meet right now from "
+                     f"<strong>{host}</strong>. The next meet will appear here "
+                     "automatically &mdash; this link is good all season, so "
+                     "feel free to bookmark it or save the QR code.",
                 status_code=200,
-                kind="success",
-                footer="Thanks for following along!",
+                kind="info",
+                footer="Check back at the next scheduled meet.",
             )
 
         bundle = store.get_current_template(meet_id)
         context = store.get_context(meet_id)
         if not bundle or not context:
+            host = escape(meta.get("host_team_name", "")) or "the host"
             return _state_page(
-                title="Meet starting up",
-                body="The host&rsquo;s scoreboard hasn&rsquo;t finished publishing yet. "
-                     "Refresh in a moment.",
+                title="Connecting to the scoreboard",
+                body=f"<strong>{host}</strong> is online but hasn&rsquo;t "
+                     "published the first event yet. Results will appear here "
+                     "automatically as soon as the meet starts &mdash; no need "
+                     "to refresh.",
                 status_code=503,
                 kind="info",
             )
