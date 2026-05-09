@@ -201,8 +201,9 @@ gh repo set-default "$GH_REPO"
 gh secret set AZURE_CLIENT_ID         --body "$GH_APP_ID"
 gh secret set AZURE_TENANT_ID         --body "$TENANT_ID"
 gh secret set AZURE_SUBSCRIPTION_ID   --body "$SUB_ID"
-gh secret set ENTRA_TENANT_ID         --body "$TENANT_ID"
-gh secret set ENTRA_AUDIENCE          --body "api://$RELAY_APP_ID"
+# Used by azure-infra-deploy to pass entraAudience=api://$RELAY_APP_ID to
+# the Bicep template. (entraTenantId reuses AZURE_TENANT_ID.)
+gh secret set RELAY_APP_ID            --body "$RELAY_APP_ID"
 
 # Alert recipients — never commit, only stored as secrets.
 gh secret set ALERT_EMAIL             --body "$ALERT_EMAIL"
@@ -319,6 +320,23 @@ az deployment group create \
 4. Smoke test the pre-prod URL.
 5. Run **`azure-promote-prod`** workflow manually with the digest from the
    pre-prod run. The `production` environment will block until you approve.
+
+### Deploying infrastructure changes (Bicep)
+
+The `azure-deploy-preprod` / `azure-promote-prod` workflows only update the
+container image. To redeploy `azure/infra/main.bicep` itself (replica
+counts, env vars, alert rules, ingress, etc.), use the
+**`azure-infra-deploy`** workflow:
+
+1. Actions tab → "azure-infra-deploy" → Run workflow.
+2. Pick `environment: preprod` (or `prod`) and `mode: what-if` first.
+3. Review the diff in the workflow log.
+4. Re-run with `mode: apply` to deploy.
+
+The workflow reads the currently-running container image off the live
+Container App and pins the Bicep deploy to it, so infra changes never
+inadvertently roll the app back to a stale image. Targeting `prod` goes
+through the same required-reviewer gate as `azure-promote-prod`.
 
 ---
 
