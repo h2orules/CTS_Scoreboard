@@ -171,6 +171,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   properties: {
     managedEnvironmentId: caEnv.id
     configuration: {
+      activeRevisionsMode: 'Multiple' // required for stickySessions and to support rollback
       ingress: {
         external: true
         targetPort: 8000
@@ -280,6 +281,7 @@ resource alertClientErrors 'Microsoft.Insights/scheduledQueryRules@2023-03-15-pr
         {
           query: 'customMetrics | where name == "client_errors_total" | summarize n = sum(value) | where n > 25'
           timeAggregation: 'Total'
+          metricMeasureColumn: 'n'
           operator: 'GreaterThan'
           threshold: 0
         }
@@ -304,6 +306,7 @@ resource alertReconnects 'Microsoft.Insights/scheduledQueryRules@2023-03-15-prev
         {
           query: 'customMetrics | where name == "pi_reconnects_total" | summarize n = sum(value) by tostring(customDimensions["meet_id"]) | where n > 5'
           timeAggregation: 'Total'
+          metricMeasureColumn: 'n'
           operator: 'GreaterThan'
           threshold: 0
         }
