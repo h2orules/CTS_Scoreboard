@@ -71,12 +71,14 @@ class TestUpdateRelayUrl:
 
 @pytest.fixture
 def isolated_settings(tmp_path, monkeypatch):
-    """Point settings.json at a temp file so POSTs don't clobber the repo."""
+    """Point settings.json + azure_settings.json at temp files."""
     target = tmp_path / "settings.json"
+    azure_target = tmp_path / "azure_settings.json"
     monkeypatch.setattr(CTS_Scoreboard, "settings_file", str(target))
+    monkeypatch.setattr(CTS_Scoreboard, "azure_settings_file", str(azure_target))
     # Snapshot + restore the in-memory settings dict.
     snapshot = dict(settings)
-    yield target
+    yield azure_target
     settings.clear()
     settings.update(snapshot)
 
@@ -171,7 +173,7 @@ class TestAzureConfigPost:
         assert body["ok"] is True
         assert body["status"]["environment"] == "preprod"
         assert body["status"]["relay_url"] == "https://pp.example.com"
-        # Persisted to disk.
+        # Persisted to disk in azure_settings.json (not settings.json).
         on_disk = json.loads(isolated_settings.read_text())
         assert on_disk["azure_relay_url_preprod"] == "https://pp.example.com"
         assert on_disk["azure_tenant_id"] == "tid-1"
@@ -212,16 +214,23 @@ class TestLegacyUrlMigration:
             "azure_relay_url": "https://legacy.example.com",
             "azure_public_url": "https://legacy-public.example.com",
         }))
+        azure_target = tmp_path / "azure_settings.json"
         monkeypatch.setattr(CTS_Scoreboard, "settings_file", str(target))
+        monkeypatch.setattr(CTS_Scoreboard, "azure_settings_file", str(azure_target))
         snapshot = dict(settings)
         try:
+            # Clear any operator-supplied values so the migration runs.
+            for k in ("azure_relay_url_preprod", "azure_public_url_preprod"):
+                settings[k] = ""
             CTS_Scoreboard.load_settings()
             assert settings["azure_relay_url_preprod"] == "https://legacy.example.com"
             assert settings["azure_public_url_preprod"] == "https://legacy-public.example.com"
-            # Legacy keys cleared on disk.
+            # The new file split now writes azure_* into azure_settings.json
+            # and removes them from settings.json entirely.
             on_disk = json.loads(target.read_text())
-            assert on_disk.get("azure_relay_url", "") == ""
-            assert on_disk.get("azure_public_url", "") == ""
+            assert not any(k.startswith("azure_") for k in on_disk)
+            azure_disk = json.loads(azure_target.read_text())
+            assert azure_disk["azure_relay_url_preprod"] == "https://legacy.example.com"
         finally:
             settings.clear()
             settings.update(snapshot)
@@ -234,14 +243,84 @@ class TestLegacyUrlMigration:
             "azure_relay_url": "https://legacy.example.com",
             "azure_relay_url_preprod": "https://already-set.example.com",
         }))
+        azure_target = tmp_path / "azure_settings.json"
         monkeypatch.setattr(CTS_Scoreboard, "settings_file", str(target))
+        monkeypatch.setattr(CTS_Scoreboard, "azure_settings_file", str(azure_target))
         snapshot = dict(settings)
         try:
+            settings["azure_relay_url_preprod"] = ""
             CTS_Scoreboard.load_settings()
             assert (
                 settings["azure_relay_url_preprod"]
                 == "https://already-set.example.com"
             )
+        finally:
+            settings.clear()
+            settings.update(snapshot)
+
+
+class TestAzureSettingsFileSplit:
+    def test_leaked_keys_migrate_out_of_settings_json(self, tmp_path, monkeypatch):
+        """An older settings.json that still holds azure_* keys should have
+        them moved into azure_settings.json on next load."""
+        target = tmp_path / "settings.json"
+        azure_target = tmp_path / "azure_settings.json"
+        target.write_text(json.dumps({
+            "username": "u",
+            "azure_tenant_id": "tid-x",
+            "azure_client_id": "cid-x",
+            "azure_environment": "preprod",
+        }))
+        monkeypatch.setattr(CTS_Scoreboard, "settings_file", str(target))
+        monkeypatch.setattr(CTS_Scoreboard, "azure_settings_file", str(azure_target))
+        snapshot = dict(settings)
+        try:
+            CTS_Scoreboard.load_settings()
+            on_disk = json.loads(target.read_text())
+            assert not any(k.startswith("azure_") for k in on_disk)
+            azure_disk = json.loads(azure_target.read_text())
+            assert azure_disk["azure_tenant_id"] == "tid-x"
+            assert azure_disk["azure_client_id"] == "cid-x"
+            assert azure_disk["azure_environment"] == "preprod"
+        finally:
+            settings.clear()
+            settings.update(snapshot)
+
+    def test_azure_settings_file_loaded_on_top_of_settings(
+        self, tmp_path, monkeypatch
+    ):
+        target = tmp_path / "settings.json"
+        azure_target = tmp_path / "azure_settings.json"
+        target.write_text(json.dumps({"username": "u"}))
+        azure_target.write_text(json.dumps({
+            "azure_tenant_id": "from-azure-file",
+            "azure_environment": "prod",
+        }))
+        monkeypatch.setattr(CTS_Scoreboard, "settings_file", str(target))
+        monkeypatch.setattr(CTS_Scoreboard, "azure_settings_file", str(azure_target))
+        snapshot = dict(settings)
+        try:
+            CTS_Scoreboard.load_settings()
+            assert settings["azure_tenant_id"] == "from-azure-file"
+            assert settings["azure_environment"] == "prod"
+        finally:
+            settings.clear()
+            settings.update(snapshot)
+
+    def test_save_azure_settings_writes_only_azure_keys(self, tmp_path, monkeypatch):
+        azure_target = tmp_path / "azure_settings.json"
+        monkeypatch.setattr(CTS_Scoreboard, "azure_settings_file", str(azure_target))
+        snapshot = dict(settings)
+        try:
+            settings["azure_tenant_id"] = "tid-out"
+            settings["azure_client_id"] = "cid-out"
+            settings["username"] = "should-not-appear"
+            CTS_Scoreboard.save_azure_settings()
+            on_disk = json.loads(azure_target.read_text())
+            assert on_disk["azure_tenant_id"] == "tid-out"
+            assert on_disk["azure_client_id"] == "cid-out"
+            assert "username" not in on_disk
+            assert all(k.startswith("azure_") for k in on_disk)
         finally:
             settings.clear()
             settings.update(snapshot)
