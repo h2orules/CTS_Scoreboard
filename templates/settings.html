@@ -1607,14 +1607,25 @@
                     <div class="form-group" style="margin-bottom:6px;">
                         <label for="azure-cfg-tenant" style="margin-bottom:2px;">Tenant ID</label>
                         <input type="text" id="azure-cfg-tenant" class="form-control" oninput="azureMarkConfigDirty()" placeholder="GUID">
+                        <small class="text-muted" style="font-size:11px;">
+                            Your Entra <em>tenant</em> GUID (<code>az account show --query tenantId</code>).
+                        </small>
                     </div>
                     <div class="form-group" style="margin-bottom:6px;">
                         <label for="azure-cfg-client" style="margin-bottom:2px;">Client ID</label>
-                        <input type="text" id="azure-cfg-client" class="form-control" oninput="azureMarkConfigDirty()" placeholder="GUID">
+                        <input type="text" id="azure-cfg-client" class="form-control" oninput="azureClientIdChanged()" placeholder="GUID">
+                        <small class="text-muted" style="font-size:11px;">
+                            App ID of the <strong>&ldquo;CTS Scoreboard Relay&rdquo;</strong> app
+                            registration &mdash; <em>not</em> the GitHub Actions service principal.
+                        </small>
                     </div>
                     <div class="form-group" style="margin-bottom:6px;">
                         <label for="azure-cfg-audience" style="margin-bottom:2px;">Audience</label>
-                        <input type="text" id="azure-cfg-audience" class="form-control" oninput="azureMarkConfigDirty()" placeholder="api://&lt;client-id&gt;">
+                        <input type="text" id="azure-cfg-audience" class="form-control" oninput="azureMarkConfigDirty()" placeholder="api://<client-id>">
+                        <small class="text-muted" style="font-size:11px;">
+                            Full resource URI &mdash; usually <code>api://&lt;Client&nbsp;ID&gt;</code>.
+                            Auto-filled from Client ID when blank.
+                        </small>
                     </div>
                     <hr style="margin:10px 0;">
                     <div class="form-group" style="margin-bottom:6px;">
@@ -1930,6 +1941,18 @@
             configDirty = true;
             $('azure-cfg-save-btn').disabled = false;
             $('azure-cfg-msg').textContent = '';
+        };
+
+        // When Client ID changes and Audience is blank, prefill Audience as
+        // api://<client-id>. This is the common case and prevents the
+        // AADSTS650057 "Invalid resource" error.
+        window.azureClientIdChanged = function() {
+            var aud = $('azure-cfg-audience');
+            var cid = $('azure-cfg-client').value.trim();
+            if (cid && !aud.value.trim()) {
+                aud.value = 'api://' + cid;
+            }
+            azureMarkConfigDirty();
         };
 
         function loadConfig() {
