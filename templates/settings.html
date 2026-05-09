@@ -1855,6 +1855,16 @@
                 .catch(function() { /* ignore transient errors */ });
         }
 
+        function refreshStatusOnce() {
+            // Like refreshStatus but always runs, returns the snapshot, and
+            // never throws — used by the sign-in recovery path to detect a
+            // successful login when /azure/login/complete returns non-JSON.
+            return fetch('/azure/status', { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(snap) { applyStatus(snap); return snap; })
+                .catch(function() { return null; });
+        }
+
         function startPolling() {
             if (pollTimer) return;
             refreshStatus();
@@ -1897,16 +1907,51 @@
                         signal: devicePollAbort.signal,
                     });
                 })
-                .then(function(r) { return r.json(); })
-                .then(function(result) {
-                    $('azure-device-overlay').style.display = 'none';
-                    if (result.ok) {
-                        showToast('Signed in to Azure.');
-                        applyStatus(result.status);
-                    } else {
-                        showToast('Sign-in failed.', 'error');
+                .then(function(r) {
+                    // The long poll can return non-JSON (proxy timeout HTML,
+                    // session-expired login redirect, debug error page).
+                    // Parse defensively so a malformed response doesn't mask
+                    // an actually-successful sign-in.
+                    var ct = (r.headers.get('content-type') || '').toLowerCase();
+                    if (ct.indexOf('application/json') !== -1) {
+                        return r.json().then(function(j) { return {kind: 'json', body: j, status: r.status}; });
                     }
-                    refreshStatus();
+                    return r.text().then(function(t) { return {kind: 'text', body: t, status: r.status}; });
+                })
+                .then(function(parsed) {
+                    $('azure-device-overlay').style.display = 'none';
+                    if (parsed.kind === 'json' && parsed.body && parsed.body.ok) {
+                        showToast('Signed in to Azure.');
+                        applyStatus(parsed.body.status);
+                        refreshStatus();
+                        return;
+                    }
+                    if (parsed.kind === 'json') {
+                        showToast('Sign-in failed.', 'error');
+                        refreshStatus();
+                        return;
+                    }
+                    // Non-JSON. Recover by polling /azure/status — if the
+                    // backend actually completed, we light up the UI; if not,
+                    // surface a short snippet of the HTML response.
+                    refreshStatusOnce().then(function(snap) {
+                        var connected = snap && (
+                            snap.state === 'connecting' ||
+                            snap.state === 'connected' ||
+                            snap.state === 'degraded'
+                        );
+                        if (connected) {
+                            showToast('Signed in to Azure.');
+                            return;
+                        }
+                        var snippet = (parsed.body || '').replace(/<[^>]+>/g, ' ')
+                            .replace(/\s+/g, ' ').trim().slice(0, 140);
+                        showToast(
+                            'Sign-in response not JSON (HTTP ' + parsed.status + '): ' +
+                            (snippet || '(empty)'),
+                            'error'
+                        );
+                    });
                 })
                 .catch(function(err) {
                     if (err && err.name === 'AbortError') return;
