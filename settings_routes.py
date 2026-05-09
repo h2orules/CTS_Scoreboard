@@ -634,6 +634,9 @@ def register(flask_app, app_module):
                 warning = f'failed to persist azure_settings.json: {e}'
                 logging.exception('save_azure_settings failed after sign-in')
             try:
+                _app.azure_relay_client.update_relay_url(
+                    _app._active_azure_urls()[0]
+                )
                 _app.azure_relay_client.start()
             except Exception as e:
                 warning = (warning + '; ' if warning else '') + \
