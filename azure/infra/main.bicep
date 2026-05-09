@@ -51,6 +51,7 @@ var laName = '${prefix}-la'
 var aiName = '${prefix}-ai'
 var caEnvName = '${prefix}-cae'
 var caName = '${prefix}-app'
+var uamiName = '${prefix}-uami'
 var redisName = '${prefix}-redis'
 var storageName = take(replace('${prefix}st', '-', ''), 24)
 var pubsubName = '${prefix}-wps'
@@ -83,6 +84,27 @@ resource acr 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' = {
   location: location
   sku: { name: 'Basic' }
   properties: { adminUserEnabled: false }
+}
+
+// ---------- user-assigned managed identity for ACR pull ----------
+// We grant AcrPull to this UAMI BEFORE the Container App is created, so the
+// first revision can pull the image immediately. (System-assigned identity
+// would create a chicken-and-egg: the role assignment can't exist until the
+// Container App exists, so the first pull always races role propagation and
+// can hang for 10+ minutes.)
+resource uami 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: uamiName
+  location: location
+}
+
+resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: acr
+  name: guid(acr.id, uami.id, 'AcrPull')
+  properties: {
+    principalId: uami.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
+  }
 }
 
 // ---------- storage (Tables + Blob) ----------
@@ -170,7 +192,11 @@ resource caEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: caName
   location: location
-  identity: { type: 'SystemAssigned' }
+  identity: {
+    type: 'UserAssigned'
+    userAssignedIdentities: { '${uami.id}': {} }
+  }
+  dependsOn: [ acrPull ]
   properties: {
     managedEnvironmentId: caEnv.id
     configuration: {
@@ -188,7 +214,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       registries: [
         {
           server: '${acrName}.azurecr.io'
-          identity: 'system'
+          identity: uami.id
         }
       ]
       secrets: [
@@ -238,16 +264,8 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
-// AcrPull for the Container App's managed identity.
-resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: acr
-  name: guid(acr.id, containerApp.id, 'AcrPull')
-  properties: {
-    principalId: containerApp.identity.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
-  }
-}
+// AcrPull role for the user-assigned MI is declared above, before the
+// Container App, so the first image pull doesn't race role propagation.
 
 // ---------- alerting ----------
 resource actionGroup 'Microsoft.Insights/actionGroups@2023-01-01' = {
