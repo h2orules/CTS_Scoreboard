@@ -1,0 +1,162 @@
+name: azure-infra-deploy
+
+# Deploys infrastructure changes (azure/infra/main.bicep) to either the
+# preprod or prod resource group. Defaults to a what-if preview only;
+# set `mode: apply` to actually deploy.
+#
+# This workflow is for *infra* changes (replica counts, env vars, alert
+# rules, ingress config, etc). Application image deploys still go through
+# azure-deploy-preprod / azure-promote-prod, which keep the existing
+# image digest pinned via `containerapp update --image`.
+#
+# To preserve the currently-running image when redeploying Bicep, the
+# workflow first reads the live container image off the Container App and
+# passes it back in as the `containerImage` parameter. Without this the
+# Bicep would reset the app to whatever literal default was last hardcoded.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options: [preprod, prod]
+        default: preprod
+      mode:
+        description: 'what-if (preview only) or apply (actually deploy)'
+        required: true
+        type: choice
+        options: [what-if, apply]
+        default: what-if
+
+permissions:
+  id-token: write   # OIDC federated credential
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Required-reviewer gate when targeting prod (configure in repo settings).
+    environment: ${{ github.event.inputs.environment }}
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      # ENTRA_TENANT_ID is the same value as AZURE_TENANT_ID for this repo.
+      RELAY_APP_ID: ${{ secrets.RELAY_APP_ID }}
+      ALERT_EMAIL: ${{ secrets.ALERT_EMAIL }}
+      ALERT_SMS_COUNTRY_CODE: ${{ secrets.ALERT_SMS_COUNTRY_CODE }}
+      ALERT_SMS_PHONE: ${{ secrets.ALERT_SMS_PHONE }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Resolve target resource group + Container App name
+        id: target
+        run: |
+          if [[ "${{ github.event.inputs.environment }}" == "prod" ]]; then
+            echo "rg=${{ secrets.RG_PROD }}" >> $GITHUB_OUTPUT
+            echo "app=cts-sb-prod-app"       >> $GITHUB_OUTPUT
+          else
+            echo "rg=${{ secrets.RG_PREPROD }}" >> $GITHUB_OUTPUT
+            echo "app=cts-sb-preprod-app"      >> $GITHUB_OUTPUT
+          fi
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Read currently-running container image
+        id: img
+        run: |
+          # Pin the deploy to the image already running so Bicep doesn't
+          # roll the app back to a stale tag. If the app doesn't exist
+          # yet (first-time bootstrap), fall back to the bootstrap image.
+          set +e
+          IMG=$(az containerapp show \
+                  -g "${{ steps.target.outputs.rg }}" \
+                  -n "${{ steps.target.outputs.app }}" \
+                  --query "properties.template.containers[0].image" \
+                  -o tsv 2>/dev/null)
+          set -e
+          if [[ -z "$IMG" ]]; then
+            if [[ "${{ github.event.inputs.environment }}" == "prod" ]]; then
+              IMG="ctssbprodacr.azurecr.io/cts-relay:bootstrap"
+            else
+              IMG="ctssbpreprodacr.azurecr.io/cts-relay:bootstrap"
+            fi
+            echo "::warning title=No running image::Falling back to $IMG"
+          fi
+          echo "image=$IMG" >> $GITHUB_OUTPUT
+          echo "::notice title=Pinned image::$IMG"
+
+      - name: Bicep what-if
+        if: github.event.inputs.mode == 'what-if'
+        run: |
+          az deployment group what-if \
+            -g "${{ steps.target.outputs.rg }}" \
+            --template-file azure/infra/main.bicep \
+            --parameters \
+                environmentName=${{ github.event.inputs.environment }} \
+                containerImage="${{ steps.img.outputs.image }}" \
+                entraTenantId="$AZURE_TENANT_ID" \
+                entraAudience="api://$RELAY_APP_ID" \
+                alertEmail="$ALERT_EMAIL" \
+                alertSmsCountryCode="$ALERT_SMS_COUNTRY_CODE" \
+                alertSmsPhone="$ALERT_SMS_PHONE"
+
+      - name: Bicep deploy
+        if: github.event.inputs.mode == 'apply'
+        id: apply
+        run: |
+          az deployment group create \
+            -g "${{ steps.target.outputs.rg }}" \
+            --name "infra-${{ github.run_number }}-$(echo ${{ github.sha }} | cut -c1-8)" \
+            --template-file azure/infra/main.bicep \
+            --parameters \
+                environmentName=${{ github.event.inputs.environment }} \
+                containerImage="${{ steps.img.outputs.image }}" \
+                entraTenantId="$AZURE_TENANT_ID" \
+                entraAudience="api://$RELAY_APP_ID" \
+                alertEmail="$ALERT_EMAIL" \
+                alertSmsCountryCode="$ALERT_SMS_COUNTRY_CODE" \
+                alertSmsPhone="$ALERT_SMS_PHONE"
+          FQDN=$(az containerapp show \
+                  -g "${{ steps.target.outputs.rg }}" \
+                  -n "${{ steps.target.outputs.app }}" \
+                  --query properties.configuration.ingress.fqdn -o tsv)
+          echo "url=https://$FQDN" >> $GITHUB_OUTPUT
+
+      - name: Smoke test
+        if: github.event.inputs.mode == 'apply'
+        run: |
+          for i in 1 2 3 4 5 6; do
+            if curl -fsS "${{ steps.apply.outputs.url }}/healthz" \
+                && curl -fsS "${{ steps.apply.outputs.url }}/readyz" >/dev/null; then
+              echo "OK"
+              exit 0
+            fi
+            echo "Not ready yet (attempt $i), sleeping 10s..."
+            sleep 10
+          done
+          echo "Health probe failed."
+          exit 1
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Infra deploy: ${{ github.event.inputs.environment }} (${{ github.event.inputs.mode }})"
+            echo "- Resource group: \`${{ steps.target.outputs.rg }}\`"
+            echo "- Container App: \`${{ steps.target.outputs.app }}\`"
+            echo "- Pinned image: \`${{ steps.img.outputs.image }}\`"
+            if [[ "${{ github.event.inputs.mode }}" == "apply" ]]; then
+              echo "- URL: ${{ steps.apply.outputs.url }}"
+            else
+              echo ""
+              echo "_Preview only. Re-run with **mode: apply** to deploy._"
+            fi
+          } >> $GITHUB_STEP_SUMMARY

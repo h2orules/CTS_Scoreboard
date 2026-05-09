@@ -56,9 +56,27 @@ def build_app(
         lifespan=lifespan,
     )
 
+    # Cross-process / cross-replica fanout for Socket.IO.
+    #
+    # Each engine.io session lives in one worker process — so an emit() to
+    # a room from worker A won't reach a client connected to worker B
+    # unless the two workers share a pub/sub channel. AsyncRedisManager
+    # provides exactly that on top of the same Redis we already use for
+    # meet state. With it in place we can run multiple gunicorn workers
+    # per replica AND multiple Container Apps replicas; without it we'd
+    # silently drop fanout to all-but-one of them.
+    #
+    # In tests, callers pass redis_client=fakeredis. Skip the manager
+    # there because AsyncRedisManager opens its own real connection from
+    # settings.redis_url that fakeredis can't intercept.
+    client_manager = None
+    if redis_client is None:
+        client_manager = socketio.AsyncRedisManager(settings.redis_url)
+
     sio: socketio.AsyncServer = socketio.AsyncServer(
         async_mode="asgi",
         cors_allowed_origins="*",
+        client_manager=client_manager,
     )
 
     register_handlers(

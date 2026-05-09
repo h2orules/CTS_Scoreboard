@@ -57,8 +57,13 @@ _IO_CONNECT_RE = re.compile(
 
 
 def _rewrite_io_connect(html: str, meet_id: str) -> str:
+    # Force websocket-only transport. We disable HTTP long-polling so we
+    # don't need sticky sessions on the load balancer — every reconnect
+    # picks a worker fresh and the WS stays pinned to it for its
+    # lifetime. Combined with AsyncRedisManager on the server side this
+    # lets us scale horizontally across workers and replicas.
     return _IO_CONNECT_RE.sub(
-        f"io('/scoreboard', {{auth: {{meet_id: {meet_id!r}}}}})",
+        f"io('/scoreboard', {{auth: {{meet_id: {meet_id!r}}}, transports: ['websocket']}})",
         html,
     )
 

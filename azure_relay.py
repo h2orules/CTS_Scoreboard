@@ -175,6 +175,9 @@ class AzureRelayClient:
 
         self._lock = threading.RLock()
         self._stop = threading.Event()
+        # Set by force_reconnect() to break the inner serve loop and force a
+        # fresh connect cycle even when state is CONNECTED.
+        self._force_reconnect = threading.Event()
         self._thread: threading.Thread | None = None
         self._queue: Queue[tuple[str, dict[str, Any]]] = Queue(maxsize=1000)
         self._status_subscribers: list[Callable[[dict[str, Any]], None]] = []
@@ -269,13 +272,17 @@ class AzureRelayClient:
 
         Also (re)starts the worker thread if it has died or never been started,
         so this method is safe to call from a UI 'Reconnect' button regardless
-        of the prior state.
+        of the prior state. If currently CONNECTED/DEGRADED, signals the serve
+        loop to drop the live socket so the outer loop performs a fresh
+        handshake (re-sends meet_open, template_push, meet_context).
         """
         with self._lock:
             self._attempt = 0
             self._next_retry_at = None
             if self._state in (STATE_BACKOFF, STATE_DEGRADED, STATE_DISCONNECTED):
                 self._set_state(STATE_CONNECTING)
+        # Tell any active serve loop to break out and reconnect.
+        self._force_reconnect.set()
         # Ensure the worker thread is alive. start() is idempotent.
         self.start()
         # Wake the queue.
@@ -577,11 +584,24 @@ class AzureRelayClient:
                 with self._lock:
                     self._active_client_count = int(data["active_client_count"])
 
+        # The relay returns the heartbeat reply as a Socket.IO callback ack
+        # (the server-side handler does `return {...}`), not as a separate
+        # event. Build a callback that funnels into the same handler so we
+        # treat both response shapes identically.
+        def _on_heartbeat_callback(data: dict[str, Any] | None = None) -> None:
+            heartbeat_ack(data or {})
+
         @client.event(namespace="/pi")  # type: ignore[misc]
         def disconnect() -> None:  # noqa: ARG001
             connected_evt.clear()
 
-        # Connect with bearer token in the auth payload.
+        # Connect with bearer token in the auth payload. We force
+        # websocket-only transport: the relay app runs multiple workers
+        # behind a load balancer with no sticky sessions, and engine.io's
+        # HTTP long-polling fallback would otherwise scatter polling
+        # requests across workers that don't own the sid (HTTP 400). With
+        # WS-only the connection lives on whichever worker accepts the
+        # initial upgrade and stays there for its lifetime.
         client.connect(
             self.relay_url,
             namespaces=["/pi"],
@@ -590,6 +610,7 @@ class AzureRelayClient:
                 "meet_id": creds.meet_id,
                 "protocol_version": self.protocol_version,
             },
+            transports=["websocket"],
             wait_timeout=10,
         )
         logger.info("relay: socket connected, sending meet_open")
@@ -624,8 +645,12 @@ class AzureRelayClient:
             self._last_error = None
 
         last_heartbeat = self._clock()
+        # Clear any pending reconnect signal now that we have a fresh socket.
+        self._force_reconnect.clear()
         try:
-            while not self._stop.is_set() and connected_evt.is_set():
+            while (not self._stop.is_set()
+                   and connected_evt.is_set()
+                   and not self._force_reconnect.is_set()):
                 # Drain the outbound queue.
                 try:
                     name, payload = self._queue.get(timeout=0.5)
@@ -636,7 +661,12 @@ class AzureRelayClient:
 
                 now = self._clock()
                 if now - last_heartbeat >= HEARTBEAT_INTERVAL_S:
-                    client.emit("heartbeat", {"ts": now}, namespace="/pi")
+                    client.emit(
+                        "heartbeat",
+                        {"ts": now},
+                        namespace="/pi",
+                        callback=_on_heartbeat_callback,
+                    )
                     last_heartbeat = now
 
                 if now - last_ack_time[0] > HEARTBEAT_DEGRADED_AFTER_S:
