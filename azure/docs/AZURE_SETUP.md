@@ -275,7 +275,7 @@ After the first real workflow deploy, this bootstrap image is replaced.
 
 ## 7. Deploy pre-prod via Bicep (one-time, then via workflow)
 
-The first deploy creates every other resource (Web PubSub, Redis, Storage,
+The first deploy creates every other resource (Redis, Storage,
 Log Analytics, App Insights, Container Apps Environment, Container App,
 Action Group, Alert Rules). Subsequent updates to the relay app go through
 the GitHub Actions workflow.
@@ -399,7 +399,7 @@ az containerapp revision activate -g "$RG" -n "$APP" --revision "<previous-revis
 ## 12. Tear down (preprod, on demand)
 
 The `azure-deploy-preprod` workflow defaults `minReplicas=0` so a quiescent
-pre-prod costs only the storage + Redis Basic + Web PubSub Free baseline.
+pre-prod costs only the storage + Redis Basic baseline.
 Full teardown:
 
 ```bash
@@ -417,7 +417,6 @@ Idle pre-prod (everything scaled to zero except the always-on resources):
 | Resource | Tier | ~Monthly |
 |---|---|---|
 | Container Apps | min=0 | $0 when idle |
-| Web PubSub for Socket.IO | Free | $0 |
 | Redis | Basic C0 | ~$16 |
 | Storage | Standard_LRS, low usage | <$1 |
 | App Insights | first 5 GB free | $0 |
@@ -425,4 +424,24 @@ Idle pre-prod (everything scaled to zero except the always-on resources):
 | **Total** | | **~$17/mo** when idle |
 
 Prod with light real usage (1 meet/day, 50 viewers) is roughly the same plus
-~$50/mo for the Standard Web PubSub tier and Container Apps active time.
+Container Apps active time (typically a few dollars/month at this scale).
+
+---
+
+## Architecture decision: Socket.IO fanout
+
+Browser viewers connect via Socket.IO directly to the Container App. Cross-
+worker / cross-replica fanout is provided by `socketio.AsyncRedisManager`
+on the same Redis instance used for meet state. Combined with WebSocket-
+only transport (no sticky sessions required), this scales horizontally
+across the Container App's max replicas.
+
+**Azure Web PubSub for Socket.IO was considered and rejected.** WPS bills
+per outgoing message, and a fanout to N viewers counts as N messages.
+For our workload (10–30 events/sec/meet × hundreds-to-thousands of
+viewers × multiple concurrent meets), the per-message bill scales into
+the hundreds of thousands of dollars per month at peak — 100×–1000×
+more than the current Container Apps + Redis design — while delivering no
+latency or reliability win for our shape. Revisit only if a single meet
+sustains >5K viewers or the relay sustains >1M outbound msg/s for long
+periods.

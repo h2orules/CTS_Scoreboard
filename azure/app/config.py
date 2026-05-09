@@ -30,16 +30,6 @@ class Settings(BaseSettings):
     )
     log_level: str = Field(default="INFO")
 
-    # ---- realtime transport (Azure Web PubSub for Socket.IO) ----
-    webpubsub_connection_string: str = Field(
-        default="",
-        description="Connection string for the Web PubSub for Socket.IO resource.",
-    )
-    webpubsub_hub: str = Field(
-        default="scoreboard",
-        description="Web PubSub hub name; defaults to 'scoreboard'.",
-    )
-
     # ---- state stores ----
     redis_url: str = Field(
         default="redis://localhost:6379/0",
