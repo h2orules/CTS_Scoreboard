@@ -1173,9 +1173,13 @@ def _azure_context_provider():
 
     Mirrors the kwargs passed to render_template in route_web, minus dev-mode
     fields. Returns a JSON-serializable dict, or None if the snapshot can't
-    be built."""
+    be built. Runs inside a Flask app context because _build_render_context
+    calls render_template, which requires `current_app`. The relay worker
+    invokes this provider from a background thread that has no request or
+    app context of its own."""
     try:
-        ctx = _build_render_context()
+        with app.app_context():
+            ctx = _build_render_context()
         # Force browser-friendly defaults: dev-only gates off; serving_context
         # marks the page as served via Azure.
         ctx['is_dev_mode'] = False
@@ -1195,8 +1199,8 @@ azure_relay_client = AzureRelayClient(
     bundle_provider=_azure_bundle_provider,
     context_provider=_azure_context_provider,
 )
-if settings.get('azure_enabled') and azure_relay_client.meet_id:
-    azure_relay_client.start()
+# Worker thread is started later, after load_settings(), so the relay URL is
+# populated first. See the block near the bottom of this module.
 
 
 def broadcast_scoreboard(update):
@@ -1364,8 +1368,12 @@ logging.getLogger('socketio').setLevel(logging.INFO)
 # azure_relay was constructed above settings load, so its relay_url
 # was empty. Push the now-loaded URL into it.
 azure_relay_client.update_relay_url(_active_azure_urls()[0])
-if settings.get('azure_enabled') and azure_relay_client.meet_id \
-        and azure_relay_client.status in ('disconnected', 'needs_auth'):
+# Start the worker thread whenever we have credentials. The worker just sits
+# in needs_auth/disconnected if there's nothing to do, but having it alive
+# means the Reconnect button and post-sign-in flow can work without a server
+# restart. (azure_enabled gates whether updates get forwarded to Azure;
+# see broadcast_scoreboard.)
+if azure_relay_client.meet_id:
     azure_relay_client.start()
 _update_message_rotation()
 
