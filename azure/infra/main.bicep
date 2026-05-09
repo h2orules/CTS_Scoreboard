@@ -41,13 +41,17 @@ param entraAudience string
 
 @description('Email address for Azure Monitor alert receivers. Supplied at deploy time; not stored in source.')
 @secure()
+@minLength(5)
 param alertEmail string
 
 @description('Country code (digits only, e.g. 1 for US) for SMS alert receiver.')
+@minLength(1)
+@maxLength(4)
 param alertSmsCountryCode string
 
 @description('Phone number (digits only, no formatting) for SMS alert receiver.')
 @secure()
+@minLength(7)
 param alertSmsPhone string
 
 // ---------- naming ----------
