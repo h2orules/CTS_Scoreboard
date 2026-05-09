@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import secrets
 import string
 import threading
@@ -52,6 +53,13 @@ MEET_ID_LENGTH = 15
 # Alphabet: alphanumeric, no ambiguous chars (no 0/O, no 1/l/I).
 MEET_ID_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz"
 
+# Friendly meet ID validation. The same rule is mirrored in
+# static/js/meet_id.js for the Settings UI and in azure/app/routes.py for
+# the cloud relay's URL gates. Length 10-20, letters/digits/-/_ only.
+MEET_ID_MIN_LEN = 10
+MEET_ID_MAX_LEN = 20
+MEET_ID_REGEX = re.compile(r"^[A-Za-z0-9_-]{10,20}$")
+
 # State names (intentional simple strings; mirrored in tests).
 STATE_DISCONNECTED = "disconnected"
 STATE_NEEDS_AUTH = "needs_auth"
@@ -66,6 +74,66 @@ STATE_STOPPED = "stopped"
 def generate_meet_id(length: int = MEET_ID_LENGTH) -> str:
     """Generate a 15-char URL-safe meet ID using a no-confusion alphabet."""
     return "".join(secrets.choice(MEET_ID_ALPHABET) for _ in range(length))
+
+
+def validate_meet_id(name: str) -> tuple[bool, str | None]:
+    """Validate a meet ID against the friendly-name rules.
+
+    Returns ``(True, None)`` on success or ``(False, reason)`` on failure.
+    Rules: 10-20 chars, ``[A-Za-z0-9_-]`` only (preserves case). Same regex
+    is mirrored in ``static/js/meet_id.js`` and enforced cloud-side in
+    ``azure/app/routes.py``.
+    """
+    if not isinstance(name, str) or not name:
+        return False, "Meet ID is required."
+    if len(name) < MEET_ID_MIN_LEN:
+        return False, f"Meet ID must be at least {MEET_ID_MIN_LEN} characters."
+    if len(name) > MEET_ID_MAX_LEN:
+        return False, f"Meet ID must be at most {MEET_ID_MAX_LEN} characters."
+    if not MEET_ID_REGEX.match(name):
+        return False, "Only letters, numbers, '-', and '_' are allowed (no spaces)."
+    return True, None
+
+
+def derive_meet_id_default(team_home: str, *, _rng: Callable[[], str] | None = None) -> str:
+    """Derive a friendly default meet ID from the host team name.
+
+    Replaces whitespace runs with ``-``, strips disallowed characters,
+    collapses repeats of ``-``/``_``, trims, and truncates to the max
+    length. If the result is shorter than the minimum, a random suffix
+    from :data:`MEET_ID_ALPHABET` is appended (separated by ``-``). If
+    ``team_home`` is empty/blank, falls back to :func:`generate_meet_id`.
+
+    ``_rng`` is a test seam returning a single random char from the
+    alphabet; defaults to ``secrets.choice(MEET_ID_ALPHABET)``.
+    """
+    rng = _rng or (lambda: secrets.choice(MEET_ID_ALPHABET))
+    if not team_home or not team_home.strip():
+        return generate_meet_id()
+    # Replace whitespace runs with single '-'.
+    s = re.sub(r"\s+", "-", team_home.strip())
+    # Strip any character that's not in the allowed set.
+    s = re.sub(r"[^A-Za-z0-9_-]", "", s)
+    # Collapse repeated '-' and '_' (separately) so "Foo  Bar" -> "Foo-Bar"
+    # rather than "Foo--Bar", and "a__b" -> "a_b".
+    s = re.sub(r"-{2,}", "-", s)
+    s = re.sub(r"_{2,}", "_", s)
+    # Trim leading/trailing separators.
+    s = s.strip("-_")
+    if not s:
+        return generate_meet_id()
+    # Truncate to max length first so a long team name doesn't overflow
+    # after we add the random suffix below.
+    if len(s) > MEET_ID_MAX_LEN:
+        s = s[:MEET_ID_MAX_LEN].rstrip("-_")
+    if len(s) >= MEET_ID_MIN_LEN:
+        return s
+    # Pad with "-XXXX" to hit MEET_ID_MIN_LEN.
+    needed = MEET_ID_MIN_LEN - len(s) - 1  # -1 for the separator
+    if needed < 1:
+        needed = 1
+    suffix = "".join(rng() for _ in range(needed))
+    return f"{s}-{suffix}"
 
 
 def compute_backoff(attempt: int, schedule: tuple[int, ...] = BACKOFF_SCHEDULE) -> int:
@@ -484,6 +552,84 @@ class AzureRelayClient:
             save_credentials(self.creds_file, self._creds)
         self.force_reconnect()
         return new_id
+
+    def set_meet_id(self, new_id: str) -> tuple[bool, str]:
+        """Set the meet ID to a host-chosen friendly name.
+
+        Validates against :func:`validate_meet_id`, persists to credentials,
+        and forces a reconnect so the cloud picks up the new ID. The cloud
+        side is responsible for marking the previous ID
+        ``expired_id_rotated`` (handled in ``on_meet_open`` when the Pi's
+        prior owned ID differs from the new one).
+
+        Returns ``(True, new_id)`` on success or ``(False, error)`` on
+        failure (not signed in, invalid name).
+        """
+        with self._lock:
+            if not self._creds:
+                return False, "Not signed in to Azure."
+        ok, err = validate_meet_id(new_id)
+        if not ok:
+            return False, err or "Invalid meet ID."
+        with self._lock:
+            self._creds.meet_id = new_id
+            save_credentials(self.creds_file, self._creds)
+        self.force_reconnect()
+        return True, new_id
+
+    def check_meet_id_available(self, name: str) -> dict[str, Any]:
+        """Ask the Azure relay whether ``name`` is available for this Pi.
+
+        Returns a dict ``{ok: bool, available: bool, owner: 'self'|'other'|None,
+        error: str | None}``. ``ok=False`` indicates the request itself
+        failed (not signed in, network error, or relay rejection); the UI
+        should treat this as "unknown" and let the user proceed at their
+        own risk (the cloud will reject on ``meet_open`` if needed).
+        """
+        ok, err = validate_meet_id(name)
+        if not ok:
+            return {"ok": False, "available": False, "owner": None, "error": err}
+        with self._lock:
+            creds = self._creds
+        if not creds:
+            return {"ok": False, "available": False, "owner": None,
+                    "error": "Not signed in to Azure."}
+        if not self.relay_url:
+            return {"ok": False, "available": False, "owner": None,
+                    "error": "Relay URL not configured."}
+        try:
+            access_token = self._acquire_access_token(creds)
+        except Exception as exc:  # pragma: no cover - network/msal errors
+            return {"ok": False, "available": False, "owner": None,
+                    "error": f"Could not acquire access token: {exc}"}
+        # Lazy import: keep ``requests`` out of import time so unit tests
+        # that don't exercise this path don't pull in the dependency.
+        import requests  # type: ignore[import-not-found]
+
+        url = self.relay_url.rstrip("/") + f"/internal/meet_id/{name}/availability"
+        try:
+            resp = requests.get(
+                url,
+                headers={"Authorization": f"Bearer {access_token}"},
+                timeout=10,
+            )
+        except Exception as exc:  # pragma: no cover - network errors
+            return {"ok": False, "available": False, "owner": None,
+                    "error": f"Could not reach relay: {exc}"}
+        if resp.status_code != 200:
+            return {"ok": False, "available": False, "owner": None,
+                    "error": f"Relay returned HTTP {resp.status_code}."}
+        try:
+            body = resp.json()
+        except ValueError:
+            return {"ok": False, "available": False, "owner": None,
+                    "error": "Relay returned non-JSON response."}
+        return {
+            "ok": True,
+            "available": bool(body.get("available")),
+            "owner": body.get("owner"),
+            "error": None,
+        }
 
     # ---------------- internals ----------------
 
