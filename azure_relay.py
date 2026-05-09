@@ -238,12 +238,14 @@ class AzureRelayClient:
         """Start the background worker thread (idempotent)."""
         with self._lock:
             if self._thread and self._thread.is_alive():
+                logger.info("relay: start() called; worker already running")
                 return
             self._stop.clear()
             self._thread = threading.Thread(
                 target=self._run, name="AzureRelayClient", daemon=True
             )
             self._thread.start()
+            logger.info("relay: worker thread started")
 
     def stop(self, timeout: float = 5.0) -> None:
         """Signal the background thread to stop and wait briefly."""
@@ -263,12 +265,19 @@ class AzureRelayClient:
             return False
 
     def force_reconnect(self) -> None:
-        """Reset backoff so the next loop iteration tries to reconnect immediately."""
+        """Reset backoff so the next loop iteration tries to reconnect immediately.
+
+        Also (re)starts the worker thread if it has died or never been started,
+        so this method is safe to call from a UI 'Reconnect' button regardless
+        of the prior state.
+        """
         with self._lock:
             self._attempt = 0
             self._next_retry_at = None
             if self._state in (STATE_BACKOFF, STATE_DEGRADED, STATE_DISCONNECTED):
                 self._set_state(STATE_CONNECTING)
+        # Ensure the worker thread is alive. start() is idempotent.
+        self.start()
         # Wake the queue.
         self.forward_event("__noop__", {})
 
@@ -324,16 +333,20 @@ class AzureRelayClient:
         if scopes:
             flow_scopes = scopes
         else:
-            # AAD rejects `api://<client_id>/.default` when an app requests a
-            # token for itself (AADSTS90009 — "supported only if resource is
-            # specified using the GUID based App Identifier"). Detect that
-            # self-token case and substitute the bare GUID.
-            resource = audience
-            if resource.startswith("api://"):
-                resource_id = resource[len("api://"):]
-                if resource_id == client_id:
-                    resource = client_id
-            flow_scopes = [f"{resource}/.default"]
+            # Ask AAD for the explicit named scope rather than `.default`.
+            #
+            # `.default` means "every API permission listed on the client
+            # app's registration, all at once" — which forces tenant-wide
+            # admin consent if anything on that list isn't already
+            # user-consented. For a Pi talking to its own relay app, a
+            # single `type: User` delegated scope is plenty: AAD will
+            # prompt for user consent on first sign-in and that's it.
+            #
+            # The scope value is `api://<client_id>/Pi.Connect`. AAD
+            # accepts the api:// form for delegated named scopes even in
+            # the same-app case (the `.default` self-token rule
+            # AADSTS90009 doesn't apply here).
+            flow_scopes = [f"api://{client_id}/Pi.Connect"]
         flow = app.initiate_device_flow(scopes=flow_scopes)
         if "user_code" not in flow:
             raise RuntimeError(f"failed to start device flow: {flow}")
@@ -481,31 +494,46 @@ class AzureRelayClient:
 
     def _run(self) -> None:
         """Main worker loop. Runs in a daemon thread."""
-        while not self._stop.is_set():
-            with self._lock:
-                creds = self._creds
-                state = self._state
-                next_retry = self._next_retry_at
-
-            if state == STATE_NEEDS_AUTH or creds is None:
-                # Wait for the operator to log in; check periodically.
-                self._stop.wait(1.0)
-                continue
-
-            if next_retry is not None and self._clock() < next_retry:
-                self._stop.wait(0.5)
-                continue
-
-            try:
-                self._connect_and_serve(creds)
-            except Exception as e:
-                logger.exception("relay connection failed: %s", e)
+        logger.info("relay: worker loop entered")
+        _last_logged_state: str | None = None
+        try:
+            while not self._stop.is_set():
                 with self._lock:
-                    self._last_error = str(e)
-                    delay = compute_backoff(self._attempt, self.backoff_schedule)
-                    self._next_retry_at = self._clock() + delay
-                    self._attempt += 1
-                    self._set_state(STATE_BACKOFF)
+                    creds = self._creds
+                    state = self._state
+                    next_retry = self._next_retry_at
+
+                if state != _last_logged_state:
+                    logger.info(
+                        "relay: loop tick state=%s creds=%s next_retry=%s",
+                        state, "yes" if creds else "no", next_retry,
+                    )
+                    _last_logged_state = state
+
+                if state == STATE_NEEDS_AUTH or creds is None:
+                    # Wait for the operator to log in; check periodically.
+                    self._stop.wait(1.0)
+                    continue
+
+                if next_retry is not None and self._clock() < next_retry:
+                    self._stop.wait(0.5)
+                    continue
+
+                try:
+                    self._connect_and_serve(creds)
+                except Exception as e:
+                    logger.exception("relay connection failed: %s", e)
+                    with self._lock:
+                        self._last_error = str(e)
+                        delay = compute_backoff(self._attempt, self.backoff_schedule)
+                        self._next_retry_at = self._clock() + delay
+                        self._attempt += 1
+                        self._set_state(STATE_BACKOFF)
+        except BaseException:
+            logger.exception("relay: worker loop crashed")
+            raise
+        finally:
+            logger.info("relay: worker loop exited")
 
     def _connect_and_serve(self, creds: AzureCredentials) -> None:
         """Open the Socket.IO connection and serve until disconnected.
@@ -649,7 +677,7 @@ class AzureRelayClient:
         # acquire_token_by_refresh_token is the explicit refresh flow.
         result = app.acquire_token_by_refresh_token(
             refresh_token=creds.refresh_token,
-            scopes=creds.scopes or [f"{creds.audience}/.default"],
+            scopes=creds.scopes or [f"api://{creds.client_id}/Pi.Connect"],
         )
         if "access_token" not in result:
             err = result.get("error_description") or result.get("error") or "unknown"

@@ -86,7 +86,7 @@ def _sample_creds(meet_id: str = "abc123XYZ7890ab") -> AzureCredentials:
         account_id="acct-local",
         home_account_id="acct-home",
         upn="user@example.com",
-        scopes=["api://aud/.default"],
+        scopes=["api://aud/Pi.Connect"],
         meet_id=meet_id,
     )
 
@@ -298,10 +298,11 @@ class TestDeviceCodeFlow:
         snap = client.snapshot()
         assert snap["device_flow"]["user_code"] == "AB12-CD34"
 
-    def test_self_token_audience_uses_guid_scope(self, tmp_path):
-        """When audience is `api://<client_id>` (an app requesting a token
-        for itself), AAD requires the GUID form of the resource, not the
-        api:// URI (AADSTS90009)."""
+    def test_default_scope_is_named_pi_connect(self, tmp_path):
+        """Default scope is `api://<client_id>/Pi.Connect`, not `.default`.
+
+        Using the named delegated scope keeps consent on a per-user basis
+        — admin consent isn't required to talk to your own relay app."""
         fake_app = MagicMock()
         fake_app.initiate_device_flow.return_value = {
             "user_code": "X", "verification_uri": "u",
@@ -315,10 +316,10 @@ class TestDeviceCodeFlow:
             tenant_id="tid", client_id="the-guid", audience="api://the-guid",
         )
         scopes = fake_app.initiate_device_flow.call_args.kwargs["scopes"]
-        assert scopes == ["the-guid/.default"]
+        assert scopes == ["api://the-guid/Pi.Connect"]
 
-    def test_third_party_audience_keeps_api_uri(self, tmp_path):
-        """Audience pointing at a *different* app must keep the api:// form."""
+    def test_explicit_scopes_override_default(self, tmp_path):
+        """Callers can still pass an explicit scope list to override."""
         fake_app = MagicMock()
         fake_app.initiate_device_flow.return_value = {
             "user_code": "X", "verification_uri": "u",
@@ -329,10 +330,11 @@ class TestDeviceCodeFlow:
             msal_app_factory=lambda **_: fake_app,
         )
         client.request_login(
-            tenant_id="tid", client_id="client-guid", audience="api://other-app",
+            tenant_id="tid", client_id="cid", audience="api://aud",
+            scopes=["api://other/Custom.Scope"],
         )
         scopes = fake_app.initiate_device_flow.call_args.kwargs["scopes"]
-        assert scopes == ["api://other-app/.default"]
+        assert scopes == ["api://other/Custom.Scope"]
 
     def test_complete_login_persists_creds(self, tmp_path):
         fake_app = MagicMock()
