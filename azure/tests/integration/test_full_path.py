@@ -128,7 +128,7 @@ async def test_pi_open_meet_then_browser_renders():
     with TestClient(fastapi_app2) as client:
         res = client.get(f"/m/{MEET}")
     assert res.status_code == 200
-    assert "Meet closed" in res.text
+    assert "No meet in session" in res.text
     reset_for_tests()
     # Make sure spies didn't error.
     assert isinstance(emits, list)
