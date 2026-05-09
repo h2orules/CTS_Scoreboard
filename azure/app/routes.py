@@ -150,17 +150,103 @@ class _DictLoader(BaseLoader):
 
 # --- "no live meet" / "closed" / "unknown" small pages ---------------
 
-def _state_page(*, title: str, body: str, status_code: int = 200) -> HTMLResponse:
+# Reusable styling for the small status pages. Mirrors the visual language of
+# the Pi's settings.html (system fonts, soft-grey background, rounded card,
+# Bootstrap-3 alert-style colors) so the cloud-side pages don't look like a
+# bare 404 next to the live scoreboard.
+_STATE_CSS = """
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+    color: #333;
+    background: #f5f7fa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    min-height: 100vh;
+}
+.state-card {
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    max-width: 32rem;
+    width: 100%;
+    padding: 28px 32px 24px;
+    text-align: center;
+}
+.state-icon {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+    font-size: 28px;
+    line-height: 1;
+}
+.state-icon.info    { background: #d9edf7; color: #31708f; }
+.state-icon.warning { background: #fcf8e3; color: #8a6d3b; }
+.state-icon.danger  { background: #f2dede; color: #a94442; }
+.state-icon.success { background: #dff0d8; color: #3c763d; }
+.state-card h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 10px;
+    color: #333;
+}
+.state-card p {
+    font-size: 14px;
+    color: #555;
+    margin: 0 0 12px;
+    line-height: 1.5;
+}
+.state-card p:last-child { margin-bottom: 0; }
+.state-card .muted {
+    font-size: 12px;
+    color: #999;
+    margin-top: 18px;
+}
+.state-card strong { color: #333; }
+"""
+
+# kind -> (css class, glyph). Kept ASCII / unicode-safe for simple SVG-free render.
+_STATE_KINDS = {
+    "info":    ("info",    "&#x24D8;"),   # circled i
+    "warning": ("warning", "&#x26A0;"),   # warning sign
+    "danger":  ("danger",  "&#x2715;"),   # ballot x
+    "success": ("success", "&#x2713;"),   # check
+}
+
+
+def _state_page(
+    *,
+    title: str,
+    body: str,
+    status_code: int = 200,
+    kind: str = "info",
+    footer: str = "",
+) -> HTMLResponse:
+    icon_class, glyph = _STATE_KINDS.get(kind, _STATE_KINDS["info"])
+    footer_html = f'<p class="muted">{footer}</p>' if footer else ""
     html = (
         "<!doctype html><html><head>"
         "<meta charset=\"utf-8\">"
         f"<title>{escape(title)}</title>"
         "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-        "<style>body{font-family:system-ui,sans-serif;max-width:40rem;"
-        "margin:4rem auto;padding:0 1rem;color:#111}"
-        "h1{font-size:1.5rem}</style>"
-        f"</head><body><h1>{escape(title)}</h1>"
-        f"<p>{body}</p></body></html>"
+        f"<style>{_STATE_CSS}</style>"
+        "</head><body>"
+        "<div class=\"state-card\">"
+        f"<div class=\"state-icon {icon_class}\" aria-hidden=\"true\">{glyph}</div>"
+        f"<h1>{escape(title)}</h1>"
+        f"<p>{body}</p>"
+        f"{footer_html}"
+        "</div></body></html>"
     )
     return HTMLResponse(html, status_code=status_code)
 
@@ -179,6 +265,8 @@ def build_router(*, store: MeetStateStore) -> APIRouter:
                 title="Invalid meet ID",
                 body="The link you followed is malformed.",
                 status_code=400,
+                kind="danger",
+                footer="Double-check the URL and try again.",
             )
 
         meta = store.get_metadata(meet_id)
@@ -188,21 +276,25 @@ def build_router(*, store: MeetStateStore) -> APIRouter:
                 body="That meet ID is unknown or has expired. Ask the host for "
                      "an up-to-date link.",
                 status_code=404,
+                kind="warning",
             )
         status = meta.get("status")
         if status == "expired_id_rotated":
             return _state_page(
                 title="Link expired",
-                body="The host rotated the meet's sharing link. Ask them for "
-                     "the new one.",
+                body="The host rotated the meet&rsquo;s sharing link. Ask them "
+                     "for the new one.",
                 status_code=410,
+                kind="warning",
             )
         if status == "closed":
             return _state_page(
                 title="Meet closed",
-                body=f"<strong>{escape(meta.get('host_team_name', ''))}</strong>'s "
+                body=f"<strong>{escape(meta.get('host_team_name', ''))}</strong>&rsquo;s "
                      "meet has finished. Final results may be available from the host.",
                 status_code=200,
+                kind="success",
+                footer="Thanks for following along!",
             )
 
         bundle = store.get_current_template(meet_id)
@@ -210,9 +302,10 @@ def build_router(*, store: MeetStateStore) -> APIRouter:
         if not bundle or not context:
             return _state_page(
                 title="Meet starting up",
-                body="The host's scoreboard hasn't finished publishing yet. "
+                body="The host&rsquo;s scoreboard hasn&rsquo;t finished publishing yet. "
                      "Refresh in a moment.",
                 status_code=503,
+                kind="info",
             )
 
         try:
@@ -222,6 +315,7 @@ def build_router(*, store: MeetStateStore) -> APIRouter:
                 title="Render error",
                 body=f"Could not render the meet template: {escape(str(exc))}",
                 status_code=500,
+                kind="danger",
             )
         # If the meet is degraded, leave it to the in-page Socket.IO client to
         # surface the banner via the "feed_status" event we already emit.
