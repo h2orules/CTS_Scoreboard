@@ -171,13 +171,16 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   properties: {
     managedEnvironmentId: caEnv.id
     configuration: {
-      activeRevisionsMode: 'Multiple' // required for stickySessions and to support rollback
+      activeRevisionsMode: 'Multiple' // enables 'az containerapp revision activate' rollback
       ingress: {
         external: true
         targetPort: 8000
         transport: 'auto'
         allowInsecure: false
-        stickySessions: { affinity: 'sticky' } // sticky for socket.io fallback to long-poll
+        // No stickySessions: Web PubSub for Socket.IO terminates the
+        // websocket on the Web PubSub side, so the Container App ingress
+        // sees stateless HTTP. (Sticky sessions also aren't supported in
+        // Multiple revision mode anyway.)
       }
       registries: [
         {
