@@ -153,9 +153,17 @@ race_fsm = RaceStateMachine()
 _content_cache = {}
 
 def _cache_put(resource, html):
-    """Store rendered HTML in the content cache. Returns the content key."""
+    """Store rendered HTML in the content cache. Returns the content key.
+
+    Also forwards the rendered fragment to Azure (if the relay client is
+    initialized) so the cloud-side viewer can serve the same HTML by name —
+    the Pi's /api/<fragment> endpoints aren't reachable from Azure.
+    """
     key = hashlib.sha256(html.encode('utf-8')).hexdigest()[:12]
     _content_cache[resource] = {'key': key, 'html': html}
+    client = globals().get('azure_relay_client')
+    if client is not None:
+        client.forward_event('fragment', {'name': resource, 'key': key, 'html': html})
     return key
 
 def _cache_get(resource):
@@ -1207,15 +1215,18 @@ def broadcast_scoreboard(update):
     """Emit an update_scoreboard payload to local browsers AND forward to Azure.
 
     The local emit happens unconditionally on the /scoreboard namespace. The
-    Azure forward is fire-and-forget: it enqueues the payload on the relay's
-    background thread queue, which delivers it once the relay is connected.
-    Events enqueued while disconnected are kept until the queue is full
-    (bounded at 1000) and the most recent ones win when full.
+    Azure forward is also unconditional and fire-and-forget: it enqueues the
+    payload on the relay's background thread queue. If the relay isn't
+    signed in or isn't connected, the queue silently absorbs events (bounded
+    at 1000; the most recent ones win when full) and they're delivered once
+    the connection is established. Sign in via the settings UI and the
+    relay's ``meet_open`` handshake is enough — no separate "enabled"
+    toggle.
     """
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
-    if settings.get('azure_enabled'):
-        # forward_event() is non-blocking and thread-safe.
-        azure_relay_client.forward_event('update_scoreboard', dict(update))
+    # forward_event() is non-blocking and thread-safe; safe to call even
+    # when the relay is in NEEDS_AUTH or DISCONNECTED.
+    azure_relay_client.forward_event('update_scoreboard', dict(update))
 
 
 # Register settings/admin routes
@@ -1376,8 +1387,8 @@ azure_relay_client.update_relay_url(_active_azure_urls()[0])
 # Start the worker thread whenever we have credentials. The worker just sits
 # in needs_auth/disconnected if there's nothing to do, but having it alive
 # means the Reconnect button and post-sign-in flow can work without a server
-# restart. (azure_enabled gates whether updates get forwarded to Azure;
-# see broadcast_scoreboard.)
+# restart. Once signed in and connected, broadcast_scoreboard's forward to
+# Azure is automatic — there is no separate enable toggle.
 if azure_relay_client.meet_id:
     azure_relay_client.start()
 _update_message_rotation()

@@ -68,6 +68,20 @@ def _rewrite_io_connect(html: str, meet_id: str) -> str:
     )
 
 
+# Pi templates fetch HTML fragments from absolute paths like
+# "/api/qualifying-info" and "/api/message-page/0". On Azure those paths
+# are namespaced under /m/{meet_id}/api/... so each meet's fragments stay
+# isolated. Rewrite the fetch URL strings before serving the page.
+_API_PATH_RE = re.compile(r"""(['"])/api/([A-Za-z0-9_\-/]+)\1""")
+
+
+def _rewrite_api_paths(html: str, meet_id: str) -> str:
+    return _API_PATH_RE.sub(
+        lambda m: f"{m.group(1)}/m/{meet_id}/api/{m.group(2)}{m.group(1)}",
+        html,
+    )
+
+
 def _make_url_for(meet_id: str, bundle_id: str):
     """Return a Jinja-friendly ``url_for`` shim.
 
@@ -111,7 +125,12 @@ def render_meet_page(
         meet_id=meet_id,
         **context,
     )
-    return _rewrite_io_connect(rendered, meet_id)
+    return _rewrite_for_meet(rendered, meet_id)
+
+
+def _rewrite_for_meet(html: str, meet_id: str) -> str:
+    """Apply all per-meet HTML rewrites the browser needs."""
+    return _rewrite_api_paths(_rewrite_io_connect(html, meet_id), meet_id)
 
 
 class _DictLoader(BaseLoader):
@@ -248,5 +267,31 @@ def build_router(*, store: MeetStateStore) -> APIRouter:
             media_type=_content_type_for(path),
             headers={"Cache-Control": "public, max-age=31536000, immutable"},
         )
+
+    def _serve_fragment(meet_id: str, name: str, request: Request) -> Response:
+        if not meet_id.isalnum() or len(meet_id) > 64:
+            return Response(status_code=400)
+        got = store.get_fragment(meet_id, name)
+        if not got:
+            # Match the Pi behavior: empty 200 (template treats this as "no
+            # content yet" and renders nothing).
+            return Response(b"", media_type="text/html; charset=utf-8")
+        key, html = got
+        etag = f'"{key}"'
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304)
+        return Response(
+            html.encode("utf-8"),
+            media_type="text/html; charset=utf-8",
+            headers={"ETag": etag, "Cache-Control": "public, max-age=60"},
+        )
+
+    @router.get("/m/{meet_id}/api/qualifying-info")
+    async def meet_qualifying_info(meet_id: str, request: Request) -> Response:
+        return _serve_fragment(meet_id, "qualifying_info", request)
+
+    @router.get("/m/{meet_id}/api/message-page/{index}")
+    async def meet_message_page(meet_id: str, index: int, request: Request) -> Response:
+        return _serve_fragment(meet_id, f"message_page_{index}", request)
 
     return router

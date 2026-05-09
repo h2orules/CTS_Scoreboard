@@ -215,7 +215,7 @@ def register(socketio, app_module):
 
             _app.race_fsm.evaluate_update(_app.channel_running, update)
             update['race_state'] = _app.race_fsm.state_name
-            _sio.emit('update_scoreboard', update, namespace='/scoreboard')
+            _app.broadcast_scoreboard(update)
             # Re-send scores in case we were previously in a blank state
             _app.send_scores_info()
 
@@ -238,7 +238,7 @@ def register(socketio, app_module):
 
             _app.race_fsm.evaluate_update(_app.channel_running, update)
             update['race_state'] = _app.race_fsm.state_name
-            _sio.emit('update_scoreboard', update, namespace='/scoreboard')
+            _app.broadcast_scoreboard(update)
             # Re-send scores in case we were previously in a blank state
             _app.send_scores_info()
 
@@ -251,7 +251,7 @@ def register(socketio, app_module):
 
             _app.race_fsm.evaluate_update(_app.channel_running, update)
             update['race_state'] = _app.race_fsm.state_name
-            _sio.emit('update_scoreboard', update, namespace='/scoreboard')
+            _app.broadcast_scoreboard(update)
             # Re-send event info so names/teams reappear on scoreboard
             _app.send_event_info()
             _app.send_scores_info()
@@ -280,7 +280,7 @@ def register(socketio, app_module):
 
             _app.race_fsm.evaluate_update(_app.channel_running, update)
             update['race_state'] = _app.race_fsm.state_name
-            _sio.emit('update_scoreboard', update, namespace='/scoreboard')
+            _app.broadcast_scoreboard(update)
 
         elif step == 'total_blank':
             _sim_running = False
@@ -301,7 +301,7 @@ def register(socketio, app_module):
 
             _app.race_fsm.evaluate_update(_app.channel_running, update)
             update['race_state'] = _app.race_fsm.state_name
-            _sio.emit('update_scoreboard', update, namespace='/scoreboard')
+            _app.broadcast_scoreboard(update)
 
 
 def _sim_clock_tick():
@@ -319,4 +319,4 @@ def _sim_clock_tick():
         for i in range(1, num_lanes + 1):
             if _app.channel_running[i - 1]:
                 tick_update['lane_time%d' % i] = _app.running_time
-        _sio.emit('update_scoreboard', tick_update, namespace='/scoreboard')
+        _app.broadcast_scoreboard(tick_update)
