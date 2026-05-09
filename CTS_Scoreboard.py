@@ -67,12 +67,18 @@ settings = {
     'std_desc_overrides': {},
     # Azure relay (Phase 2)
     'azure_enabled': False,
+    'azure_environment': 'preprod',  # 'preprod' or 'prod' — picks which URL pair to use.
     'azure_tenant_id': '',
     'azure_client_id': '',
     'azure_audience': '',
+    'azure_relay_url_preprod': '',
+    'azure_public_url_preprod': '',  # Public URL viewers see (often == relay).
+    'azure_relay_url_prod': '',
+    'azure_public_url_prod': '',
+    # Legacy single-environment URLs; migrated into the *_preprod slot on load.
     'azure_relay_url': '',
+    'azure_public_url': '',
     'azure_template_path': 'web/home',
-    'azure_public_url': '',  # Public URL viewers see (often == azure_relay_url).
     # QR (Phase 5)
     'qr_overlay_enabled': False,
     'qr_overlay_corner': 'top-right',
@@ -172,6 +178,17 @@ def load_settings():
             }]
             settings['message_overlay_enabled'] = settings['message_pages'][0]['enabled']
             settings.setdefault('message_rotation_interval', 30)
+            with open(settings_file, "wt") as f:
+                json.dump(settings, f, sort_keys=True, indent=4)
+        # Migrate legacy single-environment Azure URLs into the preprod slot.
+        if settings.get('azure_relay_url') and not settings.get('azure_relay_url_preprod'):
+            settings['azure_relay_url_preprod'] = settings['azure_relay_url']
+        if settings.get('azure_public_url') and not settings.get('azure_public_url_preprod'):
+            settings['azure_public_url_preprod'] = settings['azure_public_url']
+        # Legacy keys are kept in defaults but cleared on disk after migration.
+        if settings.get('azure_relay_url') or settings.get('azure_public_url'):
+            settings['azure_relay_url'] = ''
+            settings['azure_public_url'] = ''
             with open(settings_file, "wt") as f:
                 json.dump(settings, f, sort_keys=True, indent=4)
     except: pass
@@ -785,8 +802,9 @@ def _render_and_cache_message_pages():
     Returns a list of content keys (one per page).
     """
     pages = settings.get('message_pages', [])
+    relay_url, public_url = _active_azure_urls()
     qr_target = build_meet_url(
-        public_base=settings.get('azure_public_url') or settings.get('azure_relay_url', ''),
+        public_base=public_url or relay_url,
         meet_id=getattr(azure_relay_client, 'meet_id', '') if 'azure_relay_client' in globals() else '',
     )
     keys = []
@@ -1005,8 +1023,9 @@ def _build_render_context():
         for i, p in enumerate(pages)
     ]
 
+    relay_url, public_url = _active_azure_urls()
     qr_target = build_meet_url(
-        public_base=settings.get('azure_public_url') or settings.get('azure_relay_url', ''),
+        public_base=public_url or relay_url,
         meet_id=getattr(azure_relay_client, 'meet_id', '') if 'azure_relay_client' in globals() else '',
     )
     qr_overlay_svg = (
@@ -1053,6 +1072,21 @@ def _build_render_context():
 
 # Azure relay client (Phase 2). Constructed eagerly so settings/azure routes
 # can introspect status, but not started unless settings.azure_enabled is True.
+def _active_azure_urls():
+    """Return (relay_url, public_url) for the currently selected environment.
+
+    The Azure section of the settings stores per-environment URL pairs
+    (preprod and prod). This helper centralises the lookup so callers don't
+    need to know about the underlying key naming.
+    """
+    env = settings.get('azure_environment', 'preprod')
+    if env == 'prod':
+        return (settings.get('azure_relay_url_prod', '') or '',
+                settings.get('azure_public_url_prod', '') or '')
+    return (settings.get('azure_relay_url_preprod', '') or '',
+            settings.get('azure_public_url_preprod', '') or '')
+
+
 def _azure_bundle_provider():
     """Build the current template bundle for the relay to push to Azure.
 
@@ -1097,7 +1131,7 @@ def _azure_context_provider():
 
 azure_relay_client = AzureRelayClient(
     creds_file='azure_credentials.json',
-    relay_url=settings.get('azure_relay_url', ''),
+    relay_url=_active_azure_urls()[0],
     bundle_provider=_azure_bundle_provider,
     context_provider=_azure_context_provider,
 )

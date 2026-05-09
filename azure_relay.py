@@ -272,6 +272,27 @@ class AzureRelayClient:
         # Wake the queue.
         self.forward_event("__noop__", {})
 
+    def update_relay_url(self, new_url: str) -> bool:
+        """Swap the relay URL. If currently connected, trigger a reconnect.
+
+        Returns True if the URL changed, False if it was already set to
+        ``new_url`` (no-op).
+        """
+        new_url = (new_url or "").strip()
+        with self._lock:
+            if new_url == self.relay_url:
+                return False
+            self.relay_url = new_url
+            connected_states = (
+                STATE_CONNECTING, STATE_CONNECTED, STATE_DEGRADED,
+            )
+            need_reconnect = self._state in connected_states
+        if need_reconnect:
+            # Drop the live socket; the run loop will pick up the new URL on
+            # the next connect attempt.
+            self.force_reconnect()
+        return True
+
     def request_login(
         self,
         *,

@@ -1178,6 +1178,39 @@
         </div>
 
         <div class="settings-section">
+        <h3>Azure Relay</h3>
+        <div class="section-hint">
+            Sign in to publish this scoreboard to viewers over the internet.
+            Pre-prod is selected by default; switch environments and edit
+            tenant / URL details under <em>Danger Zone &rarr; Azure Configuration</em>.
+        </div>
+        <div class="row">
+            <div class="col-lg-8">
+                <div id="azure-status-card" style="border:1px solid #ddd;border-radius:4px;padding:10px 14px;background:#fafafa;margin-bottom:10px;">
+                    <div>
+                        <strong>Status:</strong>
+                        <span id="azure-state-badge"
+                              style="display:inline-block;padding:2px 8px;border-radius:10px;background:#eee;color:#555;font-size:12px;">
+                            unknown
+                        </span>
+                        <span id="azure-env-badge" style="margin-left:8px;font-size:12px;color:#666;"></span>
+                    </div>
+                    <div style="margin-top:6px;font-size:13px;color:#555;">
+                        <span id="azure-meet-row" style="display:none;"><strong>Meet ID:</strong> <code id="azure-meet-id"></code> &nbsp;</span>
+                        <span id="azure-url-row" style="display:none;"><strong>URL:</strong> <a id="azure-public-link" href="#" target="_blank" rel="noopener"></a></span>
+                    </div>
+                    <div id="azure-error-row" style="display:none;color:#a94442;font-size:12px;margin-top:6px;"></div>
+                </div>
+                <div id="azure-toast" style="display:none;margin-bottom:8px;padding:6px 10px;border-radius:4px;font-size:13px;"></div>
+                <button class="btn btn-primary" type="button" id="azure-signin-btn" onclick="azureSignIn()">Sign In</button>
+                <button class="btn btn-default" type="button" id="azure-signout-btn" onclick="azureSignOut()">Sign Out</button>
+                <button class="btn btn-default" type="button" id="azure-reconnect-btn" onclick="azureReconnect()">Reconnect</button>
+                <button class="btn btn-warning" type="button" id="azure-rotate-btn" onclick="document.getElementById('azure-rotate-overlay').style.display='flex';">Rotate Meet ID</button>
+            </div>
+        </div>
+        </div>
+
+        <div class="settings-section">
         <h3>Team Names</h3>
         <div class="section-hint">Clear team names to prevent showing scores for that team.</div>
         <div class="row">
@@ -1541,6 +1574,65 @@
                 </div>
             </div>
         </div>
+
+        <div class="row" style="margin-top:14px;">
+            <div class="col-lg-8">
+                <details id="azure-config-details" style="border:1px solid #ebccd1;border-radius:4px;padding:8px 14px;background:#fff;">
+                    <summary style="cursor:pointer;font-weight:bold;color:#a94442;">
+                        Azure Configuration
+                        <span id="azure-config-status" style="font-weight:normal;color:#8a6d3b;font-size:12px;margin-left:6px;"></span>
+                    </summary>
+                    <p style="margin:10px 0 8px;font-size:13px;color:#8a6d3b;">
+                        <strong>Warning:</strong> Wrong values here will lock the relay out of Azure
+                        until corrected. Get the tenant / client / audience values from your Azure
+                        admin (see <code>azure/docs/AZURE_SETUP.md</code>).
+                    </p>
+                    <div class="form-group" style="margin-bottom:8px;">
+                        <label style="margin-right:14px;">
+                            <input type="radio" name="azure_environment" value="preprod"
+                                   id="azure-env-preprod" onchange="azureMarkConfigDirty()"> Pre-prod
+                        </label>
+                        <label>
+                            <input type="radio" name="azure_environment" value="prod"
+                                   id="azure-env-prod" onchange="azureMarkConfigDirty()"> Prod
+                        </label>
+                    </div>
+                    <div class="form-group" style="margin-bottom:6px;">
+                        <label for="azure-cfg-tenant" style="margin-bottom:2px;">Tenant ID</label>
+                        <input type="text" id="azure-cfg-tenant" class="form-control" oninput="azureMarkConfigDirty()" placeholder="GUID">
+                    </div>
+                    <div class="form-group" style="margin-bottom:6px;">
+                        <label for="azure-cfg-client" style="margin-bottom:2px;">Client ID</label>
+                        <input type="text" id="azure-cfg-client" class="form-control" oninput="azureMarkConfigDirty()" placeholder="GUID">
+                    </div>
+                    <div class="form-group" style="margin-bottom:6px;">
+                        <label for="azure-cfg-audience" style="margin-bottom:2px;">Audience</label>
+                        <input type="text" id="azure-cfg-audience" class="form-control" oninput="azureMarkConfigDirty()" placeholder="api://&lt;client-id&gt;">
+                    </div>
+                    <hr style="margin:10px 0;">
+                    <div class="form-group" style="margin-bottom:6px;">
+                        <label for="azure-cfg-relay-preprod" style="margin-bottom:2px;">Pre-prod Relay URL</label>
+                        <input type="url" id="azure-cfg-relay-preprod" class="form-control" oninput="azureMarkConfigDirty()" placeholder="https://...azurecontainerapps.io">
+                    </div>
+                    <div class="form-group" style="margin-bottom:6px;">
+                        <label for="azure-cfg-public-preprod" style="margin-bottom:2px;">Pre-prod Public URL <span style="color:#888;font-weight:normal;">(optional, defaults to relay)</span></label>
+                        <input type="url" id="azure-cfg-public-preprod" class="form-control" oninput="azureMarkConfigDirty()" placeholder="https://...">
+                    </div>
+                    <div class="form-group" style="margin-bottom:6px;">
+                        <label for="azure-cfg-relay-prod" style="margin-bottom:2px;">Prod Relay URL</label>
+                        <input type="url" id="azure-cfg-relay-prod" class="form-control" oninput="azureMarkConfigDirty()" placeholder="https://...azurecontainerapps.io">
+                    </div>
+                    <div class="form-group" style="margin-bottom:6px;">
+                        <label for="azure-cfg-public-prod" style="margin-bottom:2px;">Prod Public URL <span style="color:#888;font-weight:normal;">(optional)</span></label>
+                        <input type="url" id="azure-cfg-public-prod" class="form-control" oninput="azureMarkConfigDirty()" placeholder="https://...">
+                    </div>
+                    <div class="form-group" style="margin-top:10px;">
+                        <button class="btn btn-danger" type="button" id="azure-cfg-save-btn" onclick="azureSaveConfig()" disabled>Save</button>
+                        <span id="azure-cfg-msg" style="margin-left:10px;font-size:12px;"></span>
+                    </div>
+                </details>
+            </div>
+        </div>
         </div>
         <div style="height:32px;"></div>
     </div>
@@ -1600,6 +1692,37 @@
             <button class="btn btn-default" id="msg-remove-cancel">Cancel</button>
         </div>
     </div>
+
+    <!-- Azure device-code overlay -->
+    <div id="azure-device-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+        <div style="background:#fff; padding:24px 32px; border-radius:6px; max-width:480px;">
+            <h4 style="margin-top:0;">Sign in to Azure</h4>
+            <p>On a phone or another computer, open the URL below and enter the code.</p>
+            <p style="margin:6px 0;">
+                <strong>URL:</strong>
+                <a id="azure-device-uri" href="#" target="_blank" rel="noopener"></a>
+            </p>
+            <p style="margin:6px 0;">
+                <strong>Code:</strong>
+                <code id="azure-device-code" style="font-size:18px;letter-spacing:2px;"></code>
+                <button type="button" class="btn btn-default btn-xs" onclick="azureCopyCode()" style="margin-left:8px;">Copy</button>
+            </p>
+            <p id="azure-device-msg" style="font-size:13px;color:#666;"></p>
+            <p id="azure-device-status" style="font-size:13px;color:#31708f;">Waiting for sign-in to complete&hellip;</p>
+            <button class="btn btn-default" type="button" onclick="azureCancelDeviceFlow()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Azure rotate-meet-id confirmation overlay -->
+    <div id="azure-rotate-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+        <div style="background:#fff; padding:24px 32px; border-radius:6px; max-width:400px; text-align:center;">
+            <h4 style="margin-top:0;">Rotate Meet ID?</h4>
+            <p>This invalidates the current scoreboard URL. Anyone using the old link will see a "link expired" page.</p>
+            <button class="btn btn-warning" type="button" onclick="azureRotateMeetId()">Rotate</button>
+            <button class="btn btn-default" type="button" onclick="document.getElementById('azure-rotate-overlay').style.display='none';">Cancel</button>
+        </div>
+    </div>
+
     <script>
         document.getElementById('shutdown-confirm-input').addEventListener('input', function() {
             document.getElementById('shutdown-ok-btn').disabled = (this.value !== 'Stop');
@@ -1616,6 +1739,247 @@
             };
             xhr.send('nonce={{ shutdown_nonce }}');
         }
+    </script>
+
+    <script>
+    // ----- Azure Relay UI -----
+    (function() {
+        var STATE_LABELS = {
+            connected: ['#dff0d8', '#3c763d', 'Connected'],
+            degraded: ['#fcf8e3', '#8a6d3b', 'Degraded'],
+            connecting: ['#d9edf7', '#31708f', 'Connecting'],
+            authenticating: ['#d9edf7', '#31708f', 'Authenticating'],
+            needs_auth: ['#fcf8e3', '#8a6d3b', 'Needs sign-in'],
+            backoff: ['#fcf8e3', '#8a6d3b', 'Reconnecting'],
+            disconnected: ['#f2dede', '#a94442', 'Disconnected'],
+            stopped: ['#eee', '#666', 'Stopped'],
+            unknown: ['#eee', '#666', 'Unknown'],
+        };
+        var pollTimer = null;
+        var devicePollAbort = null;
+
+        function $(id) { return document.getElementById(id); }
+
+        function setBadge(state) {
+            var spec = STATE_LABELS[state] || STATE_LABELS.unknown;
+            var el = $('azure-state-badge');
+            el.style.background = spec[0];
+            el.style.color = spec[1];
+            el.textContent = spec[2];
+        }
+
+        function showToast(msg, kind) {
+            var el = $('azure-toast');
+            el.textContent = msg;
+            if (kind === 'error') {
+                el.style.background = '#f2dede';
+                el.style.color = '#a94442';
+            } else {
+                el.style.background = '#dff0d8';
+                el.style.color = '#3c763d';
+            }
+            el.style.display = 'block';
+            setTimeout(function() { el.style.display = 'none'; }, 4000);
+        }
+
+        function applyStatus(snap) {
+            if (!snap) return;
+            setBadge(snap.state || 'unknown');
+            $('azure-env-badge').textContent =
+                snap.environment ? '(' + snap.environment + ')' : '';
+            if (snap.meet_id) {
+                $('azure-meet-row').style.display = 'inline';
+                $('azure-meet-id').textContent = snap.meet_id;
+            } else {
+                $('azure-meet-row').style.display = 'none';
+            }
+            if (snap.public_url && snap.meet_id) {
+                $('azure-url-row').style.display = 'inline';
+                var link = snap.public_url.replace(/\/$/, '') + '/m/' + snap.meet_id;
+                $('azure-public-link').href = link;
+                $('azure-public-link').textContent = link;
+            } else {
+                $('azure-url-row').style.display = 'none';
+            }
+            if (snap.last_error) {
+                $('azure-error-row').style.display = 'block';
+                $('azure-error-row').textContent = 'Last error: ' + snap.last_error;
+            } else {
+                $('azure-error-row').style.display = 'none';
+            }
+            // Disable Sign In if the active env's relay URL is empty.
+            $('azure-signin-btn').disabled = !snap.relay_url;
+            $('azure-rotate-btn').disabled = !snap.meet_id;
+            // Hint summary on the config details.
+            var cfgStatus = $('azure-config-status');
+            if (cfgStatus) {
+                cfgStatus.textContent = snap.relay_url ? '' : '(setup required)';
+            }
+        }
+
+        function refreshStatus() {
+            if (document.visibilityState !== 'visible') return;
+            fetch('/azure/status', { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(applyStatus)
+                .catch(function() { /* ignore transient errors */ });
+        }
+
+        function startPolling() {
+            if (pollTimer) return;
+            refreshStatus();
+            pollTimer = setInterval(refreshStatus, 5000);
+        }
+
+        function postJSON(url, body) {
+            return fetch(url, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body || {}),
+            }).then(function(r) {
+                return r.json().then(function(data) {
+                    if (!r.ok) throw new Error(data.error || ('HTTP ' + r.status));
+                    return data;
+                });
+            });
+        }
+
+        // ----- Sign in (device-code) -----
+        window.azureSignIn = function() {
+            $('azure-device-code').textContent = '';
+            $('azure-device-uri').textContent = '';
+            $('azure-device-msg').textContent = '';
+            $('azure-device-status').textContent = 'Requesting code\u2026';
+            $('azure-device-overlay').style.display = 'flex';
+            postJSON('/azure/login', {})
+                .then(function(flow) {
+                    $('azure-device-code').textContent = flow.user_code || '';
+                    $('azure-device-uri').textContent = flow.verification_uri || '';
+                    $('azure-device-uri').href = flow.verification_uri || '#';
+                    $('azure-device-msg').textContent = flow.message || '';
+                    $('azure-device-status').textContent = 'Waiting for sign-in to complete\u2026';
+                    // Long-poll completion endpoint.
+                    devicePollAbort = new AbortController();
+                    return fetch('/azure/login/complete', {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        signal: devicePollAbort.signal,
+                    });
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(result) {
+                    $('azure-device-overlay').style.display = 'none';
+                    if (result.ok) {
+                        showToast('Signed in to Azure.');
+                        applyStatus(result.status);
+                    } else {
+                        showToast('Sign-in failed.', 'error');
+                    }
+                    refreshStatus();
+                })
+                .catch(function(err) {
+                    if (err && err.name === 'AbortError') return;
+                    $('azure-device-overlay').style.display = 'none';
+                    showToast('Sign-in error: ' + (err.message || err), 'error');
+                });
+        };
+
+        window.azureCancelDeviceFlow = function() {
+            if (devicePollAbort) try { devicePollAbort.abort(); } catch (e) {}
+            $('azure-device-overlay').style.display = 'none';
+        };
+
+        window.azureCopyCode = function() {
+            var code = $('azure-device-code').textContent;
+            if (!code) return;
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(code);
+            }
+        };
+
+        window.azureSignOut = function() {
+            postJSON('/azure/logout', {})
+                .then(function(r) { applyStatus(r.status); showToast('Signed out.'); })
+                .catch(function(err) { showToast('Sign-out failed: ' + err.message, 'error'); });
+        };
+
+        window.azureReconnect = function() {
+            postJSON('/azure/reconnect', {})
+                .then(function(r) { applyStatus(r.status); showToast('Reconnecting\u2026'); })
+                .catch(function(err) { showToast('Reconnect failed: ' + err.message, 'error'); });
+        };
+
+        window.azureRotateMeetId = function() {
+            $('azure-rotate-overlay').style.display = 'none';
+            postJSON('/azure/rotate_id', {})
+                .then(function(r) { applyStatus(r.status); showToast('New meet ID issued.'); })
+                .catch(function(err) { showToast('Rotate failed: ' + err.message, 'error'); });
+        };
+
+        // ----- Config form -----
+        var configDirty = false;
+        window.azureMarkConfigDirty = function() {
+            configDirty = true;
+            $('azure-cfg-save-btn').disabled = false;
+            $('azure-cfg-msg').textContent = '';
+        };
+
+        function loadConfig() {
+            fetch('/azure/config', { credentials: 'same-origin' })
+                .then(function(r) { return r.json(); })
+                .then(function(cfg) {
+                    var env = cfg.environment || 'preprod';
+                    var radio = document.querySelector('input[name="azure_environment"][value="' + env + '"]');
+                    if (radio) radio.checked = true;
+                    $('azure-cfg-tenant').value = cfg.tenant_id || '';
+                    $('azure-cfg-client').value = cfg.client_id || '';
+                    $('azure-cfg-audience').value = cfg.audience || '';
+                    $('azure-cfg-relay-preprod').value = cfg.relay_url_preprod || '';
+                    $('azure-cfg-public-preprod').value = cfg.public_url_preprod || '';
+                    $('azure-cfg-relay-prod').value = cfg.relay_url_prod || '';
+                    $('azure-cfg-public-prod').value = cfg.public_url_prod || '';
+                    configDirty = false;
+                    $('azure-cfg-save-btn').disabled = true;
+                });
+        }
+
+        window.azureSaveConfig = function() {
+            var envEl = document.querySelector('input[name="azure_environment"]:checked');
+            var body = {
+                environment: envEl ? envEl.value : 'preprod',
+                tenant_id: $('azure-cfg-tenant').value.trim(),
+                client_id: $('azure-cfg-client').value.trim(),
+                audience: $('azure-cfg-audience').value.trim(),
+                relay_url_preprod: $('azure-cfg-relay-preprod').value.trim(),
+                public_url_preprod: $('azure-cfg-public-preprod').value.trim(),
+                relay_url_prod: $('azure-cfg-relay-prod').value.trim(),
+                public_url_prod: $('azure-cfg-public-prod').value.trim(),
+            };
+            $('azure-cfg-save-btn').disabled = true;
+            $('azure-cfg-msg').textContent = 'Saving\u2026';
+            $('azure-cfg-msg').style.color = '#666';
+            postJSON('/azure/config', body)
+                .then(function(r) {
+                    configDirty = false;
+                    $('azure-cfg-msg').textContent = 'Saved.';
+                    $('azure-cfg-msg').style.color = '#3c763d';
+                    applyStatus(r.status);
+                })
+                .catch(function(err) {
+                    $('azure-cfg-save-btn').disabled = false;
+                    $('azure-cfg-msg').textContent = 'Error: ' + (err.message || err);
+                    $('azure-cfg-msg').style.color = '#a94442';
+                });
+        };
+
+        document.addEventListener('visibilitychange', function() {
+            if (document.visibilityState === 'visible') refreshStatus();
+        });
+
+        loadConfig();
+        startPolling();
+    })();
     </script>
     {% if wifi_available %}
     <script>

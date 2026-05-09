@@ -506,11 +506,83 @@ def register(flask_app, app_module):
 
     # -- Azure relay (Phase 2) ----------------------------------------------
 
+    def _azure_status_payload():
+        """Snapshot enriched with env + active relay/public URLs for the UI."""
+        snap = _app.azure_relay_client.snapshot()
+        env = _app.settings.get('azure_environment', 'preprod')
+        relay, public = _app._active_azure_urls()
+        snap['environment'] = env
+        snap['relay_url'] = relay
+        snap['public_url'] = public or relay
+        snap['enabled'] = bool(_app.settings.get('azure_enabled'))
+        return snap
+
     @flask_app.route('/azure/status', methods=['GET'])
     @flask_login.login_required
     def route_azure_status():
         """Return current relay client status as JSON. Polled by the settings page."""
-        return flask.jsonify(_app.azure_relay_client.snapshot())
+        return flask.jsonify(_azure_status_payload())
+
+    @flask_app.route('/azure/config', methods=['GET', 'POST'])
+    @flask_login.login_required
+    def route_azure_config():
+        """Read or update Azure connection configuration.
+
+        GET returns the current values (suitable for prefilling the form).
+        POST accepts JSON with any of: environment, tenant_id, client_id,
+        audience, relay_url_preprod, public_url_preprod, relay_url_prod,
+        public_url_prod. Validates URLs and environment, persists, then
+        live-swaps the relay client's URL when the active environment's
+        URL changed.
+        """
+        if flask.request.method == 'GET':
+            return flask.jsonify({
+                'environment': _app.settings.get('azure_environment', 'preprod'),
+                'tenant_id': _app.settings.get('azure_tenant_id', ''),
+                'client_id': _app.settings.get('azure_client_id', ''),
+                'audience': _app.settings.get('azure_audience', ''),
+                'relay_url_preprod': _app.settings.get('azure_relay_url_preprod', ''),
+                'public_url_preprod': _app.settings.get('azure_public_url_preprod', ''),
+                'relay_url_prod': _app.settings.get('azure_relay_url_prod', ''),
+                'public_url_prod': _app.settings.get('azure_public_url_prod', ''),
+            })
+
+        body = flask.request.get_json(silent=True) or {}
+
+        def _norm_url(v):
+            v = (v or '').strip()
+            if not v:
+                return ''
+            if not (v.startswith('http://') or v.startswith('https://')):
+                raise ValueError('URL must start with http:// or https://')
+            return v.rstrip('/')
+
+        try:
+            updates = {}
+            if 'environment' in body:
+                env = (body.get('environment') or '').strip()
+                if env not in ('preprod', 'prod'):
+                    return flask.jsonify({'error': "environment must be 'preprod' or 'prod'"}), 400
+                updates['azure_environment'] = env
+            for key in ('tenant_id', 'client_id', 'audience'):
+                if key in body:
+                    updates['azure_' + key] = (body.get(key) or '').strip()
+            for key in ('relay_url_preprod', 'public_url_preprod',
+                        'relay_url_prod', 'public_url_prod'):
+                if key in body:
+                    updates['azure_' + key] = _norm_url(body.get(key))
+        except ValueError as e:
+            return flask.jsonify({'error': str(e)}), 400
+
+        _app.settings.update(updates)
+        with open(_app.settings_file, 'wt') as f:
+            json.dump(_app.settings, f, sort_keys=True, indent=4)
+
+        # Live-swap the relay URL if the active environment's URL changed.
+        active_relay, _public = _app._active_azure_urls()
+        _app.azure_relay_client.update_relay_url(active_relay)
+
+        return flask.jsonify({'ok': True, 'status': _azure_status_payload()})
 
     @flask_app.route('/azure/login', methods=['POST'])
     @flask_login.login_required
@@ -555,7 +627,7 @@ def register(flask_app, app_module):
             with open(_app.settings_file, 'wt') as f:
                 json.dump(_app.settings, f, sort_keys=True, indent=4)
             _app.azure_relay_client.start()
-        return flask.jsonify({'ok': ok, 'status': _app.azure_relay_client.snapshot()})
+        return flask.jsonify({'ok': ok, 'status': _azure_status_payload()})
 
     @flask_app.route('/azure/logout', methods=['POST'])
     @flask_login.login_required
@@ -564,13 +636,13 @@ def register(flask_app, app_module):
         _app.settings['azure_enabled'] = False
         with open(_app.settings_file, 'wt') as f:
             json.dump(_app.settings, f, sort_keys=True, indent=4)
-        return flask.jsonify({'ok': True, 'status': _app.azure_relay_client.snapshot()})
+        return flask.jsonify({'ok': True, 'status': _azure_status_payload()})
 
     @flask_app.route('/azure/reconnect', methods=['POST'])
     @flask_login.login_required
     def route_azure_reconnect():
         _app.azure_relay_client.force_reconnect()
-        return flask.jsonify({'ok': True, 'status': _app.azure_relay_client.snapshot()})
+        return flask.jsonify({'ok': True, 'status': _azure_status_payload()})
 
     @flask_app.route('/azure/rotate_id', methods=['POST'])
     @flask_login.login_required
@@ -578,7 +650,7 @@ def register(flask_app, app_module):
         new_id = _app.azure_relay_client.rotate_meet_id()
         if new_id is None:
             return flask.jsonify({'error': 'not signed in to Azure'}), 400
-        return flask.jsonify({'ok': True, 'meet_id': new_id, 'status': _app.azure_relay_client.snapshot()})
+        return flask.jsonify({'ok': True, 'meet_id': new_id, 'status': _azure_status_payload()})
 
     # -- Login / logout ------------------------------------------------------
 
