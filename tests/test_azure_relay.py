@@ -298,6 +298,42 @@ class TestDeviceCodeFlow:
         snap = client.snapshot()
         assert snap["device_flow"]["user_code"] == "AB12-CD34"
 
+    def test_self_token_audience_uses_guid_scope(self, tmp_path):
+        """When audience is `api://<client_id>` (an app requesting a token
+        for itself), AAD requires the GUID form of the resource, not the
+        api:// URI (AADSTS90009)."""
+        fake_app = MagicMock()
+        fake_app.initiate_device_flow.return_value = {
+            "user_code": "X", "verification_uri": "u",
+            "expires_in": 600, "message": "m",
+        }
+        client = AzureRelayClient(
+            creds_file=str(tmp_path / "creds.json"),
+            msal_app_factory=lambda **_: fake_app,
+        )
+        client.request_login(
+            tenant_id="tid", client_id="the-guid", audience="api://the-guid",
+        )
+        scopes = fake_app.initiate_device_flow.call_args.kwargs["scopes"]
+        assert scopes == ["the-guid/.default"]
+
+    def test_third_party_audience_keeps_api_uri(self, tmp_path):
+        """Audience pointing at a *different* app must keep the api:// form."""
+        fake_app = MagicMock()
+        fake_app.initiate_device_flow.return_value = {
+            "user_code": "X", "verification_uri": "u",
+            "expires_in": 600, "message": "m",
+        }
+        client = AzureRelayClient(
+            creds_file=str(tmp_path / "creds.json"),
+            msal_app_factory=lambda **_: fake_app,
+        )
+        client.request_login(
+            tenant_id="tid", client_id="client-guid", audience="api://other-app",
+        )
+        scopes = fake_app.initiate_device_flow.call_args.kwargs["scopes"]
+        assert scopes == ["api://other-app/.default"]
+
     def test_complete_login_persists_creds(self, tmp_path):
         fake_app = MagicMock()
         fake_app.initiate_device_flow.return_value = {
