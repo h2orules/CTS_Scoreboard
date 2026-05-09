@@ -20,6 +20,7 @@ from app.routes import build_router
 from app.state import MeetStateStore
 from app.telemetry import configure_telemetry
 from app.watchdog import MeetWatchdog
+from app.auth import validate_pi_token
 
 
 def build_app(
@@ -104,7 +105,21 @@ def build_app(
                 await watchdog.stop()
 
     fastapi_app.router.lifespan_context = lifespan_with_watchdog
-    fastapi_app.include_router(build_router(store=store))
+    fastapi_app.include_router(
+        build_router(
+            store=store,
+            token_validator=(
+                token_validator
+                or (
+                    lambda t: validate_pi_token(
+                        t,
+                        tenant_id=settings.entra_tenant_id,
+                        audience=settings.entra_audience,
+                    )
+                )
+            ),
+        )
+    )
 
     @fastapi_app.get("/healthz", response_class=PlainTextResponse, include_in_schema=False)
     async def healthz() -> str:

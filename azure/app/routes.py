@@ -8,15 +8,19 @@ module renders that snapshot for any anonymous viewer who knows the meet ID.
 from __future__ import annotations
 
 import base64
+import logging
 import re
 from html import escape
-from typing import Any
+from typing import Any, Callable
 
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi import APIRouter, Header, Request
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from jinja2 import BaseLoader, Environment
 
+from app.auth import InvalidPiTokenError, PiIdentity
 from app.state import MeetStateStore
+
+log = logging.getLogger(__name__)
 
 # --- Static asset MIME map (kept tiny on purpose; falls back to octet-stream).
 _MIME = {
@@ -38,6 +42,14 @@ _MIME = {
 # Hard limits (defense in depth).
 _MAX_PATH_LEN = 256
 _VALID_PATH_RE = re.compile(r"^[A-Za-z0-9._/+-]+$")
+
+# Shared friendly-name rule. Mirrors azure_relay.MEET_ID_REGEX and the
+# JS helper in static/js/meet_id.js: 10-20 chars, [A-Za-z0-9_-] only.
+MEET_ID_RE = re.compile(r"^[A-Za-z0-9_-]{10,20}$")
+
+
+def _is_valid_meet_id(meet_id: str) -> bool:
+    return bool(MEET_ID_RE.match(meet_id))
 
 
 def _content_type_for(path: str) -> str:
@@ -253,14 +265,24 @@ def _state_page(
 
 # ---------------------------------------------------------------------------
 
-def build_router(*, store: MeetStateStore) -> APIRouter:
-    """Construct the browser-facing router bound to a state store."""
+def build_router(
+    *,
+    store: MeetStateStore,
+    token_validator: Callable[[str], PiIdentity] | None = None,
+) -> APIRouter:
+    """Construct the browser-facing router bound to a state store.
+
+    ``token_validator`` is optional; if omitted, the
+    ``/internal/meet_id/{name}/availability`` endpoint always returns
+    503 (used by the Pi-side friendly-name picker, off in unit tests
+    that don't exercise it).
+    """
     router = APIRouter()
 
     @router.get("/m/{meet_id}", response_class=HTMLResponse)
     async def meet_page(meet_id: str, request: Request) -> HTMLResponse:
-        # Defensive validation: meet_ids are short and alphanumeric.
-        if not meet_id.isalnum() or len(meet_id) > 64:
+        # Defensive validation: meet_ids match the shared friendly-name rule.
+        if not _is_valid_meet_id(meet_id):
             return _state_page(
                 title="Invalid meet ID",
                 body="The link you followed is malformed.",
@@ -339,7 +361,7 @@ def build_router(*, store: MeetStateStore) -> APIRouter:
             or not _VALID_PATH_RE.match(path)
         ):
             return Response(status_code=400)
-        if not meet_id.isalnum() or not bundle_id.isalnum():
+        if not _is_valid_meet_id(meet_id) or not bundle_id.isalnum():
             return Response(status_code=400)
 
         # Look up the cached bundle. Note: we honor the bundle_id from the URL
@@ -372,7 +394,7 @@ def build_router(*, store: MeetStateStore) -> APIRouter:
         )
 
     def _serve_fragment(meet_id: str, name: str, request: Request) -> Response:
-        if not meet_id.isalnum() or len(meet_id) > 64:
+        if not _is_valid_meet_id(meet_id):
             return Response(status_code=400)
         got = store.get_fragment(meet_id, name)
         if not got:
@@ -396,5 +418,45 @@ def build_router(*, store: MeetStateStore) -> APIRouter:
     @router.get("/m/{meet_id}/api/message-page/{index}")
     async def meet_message_page(meet_id: str, index: int, request: Request) -> Response:
         return _serve_fragment(meet_id, f"message_page_{index}", request)
+
+    @router.get("/internal/meet_id/{name}/availability")
+    async def meet_id_availability(
+        name: str,
+        authorization: str | None = Header(default=None),
+    ) -> JSONResponse:
+        """Pi-only check for whether a friendly meet ID is available.
+
+        Authenticated with the same Entra access token the Pi uses on the
+        ``/pi`` Socket.IO namespace. Returns
+        ``{available, owner: 'self'|'other'|None, error?}``.
+        """
+        if token_validator is None:
+            return JSONResponse(
+                {"error": "availability check not configured"}, status_code=503
+            )
+        if not authorization or not authorization.lower().startswith("bearer "):
+            return JSONResponse({"error": "missing bearer token"}, status_code=401)
+        token = authorization.split(" ", 1)[1].strip()
+        try:
+            identity = token_validator(token)
+        except InvalidPiTokenError as exc:
+            log.info("availability check: token rejected: %s", exc)
+            return JSONResponse({"error": "invalid token"}, status_code=401)
+        if not _is_valid_meet_id(name):
+            return JSONResponse(
+                {
+                    "available": False,
+                    "owner": None,
+                    "error": "name does not match the meet ID rules",
+                },
+                status_code=400,
+            )
+        taken = store.is_meet_id_taken(name, by_account_id=identity.account_id)
+        return JSONResponse(
+            {
+                "available": taken != "other",
+                "owner": None if taken == "no" else taken,
+            }
+        )
 
     return router

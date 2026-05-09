@@ -883,6 +883,7 @@
                         </div>
                     </form>
                 <script src="/static/js/msg_formatting.js"></script>
+                <script src="/static/js/meet_id.js"></script>
                 <script>
                     (function () {
                         var pageCount = {{ message_pages | length
@@ -1490,6 +1491,8 @@
                         onclick="azureReconnect()">Reconnect</button>
                     <button class="btn btn-warning" type="button" id="azure-rotate-btn"
                         onclick="document.getElementById('azure-rotate-overlay').style.display='flex';">Rotate Meet ID</button>
+                    <button class="btn btn-default" type="button" id="azure-friendly-btn"
+                        onclick="azureOpenFriendlyOverlay()">Pick friendly name&hellip;</button>
                 </div>
             </div>
         </div>
@@ -1758,6 +1761,30 @@
         </div>
     </div>
 
+    <!-- Azure pick-friendly-meet-id overlay -->
+    <div id="azure-friendly-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+        <div style="background:#fff; padding:24px 32px; border-radius:6px; max-width:520px; text-align:left;">
+            <h4 style="margin-top:0;">Pick a friendly meet name</h4>
+            <p style="font-size:14px;">Choose a memorable name for your meet's scoreboard URL.
+            Allowed: letters, digits, <code>-</code>, and <code>_</code>. Length 10&ndash;20.</p>
+            <div class="form-group" style="margin-bottom:8px;">
+                <input id="azure-friendly-input" type="text" class="form-control" maxlength="20"
+                    autocomplete="off" spellcheck="false"
+                    style="font-family:monospace;font-size:15px;">
+            </div>
+            <div id="azure-friendly-msg" style="min-height:20px;font-size:13px;margin-bottom:8px;"></div>
+            <div style="background:#fcf8e3; border:1px solid #faebcc; color:#8a6d3b; padding:10px 14px; border-radius:4px; margin:12px 0; font-size:13px;">
+                <strong>&#x26A0; Printed QR codes will stop working.</strong>
+                If you printed signs, posters, or programs with the QR code for the current URL, families scanning them will see the expired page until you replace them with the new QR.
+            </div>
+            <div style="text-align:right;">
+                <button class="btn btn-default" type="button" onclick="document.getElementById('azure-friendly-overlay').style.display='none';">Cancel</button>
+                <button class="btn btn-primary" type="button" id="azure-friendly-submit"
+                    onclick="azureSubmitFriendlyName()" disabled>Use this name</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         document.getElementById('shutdown-confirm-input').addEventListener('input', function() {
             document.getElementById('shutdown-ok-btn').disabled = (this.value !== 'Stop');
@@ -1845,6 +1872,7 @@
             // Disable Sign In if the active env's relay URL is empty.
             $('azure-signin-btn').disabled = !snap.relay_url;
             $('azure-rotate-btn').disabled = !snap.meet_id;
+            $('azure-friendly-btn').disabled = !snap.meet_id;
             // Hint summary on the config details.
             var cfgStatus = $('azure-config-status');
             if (cfgStatus) {
@@ -2033,6 +2061,132 @@
             postJSON('/azure/rotate_id', {})
                 .then(function(r) { applyStatus(r.status); showToast('New meet ID issued.'); })
                 .catch(function(err) { showToast('Rotate failed: ' + err.message, 'error'); });
+        };
+
+        // ----- Friendly meet-id picker -----
+        var _friendlyDebounce = null;
+        var _friendlyLastChecked = '';
+
+        function _setFriendlyMsg(text, kind) {
+            var el = $('azure-friendly-msg');
+            if (!el) return;
+            el.textContent = text || '';
+            if (kind === 'error') {
+                el.style.color = '#a94442';
+            } else if (kind === 'ok') {
+                el.style.color = '#3c763d';
+            } else {
+                el.style.color = '#777';
+            }
+        }
+
+        function _setFriendlySubmitEnabled(enabled) {
+            var btn = $('azure-friendly-submit');
+            if (btn) btn.disabled = !enabled;
+        }
+
+        function _friendlyValidateLocal(name) {
+            if (!window.MeetId) return { ok: true, error: null }; // allow if helper missing
+            return window.MeetId.validate(name);
+        }
+
+        function _friendlyCheckAvailability(name) {
+            if (_friendlyLastChecked === name) return;
+            _friendlyLastChecked = name;
+            _setFriendlyMsg('Checking availability\u2026', 'info');
+            _setFriendlySubmitEnabled(false);
+            postJSON('/azure/check_meet_id', { name: name })
+                .then(function(r) {
+                    // Ignore stale responses if user kept typing.
+                    if ($('azure-friendly-input').value.trim() !== name) return;
+                    if (!r.ok) {
+                        _setFriendlyMsg(r.error || 'Not available.', 'error');
+                        _setFriendlySubmitEnabled(false);
+                        return;
+                    }
+                    if (r.available) {
+                        var who = (r.owner === 'self')
+                            ? 'Already yours \u2014 confirm to keep it.'
+                            : 'Available!';
+                        _setFriendlyMsg(who, 'ok');
+                        _setFriendlySubmitEnabled(true);
+                    } else {
+                        _setFriendlyMsg('That name is already in use.', 'error');
+                        _setFriendlySubmitEnabled(false);
+                    }
+                })
+                .catch(function(err) {
+                    _setFriendlyMsg('Check failed: ' + err.message, 'error');
+                    _setFriendlySubmitEnabled(false);
+                });
+        }
+
+        function _onFriendlyInput() {
+            var raw = $('azure-friendly-input').value;
+            var name = raw.trim();
+            _setFriendlySubmitEnabled(false);
+            if (_friendlyDebounce) {
+                clearTimeout(_friendlyDebounce);
+                _friendlyDebounce = null;
+            }
+            var v = _friendlyValidateLocal(name);
+            if (!v.ok) {
+                _setFriendlyMsg(v.error, 'error');
+                return;
+            }
+            _setFriendlyMsg('Looks valid \u2014 checking\u2026', 'info');
+            _friendlyDebounce = setTimeout(function() {
+                _friendlyCheckAvailability(name);
+            }, 400);
+        }
+
+        window.azureOpenFriendlyOverlay = function() {
+            var teamHomeEl = document.getElementById('team_home');
+            var teamHome = (teamHomeEl ? teamHomeEl.value : '') || '';
+            var def = '';
+            if (window.MeetId) {
+                def = window.MeetId.deriveDefault(teamHome);
+            }
+            var input = $('azure-friendly-input');
+            input.value = def;
+            _friendlyLastChecked = '';
+            $('azure-friendly-overlay').style.display = 'flex';
+            _setFriendlyMsg('', 'info');
+            _setFriendlySubmitEnabled(false);
+            // Wire input listener once.
+            if (!input._friendlyWired) {
+                input.addEventListener('input', _onFriendlyInput);
+                input._friendlyWired = true;
+            }
+            // Trigger initial validation/availability for the default.
+            setTimeout(_onFriendlyInput, 0);
+            input.focus();
+            input.select();
+        };
+
+        window.azureSubmitFriendlyName = function() {
+            var name = $('azure-friendly-input').value.trim();
+            var v = _friendlyValidateLocal(name);
+            if (!v.ok) {
+                _setFriendlyMsg(v.error, 'error');
+                return;
+            }
+            _setFriendlySubmitEnabled(false);
+            postJSON('/azure/set_meet_id', { name: name })
+                .then(function(r) {
+                    if (!r.ok) {
+                        _setFriendlyMsg(r.error || 'Failed to set name.', 'error');
+                        _setFriendlySubmitEnabled(true);
+                        return;
+                    }
+                    $('azure-friendly-overlay').style.display = 'none';
+                    applyStatus(r.status);
+                    showToast('Meet name updated to ' + r.meet_id + '.');
+                })
+                .catch(function(err) {
+                    _setFriendlyMsg('Update failed: ' + err.message, 'error');
+                    _setFriendlySubmitEnabled(true);
+                });
         };
 
         // ----- Config form -----
