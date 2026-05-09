@@ -5,3 +5,7 @@ __pycache__/
 test_output.txt
 test_results.log
 node_modules/
+
+# Azure relay credentials (contains OAuth refresh tokens) — never commit
+azure_credentials.json
+azure_session.json

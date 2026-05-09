@@ -10,6 +10,7 @@ import serial.tools.list_ports
 import re
 import time
 import json
+import os
 import os.path
 import glob
 from hytek_event_loader import HytekEventLoader
@@ -23,10 +24,22 @@ import hashlib
 import sim
 import wifi_manager
 import settings_routes
+from azure_relay import AzureRelayClient
+from template_bundle import build_bundle
+from qr_utils import build_meet_url, render_overlay_svg, substitute_qr_tokens
 
 DEBUG = False
 #DEBUG = True
 settings_file = './settings.json'
+
+
+def is_dev_mode():
+    """True when running outside production (gunicorn).
+
+    Controlled by env var SCOREBOARD_MODE; defaults to 'production'.
+    Set SCOREBOARD_MODE=development for `flask run`, pytest, or VS Code launch.
+    """
+    return os.environ.get('SCOREBOARD_MODE', 'production').lower() == 'development'
 
 settings = {
     'meet_title': '',
@@ -51,7 +64,18 @@ settings = {
     'team_guest2_tag': '',
     'team_guest3': '',
     'team_guest3_tag': '',
-    'std_desc_overrides': {}
+    'std_desc_overrides': {},
+    # Azure relay (Phase 2)
+    'azure_enabled': False,
+    'azure_tenant_id': '',
+    'azure_client_id': '',
+    'azure_audience': '',
+    'azure_relay_url': '',
+    'azure_template_path': 'web/home',
+    'azure_public_url': '',  # Public URL viewers see (often == azure_relay_url).
+    # QR (Phase 5)
+    'qr_overlay_enabled': False,
+    'qr_overlay_corner': 'top-right',
     }
 in_file = None
 out_file = None
@@ -282,7 +306,7 @@ def parse_line(l, out = None):
         if "current_event" in update or "running_time" in update:
             race_fsm.evaluate_update(channel_running, update)
             update["race_state"] = race_fsm.state_name
-            socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+            broadcast_scoreboard(update)
             update.clear()
             
         if (datetime.datetime.now() > next_update) and debug_console:
@@ -761,9 +785,14 @@ def _render_and_cache_message_pages():
     Returns a list of content keys (one per page).
     """
     pages = settings.get('message_pages', [])
+    qr_target = build_meet_url(
+        public_base=settings.get('azure_public_url') or settings.get('azure_relay_url', ''),
+        meet_id=getattr(azure_relay_client, 'meet_id', '') if 'azure_relay_client' in globals() else '',
+    )
     keys = []
     for i, page in enumerate(pages):
         html = _render_blank_message_html(page.get('text', ''))
+        html = substitute_qr_tokens(html, target_url=qr_target)
         key = _cache_put('message_page_%d' % i, html)
         keys.append(key)
     return keys
@@ -819,10 +848,10 @@ def _message_rotation_tick():
         # Broadcast page change
         page_keys = _render_and_cache_message_pages()
         key = page_keys[_message_rotation_index] if _message_rotation_index < len(page_keys) else None
-        socketio.emit('update_scoreboard', {
+        broadcast_scoreboard({
             'active_message_page': _message_rotation_index,
             'active_message_key': key,
-        }, namespace='/scoreboard')
+        })
 
 
 def _update_message_rotation():
@@ -876,7 +905,7 @@ def send_event_info():
     update["active_message_page"] = _message_rotation_index
     update["race_state"] = race_fsm.state_name
 
-    socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+    broadcast_scoreboard(update)
 
 def send_scores_info():
     update = {}
@@ -885,7 +914,7 @@ def send_scores_info():
     update["score_guest2"] = team_scores['score_guest2']
     update["score_guest3"] = team_scores['score_guest3']
     update["race_state"] = race_fsm.state_name
-    socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+    broadcast_scoreboard(update)
 
 def send_message_overlay_state():
     """Broadcast message overlay state to all scoreboard clients."""
@@ -901,7 +930,7 @@ def send_message_overlay_state():
         'message_rotation_interval': settings.get('message_rotation_interval', 30),
         'active_message_page': _message_rotation_index,
     }
-    socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+    broadcast_scoreboard(update)
             
 @socketio.on('connect', namespace='/scoreboard')
 def ws_scoreboard():
@@ -944,6 +973,153 @@ def ws_set_event_heat(d):
 import sys
 sim.register(socketio, sys.modules[__name__])
 
+def _build_render_context():
+    """Build the dict of variables home.html needs.
+
+    Shared between Flask's route_web (which adds dev/test-mode flags on top)
+    and the Azure relay (which forwards a frozen copy after meet_open).
+    """
+    ev = last_event_sent[0]
+    ht = last_event_sent[1]
+    qt_results, qt_show_age = _get_qualifying_times(ev)
+    rec_set_results, rec_show_age = _get_matching_records(ev)
+    show_age_codes = qt_show_age or rec_show_age
+    qt_key = _render_qualifying_html(qt_results, rec_set_results)
+    page_keys = _render_and_cache_message_pages()
+    _, qt_html = _cache_get('qualifying_info')
+    num_lanes = settings['num_lanes']
+
+    initial_lanes = {}
+    for i in range(1, num_lanes + 1):
+        initial_lanes[i] = {
+            'name': event_info.get_display_string(ev, ht, i),
+            'team': event_info.get_team_code(ev, ht, i),
+            'age_code': event_info.get_age_code(ev, ht, i) if show_age_codes else '',
+            'seed_time': event_info.get_seed_time(ev, ht, i),
+        }
+
+    pages = settings.get('message_pages', [])
+    initial_message_pages = [
+        {'text': p.get('text', ''), 'align': p.get('align', 'left'),
+         'enabled': p.get('enabled', False), 'key': page_keys[i] if i < len(page_keys) else None}
+        for i, p in enumerate(pages)
+    ]
+
+    qr_target = build_meet_url(
+        public_base=settings.get('azure_public_url') or settings.get('azure_relay_url', ''),
+        meet_id=getattr(azure_relay_client, 'meet_id', '') if 'azure_relay_client' in globals() else '',
+    )
+    qr_overlay_svg = (
+        render_overlay_svg(qr_target)
+        if settings.get('qr_overlay_enabled') and qr_target
+        else ''
+    )
+
+    return dict(
+        meet_title=settings['meet_title'],
+        num_lanes=num_lanes,
+        ad_url=settings['ad_url'],
+        schedule_has_names=event_info.has_names,
+        team_names=[
+            ('score_home', settings.get('team_home', '')),
+            ('score_guest1', settings.get('team_guest1', '')),
+            ('score_guest2', settings.get('team_guest2', '')),
+            ('score_guest3', settings.get('team_guest3', '')),
+        ],
+        initial_event=str(ev),
+        initial_heat=str(ht),
+        initial_event_name=event_info.get_event_name(ev),
+        initial_qt_groups=qt_results,
+        initial_rec_sets=rec_set_results,
+        initial_qt_key=qt_key,
+        initial_qt_html=qt_html or '',
+        initial_lanes=initial_lanes,
+        initial_scores=team_scores,
+        initial_race_state=race_fsm.state_name,
+        initial_message_pages=initial_message_pages,
+        initial_active_message_page=_message_rotation_index,
+        initial_qr_overlay_svg=qr_overlay_svg,
+        initial_qr_overlay_corner=settings.get('qr_overlay_corner', 'top-right'),
+        initial_settings={
+            'show_pr_tags': settings.get('show_pr_tags', True),
+            'show_confetti': settings.get('show_confetti', True),
+            'show_time_decorations': settings.get('show_time_decorations', False),
+            'seed_time_label': settings.get('seed_time_label', 'Seed Time'),
+            'message_overlay_enabled': settings.get('message_overlay_enabled', False),
+            'message_rotation_interval': settings.get('message_rotation_interval', 30),
+        },
+    )
+
+
+# Azure relay client (Phase 2). Constructed eagerly so settings/azure routes
+# can introspect status, but not started unless settings.azure_enabled is True.
+def _azure_bundle_provider():
+    """Build the current template bundle for the relay to push to Azure.
+
+    Returns a JSON-serializable dict, or None if bundling fails (the relay
+    will treat None as 'no template change')."""
+    try:
+        rel = settings.get('azure_template_path', 'web/home') or 'web/home'
+        if not rel.endswith('.html'):
+            rel = rel + '.html'
+        repo_root = os.path.dirname(os.path.abspath(__file__))
+        bundle = build_bundle(
+            template_root=os.path.join(repo_root, 'templates'),
+            static_root=os.path.join(repo_root, 'static'),
+            template_relpath=rel,
+        )
+        return bundle.to_dict()
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
+def _azure_context_provider():
+    """Build the initial render context for the Azure relay (Phase 4).
+
+    Mirrors the kwargs passed to render_template in route_web, minus dev-mode
+    fields. Returns a JSON-serializable dict, or None if the snapshot can't
+    be built."""
+    try:
+        ctx = _build_render_context()
+        # Force browser-friendly defaults: dev-only gates off; serving_context
+        # marks the page as served via Azure.
+        ctx['is_dev_mode'] = False
+        ctx['serving_context'] = 'azure'
+        ctx['test_background'] = False
+        ctx['test_event'] = None
+        ctx['test_heat'] = None
+        return ctx
+    except Exception:
+        traceback.print_exc()
+        return None
+
+
+azure_relay_client = AzureRelayClient(
+    creds_file='azure_credentials.json',
+    relay_url=settings.get('azure_relay_url', ''),
+    bundle_provider=_azure_bundle_provider,
+    context_provider=_azure_context_provider,
+)
+if settings.get('azure_enabled') and azure_relay_client.meet_id:
+    azure_relay_client.start()
+
+
+def broadcast_scoreboard(update):
+    """Emit an update_scoreboard payload to local browsers AND forward to Azure.
+
+    The local emit happens unconditionally on the /scoreboard namespace. The
+    Azure forward is fire-and-forget: it enqueues the payload on the relay's
+    background thread queue, which delivers it once the relay is connected.
+    Events enqueued while disconnected are kept until the queue is full
+    (bounded at 1000) and the most recent ones win when full.
+    """
+    socketio.emit('update_scoreboard', update, namespace='/scoreboard')
+    if settings.get('azure_enabled'):
+        # forward_event() is non-blocking and thread-safe.
+        azure_relay_client.forward_event('update_scoreboard', dict(update))
+
+
 # Register settings/admin routes
 settings_routes.register(app, sys.modules[__name__])
 
@@ -977,6 +1153,15 @@ def api_message_page(index):
     return resp
 
         
+@app.route("/test")
+@flask_login.login_required
+def route_test():
+    """Local-only test/simulator page. Disabled in production."""
+    if not is_dev_mode():
+        return flask.abort(404)
+    return flask.render_template('test.html', meet_title=settings.get('meet_title', ''))
+
+
 # Scoreboard Templates    
 @app.route('/web/<name>')
 def route_web(name):
@@ -984,67 +1169,14 @@ def route_web(name):
     test_event = flask.request.args.get('event', None)
     test_heat = flask.request.args.get('heat', None)
 
-    # Pre-populate initial page state so content appears immediately
-    ev = last_event_sent[0]
-    ht = last_event_sent[1]
-    qt_results, qt_show_age = _get_qualifying_times(ev)
-    rec_set_results, rec_show_age = _get_matching_records(ev)
-    show_age_codes = qt_show_age or rec_show_age
-    qt_key = _render_qualifying_html(qt_results, rec_set_results)
-    page_keys = _render_and_cache_message_pages()
-    _, qt_html = _cache_get('qualifying_info')
-    num_lanes = settings['num_lanes']
-
-    initial_lanes = {}
-    for i in range(1, num_lanes + 1):
-        initial_lanes[i] = {
-            'name': event_info.get_display_string(ev, ht, i),
-            'team': event_info.get_team_code(ev, ht, i),
-            'age_code': event_info.get_age_code(ev, ht, i) if show_age_codes else '',
-            'seed_time': event_info.get_seed_time(ev, ht, i),
-        }
-
-    pages = settings.get('message_pages', [])
-    initial_message_pages = [
-        {'text': p.get('text', ''), 'align': p.get('align', 'left'),
-         'enabled': p.get('enabled', False), 'key': page_keys[i] if i < len(page_keys) else None}
-        for i, p in enumerate(pages)
-    ]
-
+    ctx = _build_render_context()
     return flask.render_template(web_name,
-        meet_title=settings['meet_title'],
         test_background='test' in flask.request.args.keys(),
-        num_lanes=num_lanes,
+        is_dev_mode=is_dev_mode(),
+        serving_context='pi',
         test_event=test_event,
         test_heat=test_heat,
-        ad_url=settings['ad_url'],
-        schedule_has_names=event_info.has_names,
-        team_names=[
-            ('score_home', settings.get('team_home', '')),
-            ('score_guest1', settings.get('team_guest1', '')),
-            ('score_guest2', settings.get('team_guest2', '')),
-            ('score_guest3', settings.get('team_guest3', '')),
-        ],
-        initial_event=str(ev),
-        initial_heat=str(ht),
-        initial_event_name=event_info.get_event_name(ev),
-        initial_qt_groups=qt_results,
-        initial_rec_sets=rec_set_results,
-        initial_qt_key=qt_key,
-        initial_qt_html=qt_html or '',
-        initial_lanes=initial_lanes,
-        initial_scores=team_scores,
-        initial_race_state=race_fsm.state_name,
-        initial_message_pages=initial_message_pages,
-        initial_active_message_page=_message_rotation_index,
-        initial_settings={
-            'show_pr_tags': settings.get('show_pr_tags', True),
-            'show_confetti': settings.get('show_confetti', True),
-            'show_time_decorations': settings.get('show_time_decorations', False),
-            'seed_time_label': settings.get('seed_time_label', 'Seed Time'),
-            'message_overlay_enabled': settings.get('message_overlay_enabled', False),
-            'message_rotation_interval': settings.get('message_rotation_interval', 30),
-        },
+        **ctx,
     )
 
 def has_no_empty_params(rule):
