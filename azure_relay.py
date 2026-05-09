@@ -315,7 +315,19 @@ class AzureRelayClient:
         else:
             app = self._msal_factory(client_id=client_id, tenant_id=tenant_id)
 
-        flow_scopes = scopes or [f"{audience}/.default"]
+        if scopes:
+            flow_scopes = scopes
+        else:
+            # AAD rejects `api://<client_id>/.default` when an app requests a
+            # token for itself (AADSTS90009 — "supported only if resource is
+            # specified using the GUID based App Identifier"). Detect that
+            # self-token case and substitute the bare GUID.
+            resource = audience
+            if resource.startswith("api://"):
+                resource_id = resource[len("api://"):]
+                if resource_id == client_id:
+                    resource = client_id
+            flow_scopes = [f"{resource}/.default"]
         flow = app.initiate_device_flow(scopes=flow_scopes)
         if "user_code" not in flow:
             raise RuntimeError(f"failed to start device flow: {flow}")
