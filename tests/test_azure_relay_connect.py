@@ -53,7 +53,7 @@ class FakeSocketIOClient:
             return fn
         return deco
 
-    def connect(self, url: str, *, namespaces=None, auth=None, wait_timeout=10) -> None:
+    def connect(self, url: str, *, namespaces=None, auth=None, transports=None, wait_timeout=10) -> None:
         self.connect_calls.append({"url": url, "auth": auth, "namespaces": namespaces})
         self.connected = True
         # Fire the registered connect handler synchronously.

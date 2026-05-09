@@ -595,7 +595,13 @@ class AzureRelayClient:
         def disconnect() -> None:  # noqa: ARG001
             connected_evt.clear()
 
-        # Connect with bearer token in the auth payload.
+        # Connect with bearer token in the auth payload. We force
+        # websocket-only transport: the relay app runs multiple workers
+        # behind a load balancer with no sticky sessions, and engine.io's
+        # HTTP long-polling fallback would otherwise scatter polling
+        # requests across workers that don't own the sid (HTTP 400). With
+        # WS-only the connection lives on whichever worker accepts the
+        # initial upgrade and stays there for its lifetime.
         client.connect(
             self.relay_url,
             namespaces=["/pi"],
@@ -604,6 +610,7 @@ class AzureRelayClient:
                 "meet_id": creds.meet_id,
                 "protocol_version": self.protocol_version,
             },
+            transports=["websocket"],
             wait_timeout=10,
         )
         logger.info("relay: socket connected, sending meet_open")
