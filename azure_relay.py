@@ -411,6 +411,35 @@ class AzureRelayClient:
             self._creds = None
             self._set_state(STATE_NEEDS_AUTH)
 
+    def cancel_login(self) -> bool:
+        """Abort an in-flight device-code flow.
+
+        Clears the pending flow + MSAL handle and resets state. Any concurrent
+        ``complete_login()`` call still blocking inside MSAL is signalled to
+        give up by zeroing the flow's ``expires_at``; it will return False on
+        its next poll. Returns True if a flow was actually in progress.
+        """
+        with self._lock:
+            had_flow = self._device_flow is not None or getattr(
+                self, "_pending_msal", None
+            ) is not None
+            # Tell any in-flight acquire_token_by_device_flow loop to exit
+            # at its next poll (MSAL checks expires_at against time.time()).
+            if self._device_flow is not None:
+                try:
+                    self._device_flow._flow["expires_at"] = 0
+                except Exception:
+                    pass
+            self._device_flow = None
+            self._pending_msal = None  # type: ignore[assignment]
+            # Restore a sensible state: if we already had creds we go back to
+            # DISCONNECTED so the run loop can pick up; otherwise NEEDS_AUTH.
+            if self._creds is not None:
+                self._set_state(STATE_DISCONNECTED)
+            else:
+                self._set_state(STATE_NEEDS_AUTH)
+        return had_flow
+
     def rotate_meet_id(self) -> str | None:
         """Generate a new meet ID, persist, and force a reconnect.
 

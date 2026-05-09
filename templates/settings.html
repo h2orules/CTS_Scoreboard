@@ -1715,8 +1715,27 @@
             </p>
             <p style="margin:6px 0;">
                 <strong>Code:</strong>
-                <code id="azure-device-code" style="font-size:18px;letter-spacing:2px;"></code>
-                <button type="button" class="btn btn-default btn-xs" onclick="azureCopyCode()" style="margin-left:8px;">Copy</button>
+                <span style="display:inline-flex;align-items:stretch;margin-left:6px;vertical-align:middle;">
+                    <code id="azure-device-code"
+                          title="Click to copy"
+                          onclick="azureCopyCode()"
+                          style="font-size:18px;letter-spacing:2px;padding:6px 10px;
+                                 background:#f5f5f5;border:1px solid #ccc;border-right:none;
+                                 border-radius:4px 0 0 4px;cursor:pointer;line-height:1.4;
+                                 min-width:120px;display:inline-block;"></code>
+                    <button type="button" id="azure-copy-btn"
+                            class="btn btn-default" onclick="azureCopyCode()"
+                            title="Copy code to clipboard"
+                            style="border-radius:0 4px 4px 0;padding:6px 12px;line-height:1.4;
+                                   border-left:1px solid #ccc;">
+                        <span aria-hidden="true" style="font-size:16px;">&#128203;</span>
+                        <span class="sr-only">Copy</span>
+                    </button>
+                </span>
+                <span id="azure-copy-feedback"
+                      style="margin-left:8px;color:#3c763d;font-size:13px;display:none;">
+                    Copied!
+                </span>
             </p>
             <p id="azure-device-msg" style="font-size:13px;color:#666;"></p>
             <p id="azure-device-status" style="font-size:13px;color:#31708f;">Waiting for sign-in to complete&hellip;</p>
@@ -1899,15 +1918,53 @@
         window.azureCancelDeviceFlow = function() {
             if (devicePollAbort) try { devicePollAbort.abort(); } catch (e) {}
             $('azure-device-overlay').style.display = 'none';
+            // Tell the server to drop the in-flight flow so the next Sign In
+            // doesn't race against a stale one.
+            postJSON('/azure/login/cancel', {})
+                .then(function(r) { if (r && r.status) applyStatus(r.status); })
+                .catch(function() { /* best-effort */ })
+                .then(function() { refreshStatus(); });
         };
 
         window.azureCopyCode = function() {
             var code = $('azure-device-code').textContent;
             if (!code) return;
-            if (navigator.clipboard && navigator.clipboard.writeText) {
-                navigator.clipboard.writeText(code);
+            var done = function(ok) {
+                var fb = $('azure-copy-feedback');
+                if (!fb) return;
+                fb.textContent = ok ? 'Copied!' : 'Copy failed';
+                fb.style.color = ok ? '#3c763d' : '#a94442';
+                fb.style.display = 'inline';
+                setTimeout(function() { fb.style.display = 'none'; }, 1500);
+            };
+            // Modern path — only available on HTTPS / localhost.
+            if (navigator.clipboard && navigator.clipboard.writeText && window.isSecureContext) {
+                navigator.clipboard.writeText(code).then(
+                    function() { done(true); },
+                    function() { execCopyFallback(code, done); }
+                );
+                return;
             }
+            execCopyFallback(code, done);
         };
+
+        function execCopyFallback(text, done) {
+            // Plain-HTTP fallback: hidden textarea + execCommand('copy').
+            var ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed';
+            ta.style.top = '0';
+            ta.style.left = '0';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            ta.setSelectionRange(0, text.length);
+            var ok = false;
+            try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+            document.body.removeChild(ta);
+            done(ok);
+        }
 
         window.azureSignOut = function() {
             postJSON('/azure/logout', {})

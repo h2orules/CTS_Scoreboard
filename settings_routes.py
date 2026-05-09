@@ -630,6 +630,16 @@ def register(flask_app, app_module):
             _app.azure_relay_client.start()
         return flask.jsonify({'ok': ok, 'status': _azure_status_payload()})
 
+    @flask_app.route('/azure/login/cancel', methods=['POST'])
+    @flask_login.login_required
+    def route_azure_login_cancel():
+        """Abort an in-flight device-code flow and return to a clean state."""
+        cancelled = _app.azure_relay_client.cancel_login()
+        return flask.jsonify({
+            'ok': True, 'cancelled': cancelled,
+            'status': _azure_status_payload(),
+        })
+
     @flask_app.route('/azure/logout', methods=['POST'])
     @flask_login.login_required
     def route_azure_logout():
