@@ -9,6 +9,7 @@ and all referenced globals exist.  This wires up ``/settings``, ``/wifi/*``,
 import flask
 import flask_login
 import json
+import logging
 import os
 import os.path
 import re
@@ -624,11 +625,24 @@ def register(flask_app, app_module):
     def route_azure_login_complete():
         """Block until the device-code flow finishes. Returns final status."""
         ok = _app.azure_relay_client.complete_login()
+        warning = None
         if ok:
             _app.settings['azure_enabled'] = True
-            _app.save_azure_settings()
-            _app.azure_relay_client.start()
-        return flask.jsonify({'ok': ok, 'status': _azure_status_payload()})
+            try:
+                _app.save_azure_settings()
+            except Exception as e:
+                warning = f'failed to persist azure_settings.json: {e}'
+                logging.exception('save_azure_settings failed after sign-in')
+            try:
+                _app.azure_relay_client.start()
+            except Exception as e:
+                warning = (warning + '; ' if warning else '') + \
+                    f'failed to start relay worker: {e}'
+                logging.exception('azure_relay_client.start() failed after sign-in')
+        payload = {'ok': ok, 'status': _azure_status_payload()}
+        if warning:
+            payload['warning'] = warning
+        return flask.jsonify(payload)
 
     @flask_app.route('/azure/login/cancel', methods=['POST'])
     @flask_login.login_required
