@@ -224,12 +224,18 @@ az deployment group create \
   --parameters \
       environmentName=preprod \
       containerImage="$ACR_PREPROD.azurecr.io/cts-relay:bootstrap" \
+      targetPort=80 \
       entraTenantId="$TENANT_ID" \
       entraAudience="$RELAY_APP_ID" \
       alertEmail="$ALERT_EMAIL" \
       alertSmsCountryCode="$ALERT_SMS_COUNTRY_CODE" \
       alertSmsPhone="$ALERT_SMS_PHONE"
 ```
+
+> The `targetPort=80` override is only needed for the bootstrap image
+> (`aci-helloworld` listens on port 80). After the first real workflow
+> deploy in section 9, re-run this command without `targetPort=...` so the
+> ingress flips back to the relay's port 8000.
 
 Confirm `outputs.containerAppFqdn` resolves over HTTPS:
 
@@ -250,6 +256,7 @@ az deployment group create \
   --parameters \
       environmentName=prod \
       containerImage="$ACR_PROD.azurecr.io/cts-relay:bootstrap" \
+      targetPort=80 \
       entraTenantId="$TENANT_ID" \
       entraAudience="$RELAY_APP_ID" \
       alertEmail="$ALERT_EMAIL" \

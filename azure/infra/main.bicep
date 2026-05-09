@@ -14,6 +14,9 @@ param location string = resourceGroup().location
 @description('Container image reference (full path with digest or tag).')
 param containerImage string
 
+@description('TCP port the container listens on. Defaults to 8000 (the relay app). For the very first bootstrap deploy, set this to whatever your placeholder image listens on (e.g. 80 for mcr.microsoft.com/azuredocs/aci-helloworld).')
+param targetPort int = 8000
+
 @description('Min replicas for the Container App. 0 enables scale-to-zero (preprod).')
 @minValue(0)
 @maxValue(10)
@@ -174,7 +177,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       activeRevisionsMode: 'Multiple' // enables 'az containerapp revision activate' rollback
       ingress: {
         external: true
-        targetPort: 8000
+        targetPort: targetPort
         transport: 'auto'
         allowInsecure: false
         // No stickySessions: Web PubSub for Socket.IO terminates the
@@ -214,10 +217,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
             { name: 'ENTRA_TENANT_ID', value: entraTenantId }
             { name: 'ENTRA_AUDIENCE', value: entraAudience }
           ]
-          probes: [
-            { type: 'Liveness',  httpGet: { path: '/healthz', port: 8000 }, periodSeconds: 30 }
-            { type: 'Readiness', httpGet: { path: '/readyz',  port: 8000 }, periodSeconds: 15 }
-          ]
+          // No explicit probes here. Container Apps applies a default TCP
+          // socket probe on targetPort, which works for any image (including
+          // bootstrap placeholders). The relay app's /healthz and /readyz
+          // endpoints are exercised by the deploy workflow's smoke test
+          // after each revision flip.
         }
       ]
       scale: {
