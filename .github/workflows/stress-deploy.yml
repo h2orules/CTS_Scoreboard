@@ -1,0 +1,165 @@
+name: stress-deploy
+
+# Builds the stress-test image, pushes it to a per-region ACR, and deploys
+# (or what-ifs) the Bicep that creates the Container Apps Job pool.
+#
+# `mode: single` deploys to westus only.
+# `mode: multi`  deploys to westus AND eastus2 (one RG/ACR/Job per region).
+#
+# The same GitHub OIDC service principal used by the main app deploys here.
+# It must be granted Contributor + AcrPush + (constrained) RBAC Admin on
+# each new RG once, before this workflow can succeed. See stress-test/README.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'single (westus only) or multi (westus + eastus2)'
+        required: true
+        type: choice
+        options: [single, multi]
+        default: single
+      apply_or_whatif:
+        description: 'what-if (preview only) or apply (actually deploy)'
+        required: true
+        type: choice
+        options: [what-if, apply]
+        default: what-if
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        region: ${{ fromJSON(github.event.inputs.mode == 'multi' && '["westus","eastus2"]' || '["westus"]') }}
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Resolve names for region
+        id: names
+        run: |
+          REGION="${{ matrix.region }}"
+          RG="cts-scoreboard-stress-${REGION}"
+          ACR="ctssbstress${REGION}acr"
+          IMAGE_TAG="${{ github.sha }}"
+          IMAGE_REF="${ACR}.azurecr.io/stress:${IMAGE_TAG}"
+          {
+            echo "region=$REGION"
+            echo "rg=$RG"
+            echo "acr=$ACR"
+            echo "image_tag=$IMAGE_TAG"
+            echo "image_ref=$IMAGE_REF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Ensure resource group
+        run: |
+          az group create -n "${{ steps.names.outputs.rg }}" -l "${{ steps.names.outputs.region }}" -o none
+
+      - name: Ensure ACR
+        # Bicep also defines the ACR, but we need it to exist before the image
+        # build/push (apply mode) and before what-if (so the placeholder
+        # containerImage reference resolves cleanly on the second run).
+        run: |
+          if ! az acr show -n "${{ steps.names.outputs.acr }}" -g "${{ steps.names.outputs.rg }}" -o none 2>/dev/null; then
+            echo "Creating ACR ${{ steps.names.outputs.acr }}..."
+            az acr create -n "${{ steps.names.outputs.acr }}" -g "${{ steps.names.outputs.rg }}" --sku Basic -o none
+          fi
+
+      - name: Build and push image
+        if: github.event.inputs.apply_or_whatif == 'apply'
+        id: build
+        run: |
+          ACR="${{ steps.names.outputs.acr }}"
+          TAG="${{ steps.names.outputs.image_tag }}"
+          # Use ACR Tasks so the workflow does not need a Docker daemon
+          # and the build runs close to the registry.
+          az acr build \
+            --registry "$ACR" \
+            --image "stress:${TAG}" \
+            --file stress-test/app/Dockerfile \
+            stress-test/app
+          # Resolve the digest so we deploy by immutable reference.
+          DIGEST=$(az acr repository show \
+                    --name "$ACR" \
+                    --image "stress:${TAG}" \
+                    --query digest -o tsv)
+          IMG="${ACR}.azurecr.io/stress@${DIGEST}"
+          echo "image=$IMG" >> $GITHUB_OUTPUT
+          echo "::notice title=Pinned image::$IMG"
+
+      - name: Resolve image for Bicep
+        id: img
+        run: |
+          if [[ "${{ github.event.inputs.apply_or_whatif }}" == "apply" ]]; then
+            echo "image=${{ steps.build.outputs.image }}" >> $GITHUB_OUTPUT
+          else
+            # what-if mode: pin to whatever's already deployed, falling back
+            # to a public placeholder for the very first what-if.
+            set +e
+            IMG=$(az containerapp job show \
+                    -g "${{ steps.names.outputs.rg }}" \
+                    -n "cts-sb-stress-${{ steps.names.outputs.region }}-job" \
+                    --query "properties.template.containers[0].image" \
+                    -o tsv 2>/dev/null)
+            set -e
+            if [[ -z "$IMG" ]]; then
+              IMG="mcr.microsoft.com/azuredocs/aci-helloworld:latest"
+              echo "::warning title=No deployed job yet::Using placeholder image $IMG for what-if"
+            fi
+            echo "image=$IMG" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Bicep what-if
+        if: github.event.inputs.apply_or_whatif == 'what-if'
+        run: |
+          az deployment group what-if \
+            -g "${{ steps.names.outputs.rg }}" \
+            --template-file stress-test/infra/main.bicep \
+            --parameters \
+                regionTag="${{ steps.names.outputs.region }}" \
+                location="${{ steps.names.outputs.region }}" \
+                containerImage="${{ steps.img.outputs.image }}"
+
+      - name: Bicep deploy
+        if: github.event.inputs.apply_or_whatif == 'apply'
+        run: |
+          az deployment group create \
+            -g "${{ steps.names.outputs.rg }}" \
+            --name "stress-${{ github.run_number }}-${{ steps.names.outputs.region }}-$(echo ${{ github.sha }} | cut -c1-8)" \
+            --template-file stress-test/infra/main.bicep \
+            --parameters \
+                regionTag="${{ steps.names.outputs.region }}" \
+                location="${{ steps.names.outputs.region }}" \
+                containerImage="${{ steps.img.outputs.image }}" \
+            -o none
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Stress deploy: ${{ steps.names.outputs.region }} (${{ github.event.inputs.apply_or_whatif }})"
+            echo "- Resource group: \`${{ steps.names.outputs.rg }}\`"
+            echo "- ACR: \`${{ steps.names.outputs.acr }}.azurecr.io\`"
+            echo "- Job: \`cts-sb-stress-${{ steps.names.outputs.region }}-job\`"
+            echo "- Image: \`${{ steps.img.outputs.image }}\`"
+            if [[ "${{ github.event.inputs.apply_or_whatif }}" == "what-if" ]]; then
+              echo ""
+              echo "_Preview only. Re-run with **apply_or_whatif: apply** to deploy._"
+            fi
+          } >> $GITHUB_STEP_SUMMARY
