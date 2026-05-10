@@ -106,3 +106,28 @@ def test_get_metadata_missing_returns_none(store):
 
 def test_get_state_missing_returns_none(store):
     assert store.get_state("zzzzzzzzzzzzzzz") is None
+
+
+def test_put_state_records_redis_op_latency(store):
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    metrics = get_metrics()
+    mid = "m" * 15
+    store.put_state(mid, {"clock": "00:30.50"})
+    put_obs = [e for e in metrics.redis_op_seconds.events
+               if e[1] and e[1].get("op") == "put_state"]
+    assert put_obs, "expected redis_op_seconds observation for op=put_state"
+    elapsed, attrs = put_obs[-1]
+    assert elapsed >= 0
+    assert attrs == {"op": "put_state"}
+    reset_for_tests()
+
+
+def test_open_meet_records_redis_op_latency(store):
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    metrics = get_metrics()
+    store.open_meet("m" * 15, host_team_name="X", protocol_version=1, pi_account_id="oid")
+    ops = [attrs.get("op") for _, attrs in metrics.redis_op_seconds.events if attrs]
+    assert "open_meet" in ops
+    reset_for_tests()

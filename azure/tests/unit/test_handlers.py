@@ -273,3 +273,131 @@ async def test_meet_open_increments_meet_opened_metric():
     )
     assert metrics.meet_opened.total == starting_total + 1
     reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_update_scoreboard_records_event_handler_latency():
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    metrics = get_metrics()
+
+    sio, _, _, _ = _make_sio_with_spies()
+    register_handlers(sio, store=_store(), tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
+    )
+    await _handler(sio, "/pi", "update_scoreboard")("sidPi", {"clock": "00:30.50"})
+
+    handler_obs = [
+        e for e in metrics.event_handler_seconds.events
+        if e[1] and e[1].get("event") == "update_scoreboard"
+    ]
+    assert handler_obs, "expected an event_handler_seconds observation for update_scoreboard"
+    elapsed, attrs = handler_obs[-1]
+    assert elapsed >= 0
+    assert attrs == {"event": "update_scoreboard", "namespace": "/pi"}
+    reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_update_scoreboard_records_emit_fanout_latency():
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    metrics = get_metrics()
+
+    sio, _, _, _ = _make_sio_with_spies()
+    register_handlers(sio, store=_store(), tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
+    )
+    await _handler(sio, "/pi", "update_scoreboard")("sidPi", {"clock": "00:30.50"})
+
+    fanout_obs = [
+        e for e in metrics.emit_fanout_seconds.events
+        if e[1] and e[1].get("event") == "update_scoreboard"
+    ]
+    assert fanout_obs, "expected an emit_fanout_seconds observation for update_scoreboard"
+    reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_pi_connect_increments_active_sockets_and_pi_connections():
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    metrics = get_metrics()
+
+    sio, *_ = _make_sio_with_spies()
+    register_handlers(sio, store=_store(), tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
+    )
+    pi_obs = [e for e in metrics.active_sockets.events
+              if e[1] and e[1].get("namespace") == "/pi"]
+    assert pi_obs and pi_obs[-1][0] == 1
+    assert metrics.pi_connections.total == 1
+    reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_pi_disconnect_decrements_active_sockets_and_pi_connections():
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    metrics = get_metrics()
+
+    sio, *_ = _make_sio_with_spies()
+    register_handlers(sio, store=_store(), tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
+    )
+    await _handler(sio, "/pi", "disconnect")("sidPi")
+    # connect added 1, disconnect added -1 → net 0
+    pi_ns_total = sum(
+        delta for delta, attrs in metrics.active_sockets.events
+        if attrs and attrs.get("namespace") == "/pi"
+    )
+    assert pi_ns_total == 0
+    assert metrics.pi_connections.total == 0
+    reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_browser_connect_increments_active_sockets_scoreboard():
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    metrics = get_metrics()
+
+    sio, *_ = _make_sio_with_spies()
+    store = _store()
+    store.open_meet(MEET, host_team_name="X", protocol_version=1, pi_account_id="oid")
+    register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/scoreboard", "connect")("sidB", {}, {"meet_id": MEET})
+    sb_obs = [e for e in metrics.active_sockets.events
+              if e[1] and e[1].get("namespace") == "/scoreboard"]
+    assert sb_obs and sb_obs[-1][0] == 1
+    reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_browser_disconnect_decrements_active_sockets_scoreboard():
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    metrics = get_metrics()
+
+    sio, *_ = _make_sio_with_spies()
+    store = _store()
+    store.open_meet(MEET, host_team_name="X", protocol_version=1, pi_account_id="oid")
+    register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/scoreboard", "connect")("sidB", {}, {"meet_id": MEET})
+    await _handler(sio, "/scoreboard", "disconnect")("sidB")
+    sb_total = sum(
+        delta for delta, attrs in metrics.active_sockets.events
+        if attrs and attrs.get("namespace") == "/scoreboard"
+    )
+    assert sb_total == 0
+    reset_for_tests()
