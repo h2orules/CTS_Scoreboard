@@ -114,11 +114,9 @@
         {% endif %}
     </div>
     <div class="scoreboard_disclaimer">Scoreboard is unofficial. See results for official times.</div>
-    {% if initial_qr_overlay_svg %}
-    <div class="qr-overlay qr-overlay-{{ initial_qr_overlay_corner|default('top-right') }}">
+    <div id="qr_overlay" class="qr-overlay qr-overlay-{{ initial_qr_overlay_corner|default('top-right') }}{% if not initial_qr_overlay_svg or initial_qr_overlay_visibility|default('off') == 'off' %} qr-hidden{% endif %}">
         {{ initial_qr_overlay_svg|safe }}
     </div>
-    {% endif %}
     <div class="background" style="background-image: url('{{url_for('static', filename='pool.jpg')}}');"></div>
 
 </body>
@@ -160,6 +158,27 @@
     var confettiFired = {};  // Track which lanes have already shown confetti
     var maxQtTagLen = 0;    // Longest tag string for space reservation
     var raceState = {{ initial_race_state | tojson }};
+    var qrOverlayVisibility = {{ initial_qr_overlay_visibility | default('off') | tojson }};
+    var qrOverlayCorner = {{ initial_qr_overlay_corner | default('top-right') | tojson }};
+
+    function updateQrOverlay() {
+        var el = document.getElementById('qr_overlay');
+        if (!el) return;
+        // Apply corner class.
+        var corners = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+        for (var i = 0; i < corners.length; i++) {
+            el.classList.remove('qr-overlay-' + corners[i]);
+        }
+        el.classList.add('qr-overlay-' + (qrOverlayCorner || 'top-right'));
+        var hasContent = el.innerHTML.indexOf('<svg') !== -1;
+        var visible = false;
+        if (hasContent) {
+            if (qrOverlayVisibility === 'always') visible = true;
+            else if (qrOverlayVisibility === 'between_races') visible = (raceState !== 'Running');
+        }
+        if (visible) el.classList.remove('qr-hidden');
+        else el.classList.add('qr-hidden');
+    }
     var messageOverlayEnabled = {{ initial_settings.message_overlay_enabled | tojson }};
     var messagePages = {{ initial_message_pages | tojson }};
     var messageRotationInterval = {{ initial_settings.message_rotation_interval | tojson }};
@@ -671,6 +690,22 @@
             s[k] = new_s[k];
         }
 
+        // QR overlay live updates (server pushes after URL/meet/env change).
+        var qrChanged = false;
+        if ('qr_overlay_svg' in new_s) {
+            var qrEl = document.getElementById('qr_overlay');
+            if (qrEl) qrEl.innerHTML = new_s['qr_overlay_svg'] || '';
+            qrChanged = true;
+        }
+        if ('qr_overlay_corner' in new_s) {
+            qrOverlayCorner = new_s['qr_overlay_corner'];
+            qrChanged = true;
+        }
+        if ('qr_overlay_visibility' in new_s) {
+            qrOverlayVisibility = new_s['qr_overlay_visibility'];
+            qrChanged = true;
+        }
+
         // Track race state from server FSM and handle transitions
         var eventHeatChanged = false;
         if ("race_state" in s && s["race_state"] !== raceState) {
@@ -690,7 +725,10 @@
 
             // Update display mode for blank states
             updateBlankDisplay(raceState);
+            qrChanged = true;
         }
+
+        if (qrChanged) updateQrOverlay();
 
         // Track current event/heat for test controls
         if ("current_event" in s) currentEvent = parseInt(s["current_event"]) || currentEvent;
@@ -847,6 +885,10 @@
 
         s = {};
     });
+
+    // Initialise QR overlay visibility on page load (race-state may already
+    // dictate hidden, e.g. mid-race reload).
+    updateQrOverlay();
 
 </script>
 

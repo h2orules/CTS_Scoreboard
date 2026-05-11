@@ -94,3 +94,29 @@ def substitute_qr_tokens(
 def render_overlay_svg(target_url: str) -> str:
     """Render the small corner overlay QR (smaller scale, transparent bg)."""
     return render_qr_svg(target_url, scale=_DEFAULT_OVERLAY_SCALE, light=None)
+
+
+def render_qr_png(
+    target_url: str,
+    *,
+    target_px: int = 1000,
+    border: int = _DEFAULT_BORDER,
+) -> bytes:
+    """Render a QR code as PNG bytes, sized to roughly ``target_px`` pixels.
+
+    Used for the "Download QR" button, which expects a 4" × 4" image at
+    250 dpi (1000 × 1000 px). Segno emits PNGs whose pixel dimensions are
+    ``(modules + 2 * border) * scale``, so the scale is chosen so the result
+    is the largest size that does not exceed ``target_px``. Returns ``b""``
+    when ``target_url`` is empty.
+    """
+    if not target_url:
+        return b""
+    qr = segno.make(target_url, error="m")
+    # qr.symbol_size returns (px, px) for a given scale+border. Compute the
+    # largest integer scale where the image fits within target_px.
+    modules = qr.symbol_size(scale=1, border=border)[0]  # = modules + 2*border
+    scale = max(1, target_px // modules)
+    buf = io.BytesIO()
+    qr.save(buf, kind="png", scale=scale, border=border, dark="#000", light="#fff")
+    return buf.getvalue()

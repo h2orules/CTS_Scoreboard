@@ -27,7 +27,7 @@ import wifi_manager
 import settings_routes
 from azure_relay import AzureRelayClient
 from template_bundle import build_bundle
-from qr_utils import build_meet_url, render_overlay_svg, substitute_qr_tokens
+from qr_utils import build_meet_url, render_overlay_svg, substitute_qr_tokens, QR_TOKEN
 
 DEBUG = False
 #DEBUG = True
@@ -101,8 +101,15 @@ settings = {
     'azure_public_url': '',
     'azure_template_path': 'web/home',
     # QR (Phase 5)
-    'qr_overlay_enabled': False,
+    # qr_overlay_visibility: 'off' | 'between_races' | 'always'
+    'qr_overlay_visibility': 'off',
     'qr_overlay_corner': 'top-right',
+    # Legacy boolean migrated into qr_overlay_visibility on load.
+    'qr_overlay_enabled': False,
+    # Tracks whether the auto QR message page has already been injected for
+    # the current sign-in (cleared on sign-out so the next sign-in re-injects
+    # if the operator removed it).
+    'qr_message_page_injected': False,
     }
 in_file = None
 out_file = None
@@ -222,6 +229,15 @@ def load_settings():
             settings['azure_public_url'] = ''
             with open(settings_file, "wt") as f:
                 json.dump(settings, f, sort_keys=True, indent=4)
+        # Migrate legacy boolean qr_overlay_enabled → qr_overlay_visibility.
+        # Only migrate when the on-disk file actually carried the boolean
+        # (i.e. an upgrade path); fresh installs use the default 'off'.
+        if 'qr_overlay_enabled' in _raw_settings_on_disk and \
+                'qr_overlay_visibility' not in _raw_settings_on_disk:
+            settings['qr_overlay_visibility'] = (
+                'always' if _raw_settings_on_disk.get('qr_overlay_enabled')
+                else 'off'
+            )
     except: pass
     # Azure settings live in their own (git-ignored) file. Load it on top of
     # whatever defaults / migrated values are already in `settings`.
@@ -894,6 +910,106 @@ def _enabled_page_indices():
     return [i for i, p in enumerate(settings.get('message_pages', [])) if p.get('enabled')]
 
 
+_QR_AUTO_PAGE_TEXT = (
+    "# View the scoreboard live\n"
+    "Scan with your mobile device\n"
+    "[[QR]]"
+)
+
+
+def _inject_qr_message_page() -> bool:
+    """Append the auto QR message page once per fresh sign-in.
+
+    The new page is disabled, center-aligned, and placed at the end of the
+    rotation. Returns True if a page was actually appended (caller can then
+    decide to broadcast/persist). Skipped when:
+      * there are already 5 pages (the per-form maximum), or
+      * any existing page already contains the ``[[QR]]`` token.
+    """
+    pages = list(settings.get('message_pages', []) or [])
+    if len(pages) >= 5:
+        return False
+    for p in pages:
+        if QR_TOKEN in (p.get('text') or ''):
+            return False
+    pages.append({
+        'text': _QR_AUTO_PAGE_TEXT,
+        'align': 'center',
+        'enabled': False,
+    })
+    settings['message_pages'] = pages
+    try:
+        with open(settings_file, "wt") as f:
+            json.dump(settings, f, sort_keys=True, indent=4)
+    except Exception:
+        traceback.print_exc()
+    return True
+
+
+def broadcast_qr_overlay_refresh():
+    """Re-render the overlay SVG + cached message pages, then broadcast.
+
+    Called after any change that affects the QR target URL (Azure URL save,
+    meet-id rotate/set, environment switch) or the overlay visibility/corner
+    settings. Pushes a single ``update_scoreboard`` payload that connected
+    browsers will use to swap the overlay content and re-evaluate gating.
+    """
+    relay_url, public_url = _active_azure_urls()
+    qr_target = build_meet_url(
+        public_base=public_url or relay_url,
+        meet_id=getattr(azure_relay_client, 'meet_id', '') if 'azure_relay_client' in globals() else '',
+    )
+    qr_visibility = settings.get('qr_overlay_visibility', 'off')
+    qr_corner = settings.get('qr_overlay_corner', 'top-right')
+    overlay_svg = render_overlay_svg(qr_target) if qr_visibility != 'off' and qr_target else ''
+    # Invalidate cached message-page HTML so [[QR]] tokens pick up the new URL.
+    page_keys = _render_and_cache_message_pages()
+    pages = settings.get('message_pages', [])
+    broadcast_scoreboard({
+        'qr_overlay_svg': overlay_svg,
+        'qr_overlay_corner': qr_corner,
+        'qr_overlay_visibility': qr_visibility,
+        'message_pages': [
+            {'text': p.get('text', ''), 'align': p.get('align', 'left'),
+             'enabled': p.get('enabled', False),
+             'key': page_keys[i] if i < len(page_keys) else None}
+            for i, p in enumerate(pages)
+        ],
+    })
+
+
+def _on_azure_status(snap):
+    """Status-subscriber callback: react to Azure connection-state changes.
+
+    On the first transition into the connected state (per fresh sign-in),
+    inject the auto QR message page and broadcast a refresh. Sign-out
+    resets the latch so the next sign-in re-injects (only if absent).
+    """
+    state = snap.get('state')
+    if state == 'connected':
+        if not settings.get('qr_message_page_injected'):
+            injected = _inject_qr_message_page()
+            settings['qr_message_page_injected'] = True
+            try:
+                with open(settings_file, "wt") as f:
+                    json.dump(settings, f, sort_keys=True, indent=4)
+            except Exception:
+                traceback.print_exc()
+            if injected:
+                _update_message_rotation()
+        broadcast_qr_overlay_refresh()
+    elif state == 'needs_auth':
+        # Operator signed out — clear the latch so the next sign-in can
+        # re-inject the auto QR page if it's no longer present.
+        if settings.get('qr_message_page_injected'):
+            settings['qr_message_page_injected'] = False
+            try:
+                with open(settings_file, "wt") as f:
+                    json.dump(settings, f, sort_keys=True, indent=4)
+            except Exception:
+                traceback.print_exc()
+
+
 def _start_message_rotation():
     """Start the background rotation timer if 2+ pages are enabled and overlay is on."""
     global _message_rotation_running
@@ -1096,9 +1212,10 @@ def _build_render_context():
         public_base=public_url or relay_url,
         meet_id=getattr(azure_relay_client, 'meet_id', '') if 'azure_relay_client' in globals() else '',
     )
+    qr_visibility = settings.get('qr_overlay_visibility', 'off')
     qr_overlay_svg = (
         render_overlay_svg(qr_target)
-        if settings.get('qr_overlay_enabled') and qr_target
+        if qr_visibility != 'off' and qr_target
         else ''
     )
 
@@ -1127,6 +1244,7 @@ def _build_render_context():
         initial_active_message_page=_message_rotation_index,
         initial_qr_overlay_svg=qr_overlay_svg,
         initial_qr_overlay_corner=settings.get('qr_overlay_corner', 'top-right'),
+        initial_qr_overlay_visibility=qr_visibility,
         initial_settings={
             'show_pr_tags': settings.get('show_pr_tags', True),
             'show_confetti': settings.get('show_confetti', True),
@@ -1195,6 +1313,10 @@ def _azure_context_provider():
         ctx['test_background'] = False
         ctx['test_event'] = None
         ctx['test_heat'] = None
+        # The Pi-only QR overlay is intentionally suppressed when serving via
+        # Azure: the public viewer should never see the local overlay.
+        ctx['initial_qr_overlay_svg'] = ''
+        ctx['initial_qr_overlay_visibility'] = 'off'
         return ctx
     except Exception:
         traceback.print_exc()
@@ -1384,6 +1506,8 @@ logging.getLogger('geventwebsocket.handler').setLevel(logging.INFO)
 # azure_relay was constructed above settings load, so its relay_url
 # was empty. Push the now-loaded URL into it.
 azure_relay_client.update_relay_url(_active_azure_urls()[0])
+# React to relay state transitions for QR-page injection + overlay refresh.
+azure_relay_client.subscribe_status(_on_azure_status)
 # Start the worker thread whenever we have credentials. The worker just sits
 # in needs_auth/disconnected if there's nothing to do, but having it alive
 # means the Reconnect button and post-sign-in flow can work without a server

@@ -750,6 +750,10 @@
                             {% endfor %}
                             <button type="button" class="msg-tab-add" id="msg_add_page" onclick="msgAddPage()" {% if
                                 message_pages | length>= 5 %}disabled{% endif %}>+ Add</button>
+                            <button type="button" class="msg-tab-add" id="msg_insert_qr_page"
+                                onclick="azureInsertQrPage()"
+                                title="Append a centred 'View the scoreboard live' page with a QR code"
+                                {% if message_pages | length>= 5 %}disabled{% endif %}>+ QR page</button>
                         </div>
                         <div id="msg_panels_container">
                             {% for page in message_pages %}
@@ -777,6 +781,7 @@
                                                             <tr><td>#### Heading</td><td>Heading 4</td></tr>
                                                             <tr><td>- item</td><td>Bulleted list</td></tr>
                                                             <tr><td>1. item</td><td>Numbered list</td></tr>
+                                                            <tr><td>[[QR]]</td><td>Live-scoreboard QR code</td></tr>
                                                         </table>
                                                     </div>
                                                 </span>
@@ -826,6 +831,8 @@
                                                         onclick="fmtToggle({{ loop.index0 }},'ol')">
                                                         <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><text x="0" y="5.5" font-size="5" font-family="sans-serif">1.</text><rect x="5" y="3" width="10" height="2"/><text x="0" y="9.5" font-size="5" font-family="sans-serif">2.</text><rect x="5" y="7" width="10" height="2"/><text x="0" y="13.5" font-size="5" font-family="sans-serif">3.</text><rect x="5" y="11" width="10" height="2"/></svg>
                                                     </button>
+                                                    <button type="button" class="fmt-btn" data-fmt="qr" title="Insert live QR code"
+                                                        onclick="fmtInsertQr({{ loop.index0 }})">QR</button>
                                                 </div>
                                                 <div class="justify-btn-group" data-idx="{{ loop.index0 }}">
                                                     <button type="button"
@@ -936,6 +943,15 @@
                         if (!ta) return;
                         ta.focus();
                         MsgFmt.fmtToggle(ta, fmt);
+                        enforce(ta);
+                        fmtUpdateToolbar(idx);
+                    };
+
+                    window.fmtInsertQr = function(idx) {
+                        var ta = _getTA(idx);
+                        if (!ta) return;
+                        ta.focus();
+                        MsgFmt.insertQr(ta);
                         enforce(ta);
                         fmtUpdateToolbar(idx);
                     };
@@ -1078,6 +1094,7 @@
                             '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><circle cx="2" cy="4" r="1.5"/><rect x="5" y="3" width="10" height="2"/><circle cx="2" cy="8" r="1.5"/><rect x="5" y="7" width="10" height="2"/><circle cx="2" cy="12" r="1.5"/><rect x="5" y="11" width="10" height="2"/></svg></button>' +
                             '<button type="button" class="fmt-btn" data-fmt="ol" title="Numbered list" onclick="fmtToggle(' + idx + ',\'ol\')">' +
                             '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><text x="0" y="5.5" font-size="5" font-family="sans-serif">1.</text><rect x="5" y="3" width="10" height="2"/><text x="0" y="9.5" font-size="5" font-family="sans-serif">2.</text><rect x="5" y="7" width="10" height="2"/><text x="0" y="13.5" font-size="5" font-family="sans-serif">3.</text><rect x="5" y="11" width="10" height="2"/></svg></button>' +
+                            '<button type="button" class="fmt-btn" data-fmt="qr" title="Insert live QR code" onclick="fmtInsertQr(' + idx + ')">QR</button>' +
                             '</div>' +
                             '<div class="justify-btn-group" data-idx="' + idx + '">' +
                             '<button type="button" class="justify-btn active" data-align="left" title="Align left" onclick="msgSetAlign(' + idx + ',\'left\',this);">' +
@@ -1493,6 +1510,44 @@
                         onclick="document.getElementById('azure-rotate-overlay').style.display='flex';">Rotate Meet ID</button>
                     <button class="btn btn-default" type="button" id="azure-friendly-btn"
                         onclick="azureOpenFriendlyOverlay()">Pick friendly name&hellip;</button>
+
+                    <div id="azure-qr-card" style="display:none;margin-top:14px;border:1px solid #ddd;border-radius:4px;padding:10px 14px;background:#fff;">
+                        <div style="font-weight:bold;margin-bottom:6px;">Scoreboard QR code</div>
+                        <div style="font-size:12px;color:#666;margin-bottom:8px;">
+                            Scannable link that takes phones directly to the live meet URL.
+                            Use the markdown token <code>[[QR]]</code> on a message-board page to render
+                            it inline; the visibility setting below controls the upper-corner overlay
+                            on the scoreboard itself.
+                        </div>
+                        <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
+                            <div id="azure-qr-preview"
+                                 style="width:160px;height:160px;border:1px solid #eee;background:#fafafa;display:flex;align-items:center;justify-content:center;">
+                                <span style="font-size:11px;color:#999;">No meet ID</span>
+                            </div>
+                            <div style="flex:1;min-width:220px;">
+                                <div class="input-group" style="margin-bottom:8px;">
+                                    <label for="qr_visibility" style="font-size:12px;">Overlay visibility</label>
+                                    <select id="qr_visibility" class="form-control" onchange="azureSaveQrSettings()">
+                                        <option value="off"{% if qr_overlay_visibility == 'off' %} selected{% endif %}>Off (hidden)</option>
+                                        <option value="between_races"{% if qr_overlay_visibility == 'between_races' %} selected{% endif %}>Only between races</option>
+                                        <option value="always"{% if qr_overlay_visibility == 'always' %} selected{% endif %}>Always visible</option>
+                                    </select>
+                                </div>
+                                <div class="input-group" style="margin-bottom:8px;">
+                                    <label for="qr_corner" style="font-size:12px;">Corner</label>
+                                    <select id="qr_corner" class="form-control" onchange="azureSaveQrSettings()">
+                                        <option value="top-left"{% if qr_overlay_corner == 'top-left' %} selected{% endif %}>Top left</option>
+                                        <option value="top-right"{% if qr_overlay_corner == 'top-right' %} selected{% endif %}>Top right</option>
+                                        <option value="bottom-left"{% if qr_overlay_corner == 'bottom-left' %} selected{% endif %}>Bottom left</option>
+                                        <option value="bottom-right"{% if qr_overlay_corner == 'bottom-right' %} selected{% endif %}>Bottom right</option>
+                                    </select>
+                                </div>
+                                <button type="button" class="btn btn-default" id="azure-qr-download-btn"
+                                        onclick="window.location='/azure/qr.png';">Download QR (PNG, 4&quot;&times;4&quot; @ 250 dpi)</button>
+                                <span id="azure-qr-toast" style="margin-left:10px;font-size:12px;color:#3c763d;"></span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1878,6 +1933,30 @@
             if (cfgStatus) {
                 cfgStatus.textContent = snap.relay_url ? '' : '(setup required)';
             }
+
+            // QR code card: visible only when we have a publishable meet URL.
+            var qrCard = $('azure-qr-card');
+            if (qrCard) {
+                if (snap.meet_id && snap.public_url) {
+                    qrCard.style.display = 'block';
+                    var preview = $('azure-qr-preview');
+                    if (preview) {
+                        // Cache-bust per snapshot so URL/env changes refresh
+                        // the preview without a hard reload.
+                        var token = encodeURIComponent(
+                            (snap.environment || '') + '|' +
+                            (snap.public_url || '') + '|' +
+                            (snap.meet_id || ''));
+                        preview.innerHTML = '<img alt="QR code preview" ' +
+                            'src="/azure/qr.png?v=' + token + '" ' +
+                            'style="width:100%;height:100%;display:block;">';
+                    }
+                    var dlBtn = $('azure-qr-download-btn');
+                    if (dlBtn) dlBtn.disabled = false;
+                } else {
+                    qrCard.style.display = 'none';
+                }
+            }
         }
 
         function refreshStatus() {
@@ -1917,6 +1996,46 @@
                 });
             });
         }
+
+        // ----- Save QR overlay settings -----
+        window.azureSaveQrSettings = function() {
+            var visibility = $('qr_visibility').value;
+            var corner = $('qr_corner').value;
+            var toast = $('azure-qr-toast');
+            if (toast) toast.textContent = 'Saving\u2026';
+            postJSON('/azure/qr_settings', { visibility: visibility, corner: corner })
+                .then(function() {
+                    if (toast) {
+                        toast.style.color = '#3c763d';
+                        toast.textContent = 'Saved';
+                        setTimeout(function() { toast.textContent = ''; }, 1800);
+                    }
+                })
+                .catch(function(err) {
+                    if (toast) {
+                        toast.style.color = '#a94442';
+                        toast.textContent = 'Save failed: ' + (err && err.message || err);
+                    }
+                });
+        };
+
+        // ----- Insert auto-generated QR message page -----
+        window.azureInsertQrPage = function() {
+            postJSON('/azure/insert_qr_page', {})
+                .then(function(resp) {
+                    if (resp && resp.injected) {
+                        // Reload so the new page appears in the form. Settings
+                        // form state is server-rendered, so a soft reload is
+                        // the simplest way to surface the new tab.
+                        window.location.reload();
+                    } else {
+                        showToast('QR page already present (or page list is full).', 'error');
+                    }
+                })
+                .catch(function(err) {
+                    showToast('Insert failed: ' + (err && err.message || err), 'error');
+                });
+        };
 
         // ----- Sign in (device-code) -----
         window.azureSignIn = function() {
