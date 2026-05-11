@@ -138,6 +138,36 @@ class MeetStateStore:
         except json.JSONDecodeError:
             return None
 
+    # ---------- pi <-> meet binding (used by friendly-name picker) ----------
+
+    def get_pi_meet_id(self, pi_account_id: str) -> str | None:
+        """Return the meet ID currently bound to this Pi identity, if any."""
+        if not pi_account_id:
+            return None
+        return _maybe_str(self._r.get(f"pi:{pi_account_id}:meet_id"))
+
+    def is_meet_id_taken(
+        self, meet_id: str, *, by_account_id: str
+    ) -> Literal["no", "self", "other"]:
+        """Check whether ``meet_id`` is already claimed.
+
+        - ``"no"``: no live metadata exists for this id, or it's expired.
+        - ``"self"``: the current Pi (``by_account_id``) already owns it.
+        - ``"other"``: a different Pi owns it, OR metadata exists but is
+          orphaned (no recorded ``pi_account_id``); treated as taken so we
+          fail safely.
+        """
+        meta = self.get_metadata(meet_id)
+        if not meta:
+            return "no"
+        # An expired/rotated id is no longer claimed by anyone.
+        if meta.get("status") == "expired_id_rotated":
+            return "no"
+        owner = meta.get("pi_account_id") or ""
+        if owner and by_account_id and owner == by_account_id:
+            return "self"
+        return "other"
+
     # ---------- live state (latest update_scoreboard payload) ----------
 
     def put_state(self, meet_id: str, payload: dict[str, Any]) -> None:

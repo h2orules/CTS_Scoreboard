@@ -106,3 +106,42 @@ def test_get_metadata_missing_returns_none(store):
 
 def test_get_state_missing_returns_none(store):
     assert store.get_state("zzzzzzzzzzzzzzz") is None
+
+
+def test_get_pi_meet_id_returns_bound_id(store):
+    mid = "m" * 15
+    store.open_meet(mid, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
+    assert store.get_pi_meet_id("oid-1") == mid
+    assert store.get_pi_meet_id("oid-other") is None
+    assert store.get_pi_meet_id("") is None
+
+
+def test_is_meet_id_taken_no_when_empty(store):
+    assert store.is_meet_id_taken("brandnewID12", by_account_id="oid-1") == "no"
+
+
+def test_is_meet_id_taken_self_when_owner_matches(store):
+    mid = "MidlakesMM-26"
+    store.open_meet(mid, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
+    assert store.is_meet_id_taken(mid, by_account_id="oid-1") == "self"
+
+
+def test_is_meet_id_taken_other_when_owner_differs(store):
+    mid = "MidlakesMM-26"
+    store.open_meet(mid, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
+    assert store.is_meet_id_taken(mid, by_account_id="oid-2") == "other"
+
+
+def test_is_meet_id_taken_no_when_expired(store):
+    mid = "MidlakesMM-26"
+    store.open_meet(mid, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
+    store.mark_status(mid, "expired_id_rotated")
+    # Even the original owner sees "no" — the id is free for re-grab.
+    assert store.is_meet_id_taken(mid, by_account_id="oid-1") == "no"
+
+
+def test_is_meet_id_taken_other_when_orphaned(store):
+    # Metadata exists but has no owner recorded — fail safe (treat as taken).
+    mid = "OrphanedMeet01"
+    store.open_meet(mid, host_team_name="A", protocol_version=1, pi_account_id="")
+    assert store.is_meet_id_taken(mid, by_account_id="oid-1") == "other"
