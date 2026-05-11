@@ -114,9 +114,11 @@
         {% endif %}
     </div>
     <div class="scoreboard_disclaimer">Scoreboard is unofficial. See results for official times.</div>
+    {% if serving_context == 'pi' %}
     <div id="qr_overlay" class="qr-overlay qr-overlay-{{ initial_qr_overlay_corner|default('top-right') }}{% if not initial_qr_overlay_svg or initial_qr_overlay_visibility|default('off') == 'off' %} qr-hidden{% endif %}">
         {{ initial_qr_overlay_svg|safe }}
     </div>
+    {% endif %}
     <div class="background" style="background-image: url('{{url_for('static', filename='pool.jpg')}}');"></div>
 
 </body>
