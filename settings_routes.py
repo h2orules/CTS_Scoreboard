@@ -295,8 +295,17 @@ def register(flask_app, app_module):
             # --- Persist & broadcast -----------------------------------------
 
             if modified:
-                with open(_app.settings_file, "wt") as f:
-                    json.dump(settings, f, sort_keys=True, indent=4)
+                _app.save_settings()
+                # Most settings (meet title, team names, num_lanes, ad image,
+                # display flags, etc.) are baked into the server-rendered
+                # HTML, so connected scoreboards need to reload to pick them
+                # up. broadcast_settings_changed handles both the local
+                # /scoreboard namespace and Azure (which gets a fresh
+                # meet_context + a reload nudge for live viewers).
+                try:
+                    _app.broadcast_settings_changed()
+                except Exception:
+                    pass
 
             if overlay_needs_broadcast:
                 _app.send_message_overlay_state()
@@ -366,7 +375,9 @@ def register(flask_app, app_module):
                     team_guest3=settings.get('team_guest3', ''),
                     team_guest3_tag=settings.get('team_guest3_tag', ''),
                     shutdown_nonce=_new_shutdown_nonce(),
-                    wifi_available=wifi_manager.is_available())
+                    wifi_available=wifi_manager.is_available(),
+                    qr_overlay_visibility=settings.get('qr_overlay_visibility', 'off'),
+                    qr_overlay_corner=settings.get('qr_overlay_corner', 'top-right'))
 
     # -- WiFi management API -------------------------------------------------
 
@@ -424,8 +435,7 @@ def register(flask_app, app_module):
         _app.event_info.clear()
         _app.settings['event_info'] = _app.event_info.to_object()
         _app.settings.pop('schedule_filename', None)
-        with open(_app.settings_file, "wt") as f:
-            json.dump(_app.settings, f, sort_keys=True, indent=4)
+        _app.save_settings()
         return flask.redirect('/settings')
 
     @flask_app.route('/standards_clear')
@@ -435,8 +445,7 @@ def register(flask_app, app_module):
         _app.settings.pop('time_standards', None)
         _app.settings.pop('standards_filename', None)
         _app.settings.pop('std_desc_overrides', None)
-        with open(_app.settings_file, "wt") as f:
-            json.dump(_app.settings, f, sort_keys=True, indent=4)
+        _app.save_settings()
         return flask.redirect('/settings')
 
     @flask_app.route('/records_remove/<int:set_id>')
@@ -448,8 +457,7 @@ def register(flask_app, app_module):
             _app.settings['swim_record_sets'] = base64.b64encode(pickle.dumps(_app.swim_record_sets)).decode('ascii')
         else:
             _app.settings.pop('swim_record_sets', None)
-        with open(_app.settings_file, "wt") as f:
-            json.dump(_app.settings, f, sort_keys=True, indent=4)
+        _app.save_settings()
         return flask.redirect('/settings')
 
     # -- Shutdown ------------------------------------------------------------
@@ -495,8 +503,7 @@ def register(flask_app, app_module):
                     combined[(int(k[1]), int(k[2]))] = (int(v[0]), int(v[1]))
             _app.event_info.combine_events(combined)
             _app.settings['event_info'] = _app.event_info.to_object()
-            with open(_app.settings_file, "wt") as f:
-                json.dump(_app.settings, f, sort_keys=True, indent=4)
+            _app.save_settings()
         event_heat = list(_app.event_info.events.keys())
         event_heat.sort()
         return flask.render_template('schedule_preview.html',
@@ -581,6 +588,14 @@ def register(flask_app, app_module):
         # Live-swap the relay URL if the active environment's URL changed.
         active_relay, _public = _app._active_azure_urls()
         _app.azure_relay_client.update_relay_url(active_relay)
+
+        # Any change to the active env's URLs (or the env itself) shifts the
+        # public meet URL; rebroadcast so connected scoreboards refresh their
+        # QR overlay and any cached message pages with [[QR]] tokens.
+        try:
+            _app.broadcast_qr_overlay_refresh()
+        except Exception:
+            pass
 
         return flask.jsonify({'ok': True, 'status': _azure_status_payload()})
 
@@ -677,6 +692,10 @@ def register(flask_app, app_module):
         new_id = _app.azure_relay_client.rotate_meet_id()
         if new_id is None:
             return flask.jsonify({'error': 'not signed in to Azure'}), 400
+        try:
+            _app.broadcast_qr_overlay_refresh()
+        except Exception:
+            pass
         return flask.jsonify({'ok': True, 'meet_id': new_id, 'status': _azure_status_payload()})
 
     @flask_app.route('/azure/check_meet_id', methods=['POST'])
@@ -704,8 +723,92 @@ def register(flask_app, app_module):
         ok, result = _app.azure_relay_client.set_meet_id(name)
         if not ok:
             return flask.jsonify({'ok': False, 'error': result}), 400
+        try:
+            _app.broadcast_qr_overlay_refresh()
+        except Exception:
+            pass
         return flask.jsonify({'ok': True, 'meet_id': result,
                               'status': _azure_status_payload()})
+
+    @flask_app.route('/azure/qr.png', methods=['GET'])
+    @flask_login.login_required
+    def route_azure_qr_png():
+        """Serve the meet-URL QR code as a 4\" × 4\" @ 250 dpi PNG."""
+        from qr_utils import build_meet_url, render_qr_png
+        relay, public = _app._active_azure_urls()
+        meet_id = getattr(_app.azure_relay_client, 'meet_id', '') or ''
+        target = build_meet_url(public_base=public or relay, meet_id=meet_id)
+        if not target:
+            return flask.jsonify({
+                'error': 'Sign in to Azure and pick a meet ID first.'
+            }), 409
+        png = render_qr_png(target, target_px=1000)
+        resp = flask.make_response(png)
+        resp.headers['Content-Type'] = 'image/png'
+        resp.headers['Content-Disposition'] = (
+            'attachment; filename="scoreboard-qr.png"'
+        )
+        resp.headers['Cache-Control'] = 'no-store'
+        return resp
+
+    @flask_app.route('/azure/qr_settings', methods=['POST'])
+    @flask_login.login_required
+    def route_azure_qr_settings():
+        """Update the QR overlay visibility/corner and broadcast a refresh."""
+        data = flask.request.get_json(silent=True) or {}
+        modified = False
+        if 'visibility' in data:
+            v = (data.get('visibility') or '').strip()
+            if v not in ('off', 'between_races', 'always'):
+                return flask.jsonify({
+                    'ok': False,
+                    'error': "visibility must be 'off', 'between_races', or 'always'",
+                }), 400
+            if _app.settings.get('qr_overlay_visibility') != v:
+                _app.settings['qr_overlay_visibility'] = v
+                modified = True
+        if 'corner' in data:
+            c = (data.get('corner') or '').strip()
+            valid = ('top-left', 'top-right', 'bottom-left', 'bottom-right')
+            if c not in valid:
+                return flask.jsonify({
+                    'ok': False,
+                    'error': 'corner must be one of ' + ', '.join(valid),
+                }), 400
+            if _app.settings.get('qr_overlay_corner') != c:
+                _app.settings['qr_overlay_corner'] = c
+                modified = True
+        if modified:
+            try:
+                _app.save_settings()
+            except Exception:
+                pass
+            try:
+                _app.broadcast_qr_overlay_refresh()
+            except Exception:
+                pass
+        return flask.jsonify({
+            'ok': True,
+            'visibility': _app.settings.get('qr_overlay_visibility', 'off'),
+            'corner': _app.settings.get('qr_overlay_corner', 'top-right'),
+        })
+
+    @flask_app.route('/azure/insert_qr_page', methods=['POST'])
+    @flask_login.login_required
+    def route_azure_insert_qr_page():
+        """Append the auto QR message page (idempotent), bypassing sign-in."""
+        injected = _app._inject_qr_message_page()
+        if injected:
+            try:
+                _app.send_message_overlay_state()
+                _app._update_message_rotation()
+            except Exception:
+                pass
+        return flask.jsonify({
+            'ok': True,
+            'injected': injected,
+            'page_count': len(_app.settings.get('message_pages', [])),
+        })
 
     # -- Login / logout ------------------------------------------------------
 

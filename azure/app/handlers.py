@@ -235,6 +235,29 @@ def register_handlers(
             store.put_context(meet_id, context)
             return {"ok": True}
 
+    @sio.on("reload_clients", namespace="/pi")
+    async def on_reload_clients(sid: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Pi requested all live viewers reload (Pi-side settings change).
+
+        We don't try to be clever about which keys changed — the Pi
+        already re-pushed meet_context before this event, so a soft reload
+        on the connected browsers is enough for them to pick up the fresh
+        server-rendered HTML.
+        """
+        with _handler_timer("reload_clients"):
+            sess = await sio.get_session(sid, namespace="/pi")
+            meet_id = sess.get(_SESSION_PI_MEET)
+            if not meet_id:
+                return {"ok": False, "error": "no meet"}
+            with _emit_timer("reload_clients"):
+                await sio.emit(
+                    "reload_clients",
+                    payload or {},
+                    room=meet_id,
+                    namespace="/scoreboard",
+                )
+            return {"ok": True}
+
     @sio.on("invalidate", namespace="/pi")
     async def on_invalidate(sid: str, payload: dict[str, Any]) -> dict[str, Any]:
         with _handler_timer("invalidate"):
