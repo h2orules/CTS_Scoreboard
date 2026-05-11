@@ -130,6 +130,30 @@ jobs:
                   --query properties.configuration.ingress.fqdn -o tsv)
           echo "url=https://$FQDN" >> $GITHUB_OUTPUT
 
+      - name: Bind managed certificate for custom domain
+        if: github.event.inputs.mode == 'apply'
+        run: |
+          # Registers a managed TLS certificate for the custom domain and sets
+          # bindingType to SniEnabled. This step is idempotent: it creates the
+          # cert on first run and reattaches it on subsequent infra deploys
+          # (Bicep registers the hostname with bindingType=Disabled, and this
+          # step upgrades it). The cert is free and auto-renewed by Azure.
+          #
+          # PREREQUISITE: DNS CNAME and TXT (asuid.*) records must be in place
+          # in GoDaddy before this step will succeed — see CUSTOM_DOMAIN_SETUP.md.
+          ENV=${{ github.event.inputs.environment }}
+          if [[ "$ENV" == "prod" ]]; then
+            CUSTOM_DOMAIN="scoreboard.aquagnomeapps.com"
+          else
+            CUSTOM_DOMAIN="scoreboard-pre.aquagnomeapps.com"
+          fi
+          az containerapp hostname bind \
+            -g "${{ steps.target.outputs.rg }}" \
+            -n "${{ steps.target.outputs.app }}" \
+            --hostname "$CUSTOM_DOMAIN" \
+            --environment "cts-sb-${ENV}-cae" \
+            --validation-method CNAME
+
       - name: Smoke test
         if: github.event.inputs.mode == 'apply'
         run: |
