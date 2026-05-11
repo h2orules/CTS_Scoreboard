@@ -987,6 +987,31 @@ def broadcast_qr_overlay_refresh():
     })
 
 
+def broadcast_settings_changed():
+    """Notify all connected scoreboard browsers that settings changed.
+
+    Many settings (meet title, team names, num_lanes, ad image, display
+    options, etc.) are baked into the rendered HTML at request time rather
+    than driven by the live update_scoreboard stream, so the cleanest way
+    to reflect them is a soft client reload.
+
+    Locally: emit ``reload_clients`` on the /scoreboard namespace.
+    Azure: re-push the latest meet_context (so the re-rendered page picks
+    up the new values) and forward the same ``reload_clients`` event so
+    Azure can fan it out to its connected viewers.
+    """
+    socketio.emit('reload_clients', {}, namespace='/scoreboard')
+    client = globals().get('azure_relay_client')
+    if client is not None:
+        try:
+            ctx = _azure_context_provider()
+            if ctx is not None:
+                client.forward_event('meet_context', ctx)
+        except Exception:
+            traceback.print_exc()
+        client.forward_event('reload_clients', {})
+
+
 def _on_azure_status(snap):
     """Status-subscriber callback: react to Azure connection-state changes.
 

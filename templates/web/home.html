@@ -687,6 +687,15 @@
         next();
     }
 
+    // Server-pushed soft reload (e.g. after operator saves Settings on the
+    // Pi). Many display fields are baked into the rendered HTML, so the
+    // simplest correct refresh is to re-load the page.
+    socket.on('reload_clients', () => {
+        // Small jitter so 100s of viewers don't reconnect in the same tick.
+        var delay = 50 + Math.floor(Math.random() * 450);
+        setTimeout(function () { window.location.reload(); }, delay);
+    });
+
     socket.on('update_scoreboard', (new_s) => {
         for (k in new_s) {
             s[k] = new_s[k];
