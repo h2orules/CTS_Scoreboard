@@ -67,3 +67,55 @@ class TestAzureLogoutWhenNotSignedIn:
         resp = logged_in_client.post("/azure/logout")
         assert resp.status_code == 200
         assert resp.get_json()["status"]["state"] == "needs_auth"
+
+
+class TestAzureSetMeetId:
+    def test_rejects_invalid_name(self, logged_in_client):
+        resp = logged_in_client.post("/azure/set_meet_id", json={"name": "bad name!"})
+        assert resp.status_code == 400
+        body = resp.get_json()
+        assert body["ok"] is False
+        assert body["error"]
+
+    def test_rejects_when_not_signed_in(self, logged_in_client):
+        # Valid name format, but the client has no creds in the fixture state.
+        resp = logged_in_client.post("/azure/set_meet_id",
+                                     json={"name": "Midlakes-2026"})
+        assert resp.status_code == 400
+        body = resp.get_json()
+        assert body["ok"] is False
+        assert "signed in" in body["error"].lower()
+
+    def test_accepts_valid_name_when_signed_in(self, logged_in_client):
+        # Inject minimal fake credentials so set_meet_id() reaches persistence.
+        from azure_relay import AzureCredentials
+        with CTS_Scoreboard.azure_relay_client._lock:
+            CTS_Scoreboard.azure_relay_client._creds = AzureCredentials(
+                tenant_id="tid", client_id="cid", audience="api://aud",
+                refresh_token="rt", account_id="oid", home_account_id="hoid",
+                meet_id="oldOldOld12345",
+            )
+        resp = logged_in_client.post("/azure/set_meet_id",
+                                     json={"name": "Midlakes-2026"})
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["ok"] is True
+        assert body["meet_id"] == "Midlakes-2026"
+
+
+class TestAzureCheckMeetId:
+    def test_invalid_name_returns_error_without_network(self, logged_in_client):
+        resp = logged_in_client.post("/azure/check_meet_id", json={"name": "bad!"})
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["ok"] is False
+        assert body["available"] is False
+        assert body["error"]
+
+    def test_not_signed_in_returns_error(self, logged_in_client):
+        resp = logged_in_client.post("/azure/check_meet_id",
+                                     json={"name": "Midlakes-2026"})
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["ok"] is False
+        assert "signed in" in body["error"].lower()

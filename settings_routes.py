@@ -679,6 +679,34 @@ def register(flask_app, app_module):
             return flask.jsonify({'error': 'not signed in to Azure'}), 400
         return flask.jsonify({'ok': True, 'meet_id': new_id, 'status': _azure_status_payload()})
 
+    @flask_app.route('/azure/check_meet_id', methods=['POST'])
+    @flask_login.login_required
+    def route_azure_check_meet_id():
+        from azure_relay import validate_meet_id
+        data = flask.request.get_json(silent=True) or {}
+        name = (data.get('name') or '').strip()
+        ok, err = validate_meet_id(name)
+        if not ok:
+            return flask.jsonify({'ok': False, 'available': False, 'owner': None,
+                                  'error': err}), 200
+        result = _app.azure_relay_client.check_meet_id_available(name)
+        return flask.jsonify(result)
+
+    @flask_app.route('/azure/set_meet_id', methods=['POST'])
+    @flask_login.login_required
+    def route_azure_set_meet_id():
+        from azure_relay import validate_meet_id
+        data = flask.request.get_json(silent=True) or {}
+        name = (data.get('name') or '').strip()
+        ok, err = validate_meet_id(name)
+        if not ok:
+            return flask.jsonify({'ok': False, 'error': err}), 400
+        ok, result = _app.azure_relay_client.set_meet_id(name)
+        if not ok:
+            return flask.jsonify({'ok': False, 'error': result}), 400
+        return flask.jsonify({'ok': True, 'meet_id': result,
+                              'status': _azure_status_payload()})
+
     # -- Login / logout ------------------------------------------------------
 
     @flask_app.route("/login", methods=["GET", "POST"])

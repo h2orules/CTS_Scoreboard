@@ -37,13 +37,13 @@ def test_health_endpoints_alive(app_and_store):
 
 def test_unknown_meet_returns_404(app_and_store):
     client, _ = app_and_store
-    res = client.get("/m/abc123")
+    res = client.get("/m/notarealmeet0")
     assert res.status_code == 404
 
 
 def test_open_meet_renders_through_router(app_and_store):
     client, store = app_and_store
-    meet_id = "abc123"
+    meet_id = "smoketest12345"
     store.open_meet(
         meet_id,
         host_team_name="Smoke Test",
