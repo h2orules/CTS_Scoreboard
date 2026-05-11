@@ -205,8 +205,7 @@ def load_settings():
             _next_rec_set_id = 1
             settings['swim_record_sets'] = base64.b64encode(pickle.dumps(swim_record_sets)).decode('ascii')
             settings.pop('swim_records', None)
-            with open(settings_file, "wt") as f:
-                json.dump(settings, f, sort_keys=True, indent=4)
+            save_settings()
         # Migrate old flat blank_message keys → message_pages array
         if 'blank_message' in settings and 'message_pages' not in settings:
             settings['message_pages'] = [{
@@ -216,8 +215,7 @@ def load_settings():
             }]
             settings['message_overlay_enabled'] = settings['message_pages'][0]['enabled']
             settings.setdefault('message_rotation_interval', 30)
-            with open(settings_file, "wt") as f:
-                json.dump(settings, f, sort_keys=True, indent=4)
+            save_settings()
         # Migrate legacy single-environment Azure URLs into the preprod slot.
         if settings.get('azure_relay_url') and not settings.get('azure_relay_url_preprod'):
             settings['azure_relay_url_preprod'] = settings['azure_relay_url']
@@ -227,8 +225,7 @@ def load_settings():
         if settings.get('azure_relay_url') or settings.get('azure_public_url'):
             settings['azure_relay_url'] = ''
             settings['azure_public_url'] = ''
-            with open(settings_file, "wt") as f:
-                json.dump(settings, f, sort_keys=True, indent=4)
+            save_settings()
         # Migrate legacy boolean qr_overlay_enabled → qr_overlay_visibility.
         # Only migrate when the on-disk file actually carried the boolean
         # (i.e. an upgrade path); fresh installs use the default 'off'.
@@ -276,6 +273,19 @@ def save_azure_settings():
     payload = {k: settings.get(k, '') for k in AZURE_SETTINGS_KEYS}
     with open(azure_settings_file, "wt") as f:
         json.dump(payload, f, sort_keys=True, indent=4)
+
+
+def save_settings():
+    """Persist the in-memory settings dict to ``settings_file``.
+
+    Strips the ``AZURE_SETTINGS_KEYS`` subset before writing so the Azure
+    relay credentials/URLs (which are sensitive and live in their own
+    git-ignored ``azure_settings.json``) never leak back into the
+    repo-tracked ``settings.json`` on a normal save.
+    """
+    public = {k: v for k, v in settings.items() if k not in AZURE_SETTINGS_KEYS}
+    with open(settings_file, "wt") as f:
+        json.dump(public, f, sort_keys=True, indent=4)
 
 ## Stuff to move the cursor
 def print_at(r, c, s):
@@ -939,8 +949,7 @@ def _inject_qr_message_page() -> bool:
     })
     settings['message_pages'] = pages
     try:
-        with open(settings_file, "wt") as f:
-            json.dump(settings, f, sort_keys=True, indent=4)
+        save_settings()
     except Exception:
         traceback.print_exc()
     return True
@@ -991,8 +1000,7 @@ def _on_azure_status(snap):
             injected = _inject_qr_message_page()
             settings['qr_message_page_injected'] = True
             try:
-                with open(settings_file, "wt") as f:
-                    json.dump(settings, f, sort_keys=True, indent=4)
+                save_settings()
             except Exception:
                 traceback.print_exc()
             if injected:
@@ -1004,8 +1012,7 @@ def _on_azure_status(snap):
         if settings.get('qr_message_page_injected'):
             settings['qr_message_page_injected'] = False
             try:
-                with open(settings_file, "wt") as f:
-                    json.dump(settings, f, sort_keys=True, indent=4)
+                save_settings()
             except Exception:
                 traceback.print_exc()
 
