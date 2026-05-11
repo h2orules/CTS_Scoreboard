@@ -1004,6 +1004,12 @@ def broadcast_settings_changed():
     client = globals().get('azure_relay_client')
     if client is not None:
         try:
+            bundle = _azure_bundle_provider()
+            if bundle is not None:
+                client.forward_event('template_push', bundle)
+        except Exception:
+            traceback.print_exc()
+        try:
             ctx = _azure_context_provider()
             if ctx is not None:
                 client.forward_event('meet_context', ctx)
@@ -1315,10 +1321,19 @@ def _azure_bundle_provider():
         if not rel.endswith('.html'):
             rel = rel + '.html'
         repo_root = os.path.dirname(os.path.abspath(__file__))
+        # The template references the ad image via a runtime expression
+        # (url_for('static', filename='ad/' + ad_url)), which the bundler
+        # can't auto-discover. Pass the currently selected ad image as an
+        # explicit extra so it lands in the cache served by Azure.
+        extra_static = []
+        ad_url = (settings.get('ad_url') or '').strip()
+        if ad_url:
+            extra_static.append('ad/' + ad_url)
         bundle = build_bundle(
             template_root=os.path.join(repo_root, 'templates'),
             static_root=os.path.join(repo_root, 'static'),
             template_relpath=rel,
+            extra_static=extra_static,
         )
         return bundle.to_dict()
     except Exception:
