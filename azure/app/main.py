@@ -14,13 +14,13 @@ from app import (
     PROTOCOL_VERSION_MIN_SUPPORTED,
     __version__,
 )
+from app.auth import validate_pi_token
 from app.config import get_settings
 from app.handlers import register_handlers
 from app.routes import build_router
 from app.state import MeetStateStore
 from app.telemetry import configure_telemetry
 from app.watchdog import MeetWatchdog
-from app.auth import validate_pi_token
 
 
 def build_app(

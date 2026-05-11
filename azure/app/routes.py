@@ -10,8 +10,9 @@ from __future__ import annotations
 import base64
 import logging
 import re
+from collections.abc import Callable
 from html import escape
-from typing import Any, Callable
+from typing import Any
 
 from fastapi import APIRouter, Header, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
