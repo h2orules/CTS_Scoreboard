@@ -93,6 +93,32 @@ jobs:
           echo "image=$IMG" >> $GITHUB_OUTPUT
           echo "::notice title=Pinned image::$IMG"
 
+      - name: Deactivate stale revisions
+        if: github.event.inputs.mode == 'apply'
+        run: |
+          # Old revisions that reference removed secrets (e.g. webpubsub-conn)
+          # block Bicep from deleting those secrets during a PUT. Deactivate
+          # everything except the current revision before deploying so ARM can
+          # clean up stale secret references. The current revision keeps serving
+          # traffic until the new one is ready.
+          RG="${{ steps.target.outputs.rg }}"
+          APP="${{ steps.target.outputs.app }}"
+          CURRENT=$(az containerapp show -g "$RG" -n "$APP" \
+            --query properties.latestRevisionName -o tsv 2>/dev/null || echo "")
+          if [[ -z "$CURRENT" ]]; then
+            echo "No existing Container App found; skipping revision cleanup."
+            exit 0
+          fi
+          echo "Keeping current revision: $CURRENT"
+          az containerapp revision list -g "$RG" -n "$APP" \
+            --query "[?name!='$CURRENT'].name" -o tsv | \
+          while read -r rev; do
+            [[ -z "$rev" ]] && continue
+            echo "Deactivating $rev"
+            az containerapp revision deactivate -g "$RG" -n "$APP" \
+              --revision "$rev" 2>/dev/null || true
+          done
+
       - name: Bicep what-if
         if: github.event.inputs.mode == 'what-if'
         run: |
