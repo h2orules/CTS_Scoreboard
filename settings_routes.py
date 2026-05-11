@@ -295,8 +295,7 @@ def register(flask_app, app_module):
             # --- Persist & broadcast -----------------------------------------
 
             if modified:
-                with open(_app.settings_file, "wt") as f:
-                    json.dump(settings, f, sort_keys=True, indent=4)
+                _app.save_settings()
 
             if overlay_needs_broadcast:
                 _app.send_message_overlay_state()
@@ -426,8 +425,7 @@ def register(flask_app, app_module):
         _app.event_info.clear()
         _app.settings['event_info'] = _app.event_info.to_object()
         _app.settings.pop('schedule_filename', None)
-        with open(_app.settings_file, "wt") as f:
-            json.dump(_app.settings, f, sort_keys=True, indent=4)
+        _app.save_settings()
         return flask.redirect('/settings')
 
     @flask_app.route('/standards_clear')
@@ -437,8 +435,7 @@ def register(flask_app, app_module):
         _app.settings.pop('time_standards', None)
         _app.settings.pop('standards_filename', None)
         _app.settings.pop('std_desc_overrides', None)
-        with open(_app.settings_file, "wt") as f:
-            json.dump(_app.settings, f, sort_keys=True, indent=4)
+        _app.save_settings()
         return flask.redirect('/settings')
 
     @flask_app.route('/records_remove/<int:set_id>')
@@ -450,8 +447,7 @@ def register(flask_app, app_module):
             _app.settings['swim_record_sets'] = base64.b64encode(pickle.dumps(_app.swim_record_sets)).decode('ascii')
         else:
             _app.settings.pop('swim_record_sets', None)
-        with open(_app.settings_file, "wt") as f:
-            json.dump(_app.settings, f, sort_keys=True, indent=4)
+        _app.save_settings()
         return flask.redirect('/settings')
 
     # -- Shutdown ------------------------------------------------------------
@@ -497,8 +493,7 @@ def register(flask_app, app_module):
                     combined[(int(k[1]), int(k[2]))] = (int(v[0]), int(v[1]))
             _app.event_info.combine_events(combined)
             _app.settings['event_info'] = _app.event_info.to_object()
-            with open(_app.settings_file, "wt") as f:
-                json.dump(_app.settings, f, sort_keys=True, indent=4)
+            _app.save_settings()
         event_heat = list(_app.event_info.events.keys())
         event_heat.sort()
         return flask.render_template('schedule_preview.html',
@@ -775,8 +770,7 @@ def register(flask_app, app_module):
                 modified = True
         if modified:
             try:
-                with open(_app.settings_file, 'wt') as f:
-                    json.dump(_app.settings, f, sort_keys=True, indent=4)
+                _app.save_settings()
             except Exception:
                 pass
             try:
