@@ -296,6 +296,16 @@ def register(flask_app, app_module):
 
             if modified:
                 _app.save_settings()
+                # Most settings (meet title, team names, num_lanes, ad image,
+                # display flags, etc.) are baked into the server-rendered
+                # HTML, so connected scoreboards need to reload to pick them
+                # up. broadcast_settings_changed handles both the local
+                # /scoreboard namespace and Azure (which gets a fresh
+                # meet_context + a reload nudge for live viewers).
+                try:
+                    _app.broadcast_settings_changed()
+                except Exception:
+                    pass
 
             if overlay_needs_broadcast:
                 _app.send_message_overlay_state()
