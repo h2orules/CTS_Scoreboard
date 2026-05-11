@@ -59,7 +59,19 @@ def render_qr_svg(
         svgns=True,
         omitsize=False,
     )
-    return buf.getvalue().decode("utf-8")
+    svg = buf.getvalue().decode("utf-8")
+    # segno emits explicit width/height but no viewBox, so when CSS resizes
+    # the <svg> the inner path (which uses absolute module coordinates) stays
+    # anchored to its native pixel size and ends up in the upper-left corner.
+    # Inject a matching viewBox so the QR scales to fill its rendered box.
+    if "viewBox" not in svg:
+        modules, _ = qr.symbol_size(scale=scale, border=border)
+        svg = svg.replace(
+            "<svg ",
+            f'<svg viewBox="0 0 {modules} {modules}" preserveAspectRatio="xMidYMid meet" ',
+            1,
+        )
+    return svg
 
 
 def build_meet_url(*, public_base: str, meet_id: str) -> str:
@@ -92,8 +104,15 @@ def substitute_qr_tokens(
 
 
 def render_overlay_svg(target_url: str) -> str:
-    """Render the small corner overlay QR (smaller scale, transparent bg)."""
-    return render_qr_svg(target_url, scale=_DEFAULT_OVERLAY_SCALE, light=None)
+    """Render the small corner overlay QR (smaller scale, transparent bg).
+
+    Uses a zero-module border because the on-screen overlay container
+    already provides a generous white quiet zone via CSS padding; baking
+    additional whitespace into the SVG just shrinks the visible modules.
+    """
+    return render_qr_svg(
+        target_url, scale=_DEFAULT_OVERLAY_SCALE, border=0, light=None
+    )
 
 
 def render_qr_png(
