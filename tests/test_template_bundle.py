@@ -122,3 +122,32 @@ def test_bundle_against_real_repo_home_template():
     assert "<html" in b.template_text.lower()
     # It references socket.io.4.8.3.min.js as a static file.
     assert any("socket.io" in p for p in b.static_files)
+
+
+def test_bundle_includes_extra_static(fake_tree):
+    """Caller can request additional static files not auto-discovered."""
+    troot, sroot = fake_tree
+    # Add an asset referenced only via a runtime expression in the template
+    # (not a literal url_for filename), so it would not be auto-discovered.
+    (os.path.join(sroot, "ad", "extra.jpg"))
+    with open(os.path.join(sroot, "ad", "extra.jpg"), "wb") as f:
+        f.write(b"FAKEJPG")
+    b = build_bundle(
+        template_root=troot,
+        static_root=sroot,
+        template_relpath="web/home.html",
+        extra_static=["ad/extra.jpg"],
+    )
+    assert "ad/extra.jpg" in b.static_files
+    assert b.static_files["ad/extra.jpg"] == b"FAKEJPG"
+
+
+def test_bundle_extra_static_skips_missing(fake_tree):
+    troot, sroot = fake_tree
+    b = build_bundle(
+        template_root=troot,
+        static_root=sroot,
+        template_relpath="web/home.html",
+        extra_static=["ad/does-not-exist.jpg", ""],
+    )
+    assert "ad/does-not-exist.jpg" not in b.static_files
