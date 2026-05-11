@@ -96,28 +96,26 @@ jobs:
       - name: Deactivate stale revisions
         if: github.event.inputs.mode == 'apply'
         run: |
-          # Old revisions that reference removed secrets (e.g. webpubsub-conn)
-          # block Bicep from deleting those secrets during a PUT. Deactivate
-          # everything except the current revision before deploying so ARM can
-          # clean up stale secret references. The current revision keeps serving
-          # traffic until the new one is ready.
+          # Deactivate ALL revisions before deploying. ARM's PUT fails with
+          # ContainerAppSecretInUse if any revision — including the live one —
+          # still has a secretRef pointing to a secret being removed from the
+          # Bicep template (e.g. webpubsub-conn). There is no way to avoid a
+          # brief outage without keeping the old secret indefinitely, so we
+          # accept ~30-60 s of downtime while the new revision starts.
           RG="${{ steps.target.outputs.rg }}"
           APP="${{ steps.target.outputs.app }}"
-          CURRENT=$(az containerapp show -g "$RG" -n "$APP" \
-            --query properties.latestRevisionName -o tsv 2>/dev/null || echo "")
-          if [[ -z "$CURRENT" ]]; then
-            echo "No existing Container App found; skipping revision cleanup."
+          REVISIONS=$(az containerapp revision list -g "$RG" -n "$APP" \
+            --query "[].name" -o tsv 2>/dev/null || echo "")
+          if [[ -z "$REVISIONS" ]]; then
+            echo "No existing Container App / revisions found; skipping."
             exit 0
           fi
-          echo "Keeping current revision: $CURRENT"
-          az containerapp revision list -g "$RG" -n "$APP" \
-            --query "[?name!='$CURRENT'].name" -o tsv | \
           while read -r rev; do
             [[ -z "$rev" ]] && continue
             echo "Deactivating $rev"
             az containerapp revision deactivate -g "$RG" -n "$APP" \
               --revision "$rev" 2>/dev/null || true
-          done
+          done <<< "$REVISIONS"
 
       - name: Bicep what-if
         if: github.event.inputs.mode == 'what-if'
