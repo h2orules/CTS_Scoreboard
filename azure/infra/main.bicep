@@ -181,18 +181,13 @@ resource caEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
   }
 }
 
-// Managed certificate for the custom domain. Azure handles renewal automatically.
-// PREREQUISITE: DNS records must be in place before deploying this resource —
-// see azure/docs/CUSTOM_DOMAIN_SETUP.md for the required GoDaddy records.
-resource managedCert 'Microsoft.App/managedEnvironments/managedCertificates@2024-03-01' = {
-  parent: caEnv
-  name: '${prefix}-cert'
-  location: location
-  properties: {
-    subjectName: customDomain
-    domainControlValidation: 'CNAME'
-  }
-}
+// Managed certificate creation for the custom domain is handled by the
+// infra-deploy workflow (az containerapp hostname bind) after this Bicep runs.
+// Azure requires the hostname to be registered on the Container App *before*
+// the managed cert can be created, so the cert cannot be a Bicep resource in
+// the same deployment — doing so creates a circular dependency. The workflow
+// step is idempotent: it creates the cert on first run and renews/reattaches
+// on subsequent runs. See azure/docs/CUSTOM_DOMAIN_SETUP.md.
 
 resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
   name: caName
@@ -216,11 +211,15 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         // _rewrite_io_connect in app/routes.py and the Pi client's
         // transports=['websocket'] in azure_relay.py). Cross-worker /
         // cross-replica fanout is handled by socketio.AsyncRedisManager.
+        //
+        // Registers the hostname so the post-deploy workflow step can issue
+        // and bind a managed certificate. bindingType 'Disabled' means HTTPS
+        // is not yet enforced on this domain; the workflow step upgrades it to
+        // 'SniEnabled' immediately after this Bicep deployment completes.
         customDomains: [
           {
             name: customDomain
-            certificateId: managedCert.id
-            bindingType: 'SniEnabled'
+            bindingType: 'Disabled'
           }
         ]
       }

@@ -14,27 +14,47 @@ URLs — no per-deploy DNS work required.
 
 ---
 
+## How the cert gets created (and why it's not in Bicep)
+
+Azure requires a hostname to be **registered on a Container App first** before
+it can issue a managed certificate for it — but the cert's resource ID is
+needed in the Container App ingress to activate HTTPS. That circular dependency
+means a single Bicep deployment cannot do both steps.
+
+The solution used here:
+
+1. Bicep registers the custom hostname with `bindingType: 'Disabled'` (no cert
+   yet — this is idempotent and harmless).
+2. Immediately after the Bicep deploy, the infra-deploy workflow runs
+   `az containerapp hostname bind --validation-method CNAME`, which issues a
+   free managed certificate (Let's Encrypt-backed, auto-renewed by Azure) and
+   sets `bindingType` to `SniEnabled`. This command is idempotent — on
+   subsequent infra deploys it reattaches the existing cert in seconds.
+
+App-image deploys (`az containerapp update`) only create new revisions and
+never touch ingress, so those never disturb the cert binding.
+
+---
+
 ## Overview of steps
 
 ```
-1. Get two values from Azure: FQDN and verification ID for each environment
+1. Get two values from Azure for each environment: FQDN and verification ID
 2. Add four DNS records in GoDaddy
 3. Wait for DNS to propagate (~5–15 min with low TTLs)
-4. Run the infra-deploy workflow for preprod, then prod
+4. Run the infra-deploy workflow (mode: apply) for preprod, then prod
 5. Verify
 ```
 
-The Bicep changes (`managedCert` resource + `customDomains` ingress binding)
-are already committed to `main.bicep`. **Do not run the infra deploy before the
-DNS records are in place** — the managed certificate provisioning depends on the
-CNAME being resolvable.
+**Do not run the infra deploy before the DNS records are in place.** The
+`az containerapp hostname bind` step in the workflow will fail if the CNAME
+or TXT record is missing.
 
 ---
 
 ## Step 1 — Get the Azure values you need
 
-Run these two commands (substitute your actual resource group names for
-`$RG_PREPROD` and `$RG_PROD`):
+Run these commands (substitute your actual resource group names):
 
 ```bash
 # ---- preprod ----
@@ -82,8 +102,6 @@ Keep these handy — you need all four for the GoDaddy records.
 3. Add the following four records (delete any existing CNAME for `scoreboard`
    or `scoreboard-pre` if present):
 
-### Records to add
-
 | Type | Name | Value | TTL |
 |---|---|---|---|
 | CNAME | `scoreboard` | `<PROD_FQDN>` | 600 seconds |
@@ -95,8 +113,8 @@ Replace `<PROD_FQDN>`, `<PROD_VERIFY>`, etc. with the actual values from
 Step 1.
 
 **GoDaddy UI notes:**
-- For CNAME records GoDaddy may add `.aquagnomeapps.com` to the Name field
-  automatically — enter only the short name (`scoreboard`, not the full FQDN).
+- For CNAME records, GoDaddy may append `.aquagnomeapps.com` to the Name field
+  automatically — enter only the short label (`scoreboard`, not the full FQDN).
 - GoDaddy's minimum TTL in the UI is 600 seconds (10 minutes); that is fine.
 - The `asuid.*` TXT records are Azure's domain ownership proof — they must
   match the `customDomainVerificationId` exactly, including capitalisation.
@@ -122,36 +140,27 @@ also use https://dnschecker.org to confirm global propagation.
 
 ---
 
-## Step 4 — Deploy the updated Bicep
+## Step 4 — Run the infra-deploy workflow (mode: apply)
 
-Run the **Azure Infrastructure Deploy** workflow twice — once per environment.
+Run the **Azure Infrastructure Deploy** workflow for each environment, with
+**mode: apply** (not what-if).
 
 ### Via GitHub Actions UI
 
-1. Go to **Actions** → **Azure Infrastructure Deploy**.
-2. Click **Run workflow**.
-3. Set **environment** to `preprod`, leave other fields as-is, click
-   **Run workflow**.
-4. Wait for it to complete successfully.
+1. Go to **Actions** → **Azure Infrastructure Deploy** → **Run workflow**.
+2. Set **environment** to `preprod`, **mode** to `apply`, click **Run workflow**.
+3. Watch the **Bind managed certificate** step — it calls
+   `az containerapp hostname bind` and should complete in under 60 seconds.
+4. Wait for the workflow to complete successfully.
 5. Repeat with **environment** = `prod`.
 
 ### Via CLI
 
 ```bash
-# preprod
-gh workflow run azure-infra-deploy.yml \
-  -f environment=preprod
-
-# prod (after preprod succeeds)
-gh workflow run azure-infra-deploy.yml \
-  -f environment=prod
+gh workflow run azure-infra-deploy.yml -f environment=preprod -f mode=apply
+# wait for it to succeed, then:
+gh workflow run azure-infra-deploy.yml -f environment=prod    -f mode=apply
 ```
-
-The workflow deploys the Bicep template, which now creates the
-`managedCertificate` resource and binds it to the Container App's ingress.
-Azure will issue a free TLS certificate (Let's Encrypt backed) and begin
-serving traffic at the custom domain. Certificate issuance typically takes
-2–5 minutes after the Bicep deployment completes.
 
 ---
 
@@ -162,7 +171,7 @@ serving traffic at the custom domain. Certificate issuance typically takes
 curl -fsS https://scoreboard.aquagnomeapps.com/healthz
 curl -fsS https://scoreboard-pre.aquagnomeapps.com/healthz
 
-# Confirm the TLS cert subject matches
+# Confirm the TLS cert subject
 echo | openssl s_client -connect scoreboard.aquagnomeapps.com:443 2>/dev/null \
   | openssl x509 -noout -subject -issuer
 ```
@@ -171,19 +180,13 @@ echo | openssl s_client -connect scoreboard.aquagnomeapps.com:443 2>/dev/null \
 
 ## How routing stays stable across deployments
 
-The custom domain binding lives in the Container App's **ingress configuration**
-(a property of the Container App resource), not in any revision. When
-deployments run:
+| Deployment type | Touches ingress? | Custom domain affected? |
+|---|---|---|
+| `az containerapp update` (image deploy) | No | No — cert binding unchanged |
+| `az deployment group create` (infra deploy) | Yes — resets hostname to `Disabled` | Re-bound immediately by workflow's `hostname bind` step |
 
-- `az containerapp update --image ... --revision-suffix ...` creates a new
-  revision but never modifies ingress.
-- The infra-deploy workflow pins the running image before re-applying the
-  Bicep template, so the custom domain binding is reapplied idempotently each
-  time.
-
-The smoke tests in each workflow use `properties.configuration.ingress.fqdn`
-(the `*.azurecontainerapps.io` address) — they do not go through GoDaddy,
-so DNS changes can never break CI.
+The smoke tests in each workflow use the `*.azurecontainerapps.io` FQDN
+directly, so they never depend on GoDaddy DNS.
 
 ---
 
@@ -198,7 +201,8 @@ required.
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Bicep deploy fails with "Custom domain verification failed" | CNAME or TXT record not yet propagated | Wait and re-run the workflow |
-| `curl` returns certificate error | Certificate still provisioning | Wait 5 min and retry |
-| `dig` returns no result for `asuid.*` TXT | Wrong record name in GoDaddy | Check for extra dots or the `.aquagnomeapps.com` suffix being doubled |
-| CNAME resolves to wrong host | Wrong FQDN value pasted | Re-check Step 1 output and update the CNAME |
+| `hostname bind` step fails: "Custom hostname not found" | Bicep didn't register the hostname (unexpected) | Re-run the infra deploy; check that `customDomains` with `Disabled` is in main.bicep |
+| `hostname bind` step fails: "CNAME validation failed" | CNAME or TXT not yet propagated | Wait and re-run the workflow |
+| `curl` returns certificate error after workflow | Cert still provisioning | Wait 2–5 min and retry |
+| `dig` returns nothing for `asuid.*` | Wrong record name in GoDaddy | Check for doubled `.aquagnomeapps.com` suffix |
+| CNAME resolves to wrong host | Wrong FQDN pasted | Re-check Step 1 output and update the CNAME record |
