@@ -11,6 +11,7 @@ mirrors state to Redis and fans out to browser viewers in the meet's room.
 from __future__ import annotations
 
 import logging
+import re
 from contextlib import AbstractContextManager
 from typing import Any
 
@@ -27,6 +28,9 @@ log = logging.getLogger(__name__)
 _SESSION_PI_MEET = "pi_meet_id"
 _SESSION_PI_OID = "pi_account_id"
 _SESSION_BROWSER_MEET = "browser_meet_id"
+
+# Mirrors azure_relay.MEET_ID_REGEX and routes.MEET_ID_RE.
+_MEET_ID_RE = re.compile(r"^[A-Za-z0-9_-]{10,20}$")
 
 
 def register_handlers(
@@ -73,6 +77,8 @@ def register_handlers(
 
         if not meet_id:
             raise socketio.exceptions.ConnectionRefusedError("missing meet_id")
+        if not _MEET_ID_RE.match(meet_id):
+            raise socketio.exceptions.ConnectionRefusedError("invalid meet_id")
         if not isinstance(proto, int) or proto < PROTOCOL_VERSION_MIN_SUPPORTED or proto > PROTOCOL_VERSION_CURRENT:
             raise socketio.exceptions.ConnectionRefusedError(f"unsupported protocol_version={proto}")
 
@@ -121,11 +127,28 @@ def register_handlers(
             meet_id = sess.get(_SESSION_PI_MEET)
             if not meet_id or payload.get("meet_id") != meet_id:
                 return {"ok": False, "error": "meet_id mismatch"}
+            pi_oid = sess.get(_SESSION_PI_OID, "")
+            # Reject if this id is owned by a different Pi. Self-claim is fine
+            # (idempotent re-open). "no" means it's free / metadata expired.
+            taken = store.is_meet_id_taken(meet_id, by_account_id=pi_oid)
+            if taken == "other":
+                log.warning(
+                    "pi meet_open: meet_id=%s already owned by another Pi (oid=%s)",
+                    meet_id, pi_oid,
+                )
+                return {"ok": False, "error": "meet_id_taken"}
+            # If the Pi previously owned a different id (friendly-name change or
+            # Rotate Meet ID), mark the old id expired so old QR codes get the
+            # friendly "Link expired" page.
+            prev_id = store.get_pi_meet_id(pi_oid) if pi_oid else None
+            if prev_id and prev_id != meet_id:
+                store.mark_status(prev_id, "expired_id_rotated")
+                log.info("pi meet_open: marked previous meet_id=%s expired_id_rotated", prev_id)
             store.open_meet(
                 meet_id,
                 host_team_name=payload.get("host_team_name", ""),
                 protocol_version=int(payload.get("protocol_version", PROTOCOL_VERSION_CURRENT)),
-                pi_account_id=sess.get(_SESSION_PI_OID, ""),
+                pi_account_id=pi_oid,
             )
             metrics.meet_opened.add(1, {"meet_id": meet_id})
             # Notify any already-connected viewers that the feed is live.

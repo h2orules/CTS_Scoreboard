@@ -401,3 +401,58 @@ async def test_browser_disconnect_decrements_active_sockets_scoreboard():
     )
     assert sb_total == 0
     reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_meet_open_rejected_when_id_owned_by_other_pi():
+    sio, _, _, _ = _make_sio_with_spies()
+    store = _store()
+    # Pre-claim by a different Pi.
+    store.open_meet(MEET, host_team_name="Other", protocol_version=1, pi_account_id="oid-other")
+    register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
+    )
+    res = await _handler(sio, "/pi", "meet_open")(
+        "sidPi", {"meet_id": MEET, "host_team_name": "Foo", "protocol_version": 1}
+    )
+    assert res == {"ok": False, "error": "meet_id_taken"}
+    # Owner unchanged.
+    assert store.get_metadata(MEET)["host_team_name"] == "Other"
+
+
+@pytest.mark.asyncio
+async def test_meet_open_marks_previous_id_expired_when_changed():
+    sio, _, _, _ = _make_sio_with_spies()
+    store = _store()
+    OLD = "oldMeetID12345"
+    NEW = "newFriendly-26"
+    # Pre-bind under the validator's account_id ("oid-pi").
+    store.open_meet(OLD, host_team_name="Foo", protocol_version=1, pi_account_id="oid-pi")
+    register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": NEW, "protocol_version": 1}
+    )
+    res = await _handler(sio, "/pi", "meet_open")(
+        "sidPi", {"meet_id": NEW, "host_team_name": "Foo", "protocol_version": 1}
+    )
+    assert res == {"ok": True}
+    # Old id marked expired_id_rotated.
+    assert store.get_metadata(OLD)["status"] == "expired_id_rotated"
+    # New id is live.
+    assert store.get_metadata(NEW)["status"] == "live"
+
+
+@pytest.mark.asyncio
+async def test_pi_connect_rejects_invalid_meet_id():
+    sio, _, _, _ = _make_sio_with_spies()
+    store = _store()
+    register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    import socketio as _sio
+    with pytest.raises(_sio.exceptions.ConnectionRefusedError):
+        await _handler(sio, "/pi", "connect")(
+            "sidBad", {}, {"access_token": "ok", "meet_id": "bad name!", "protocol_version": 1}
+        )

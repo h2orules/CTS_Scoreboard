@@ -17,6 +17,8 @@ from azure_relay import (
     BACKOFF_SCHEDULE,
     MEET_ID_ALPHABET,
     MEET_ID_LENGTH,
+    MEET_ID_MAX_LEN,
+    MEET_ID_MIN_LEN,
     STATE_AUTHENTICATING,
     STATE_BACKOFF,
     STATE_DISCONNECTED,
@@ -26,9 +28,11 @@ from azure_relay import (
     AzureRelayClient,
     clear_credentials,
     compute_backoff,
+    derive_meet_id_default,
     generate_meet_id,
     load_credentials,
     save_credentials,
+    validate_meet_id,
 )
 
 
@@ -260,6 +264,153 @@ class TestRotateMeetId:
         loaded = load_credentials(path)
         assert loaded is not None
         assert loaded.meet_id == new
+
+
+class TestValidateMeetId:
+    def test_accepts_min_length(self):
+        ok, err = validate_meet_id("a" * MEET_ID_MIN_LEN)
+        assert ok and err is None
+
+    def test_accepts_max_length(self):
+        ok, _ = validate_meet_id("a" * MEET_ID_MAX_LEN)
+        assert ok
+
+    def test_accepts_dashes_and_underscores(self):
+        ok, _ = validate_meet_id("Midlakes-2026_v1")
+        assert ok
+
+    def test_accepts_mixed_case(self):
+        ok, _ = validate_meet_id("MidlakesM-26")
+        assert ok
+
+    def test_rejects_too_short(self):
+        ok, err = validate_meet_id("a" * (MEET_ID_MIN_LEN - 1))
+        assert not ok and "at least" in (err or "")
+
+    def test_rejects_too_long(self):
+        ok, err = validate_meet_id("a" * (MEET_ID_MAX_LEN + 1))
+        assert not ok and "at most" in (err or "")
+
+    def test_rejects_spaces(self):
+        ok, err = validate_meet_id("with space12")
+        assert not ok and "letters" in (err or "").lower()
+
+    def test_rejects_special_chars(self):
+        for s in ("with$dollar", "with.dot12", "with/slash", "with!bang3"):
+            ok, _ = validate_meet_id(s)
+            assert not ok, s
+
+    def test_rejects_empty(self):
+        ok, err = validate_meet_id("")
+        assert not ok
+        ok, err = validate_meet_id(None)  # type: ignore[arg-type]
+        assert not ok
+
+    def test_generated_ids_pass_validation(self):
+        for _ in range(50):
+            ok, _ = validate_meet_id(generate_meet_id())
+            assert ok
+
+
+class TestDeriveMeetIdDefault:
+    def test_simple_team_name(self):
+        out = derive_meet_id_default("Midlakes Marlins")
+        assert out == "Midlakes-Marlins"
+        ok, _ = validate_meet_id(out)
+        assert ok
+
+    def test_short_name_padded(self):
+        # "Foo" -> "Foo" (3 chars), needs padding to 10.
+        out = derive_meet_id_default("Foo", _rng=lambda: "X")
+        assert out == "Foo-XXXXXX"
+        assert len(out) == MEET_ID_MIN_LEN
+        ok, _ = validate_meet_id(out)
+        assert ok
+
+    def test_strips_special_chars(self):
+        out = derive_meet_id_default("Foo!Bar@Baz#Qux", _rng=lambda: "X")
+        assert out == "FooBarBazQux"
+        ok, _ = validate_meet_id(out)
+        assert ok
+
+    def test_collapses_repeated_separators(self):
+        out = derive_meet_id_default("Midlakes  Marlins")
+        assert out == "Midlakes-Marlins"
+
+    def test_truncates_to_max(self):
+        long = "Midlakes Marlins Junior Varsity Team 2026 Spring"
+        out = derive_meet_id_default(long)
+        assert len(out) <= MEET_ID_MAX_LEN
+        ok, _ = validate_meet_id(out)
+        assert ok
+
+    def test_empty_falls_back_to_random(self):
+        out = derive_meet_id_default("")
+        assert len(out) == MEET_ID_LENGTH
+        ok, _ = validate_meet_id(out)
+        assert ok
+
+    def test_whitespace_only_falls_back_to_random(self):
+        out = derive_meet_id_default("   \t\n  ")
+        assert len(out) == MEET_ID_LENGTH
+
+    def test_only_specials_falls_back_to_random(self):
+        out = derive_meet_id_default("!!!@@@###")
+        # Stripped to empty -> random fallback.
+        assert len(out) == MEET_ID_LENGTH
+
+    def test_trims_leading_trailing_separators(self):
+        out = derive_meet_id_default("--FooBarBaz--")
+        assert out == "FooBarBaz-X" or out.startswith("FooBarBaz")
+
+
+class TestSetMeetId:
+    def test_returns_error_when_not_signed_in(self, tmp_path):
+        client = AzureRelayClient(creds_file=str(tmp_path / "absent.json"))
+        ok, msg = client.set_meet_id("Midlakes-2026")
+        assert not ok
+        assert "signed in" in msg.lower()
+
+    def test_returns_error_for_invalid_name(self, tmp_path):
+        path = str(tmp_path / "creds.json")
+        save_credentials(path, _sample_creds())
+        client = AzureRelayClient(creds_file=path)
+        ok, msg = client.set_meet_id("bad name!")
+        assert not ok
+        # Original meet_id unchanged.
+        loaded = load_credentials(path)
+        assert loaded is not None
+        assert loaded.meet_id != "bad name!"
+
+    def test_persists_and_force_reconnects(self, tmp_path):
+        path = str(tmp_path / "creds.json")
+        save_credentials(path, _sample_creds(meet_id="aaaaaaaaaaaaaaa"))
+        client = AzureRelayClient(creds_file=path)
+        ok, val = client.set_meet_id("Midlakes-2026")
+        assert ok
+        assert val == "Midlakes-2026"
+        loaded = load_credentials(path)
+        assert loaded is not None
+        assert loaded.meet_id == "Midlakes-2026"
+        # The in-memory creds also reflect the new value.
+        assert client.meet_id == "Midlakes-2026"
+
+
+class TestCheckMeetIdAvailable:
+    def test_invalid_name_returns_error_without_network(self, tmp_path):
+        path = str(tmp_path / "creds.json")
+        save_credentials(path, _sample_creds())
+        client = AzureRelayClient(creds_file=path)
+        res = client.check_meet_id_available("bad name!")
+        assert res["ok"] is False
+        assert res["error"]
+        assert res["available"] is False
+
+    def test_not_signed_in_returns_error(self, tmp_path):
+        client = AzureRelayClient(creds_file=str(tmp_path / "absent.json"))
+        res = client.check_meet_id_available("Midlakes-2026")
+        assert res["ok"] is False
+        assert "signed in" in res["error"].lower()
 
 
 class TestLogout:

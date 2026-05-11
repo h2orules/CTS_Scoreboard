@@ -65,7 +65,12 @@ def test_unknown_meet_returns_404(client):
 
 
 def test_invalid_meet_id_format(client):
-    r = client.get("/m/has-dashes")
+    r = client.get("/m/has spaces")
+    assert r.status_code == 400
+
+
+def test_too_short_meet_id_format(client):
+    r = client.get("/m/short")
     assert r.status_code == 400
 
 
@@ -90,7 +95,7 @@ def test_closed_meet_returns_closed_page(client, app_with_store):
     store.close_meet(MEET)
     r = client.get(f"/m/{MEET}")
     assert r.status_code == 200
-    assert "Meet closed" in r.text
+    assert "No meet in session" in r.text
     assert "HostU" in r.text
 
 
@@ -108,7 +113,7 @@ def test_meet_starting_up_when_no_template(client, app_with_store):
     _seed_live_meet(store, with_template=False)
     r = client.get(f"/m/{MEET}")
     assert r.status_code == 503
-    assert "starting up" in r.text
+    assert "Connecting" in r.text
 
 
 def test_meet_starting_up_when_no_context(client, app_with_store):
@@ -196,3 +201,118 @@ def test_render_url_for_only_supports_static():
     html = render_meet_page(meet_id="m" * 15, bundle=bundle, context={})
     # Unsupported endpoints return '#'.
     assert 'href="#"' in html
+
+
+# --- friendly meet ID validation + availability endpoint -----------------
+
+@pytest.mark.parametrize("good", [
+    "Midlakes-2026",
+    "MidlakesM-26",
+    "abc123XYZ7890ab",
+    "Foo_bar-baz12",
+    "a" * 10,
+    "z" * 20,
+])
+def test_meet_page_accepts_valid_friendly_id(client, app_with_store, good):
+    _, store = app_with_store
+    _seed_live_meet(store, meet_id=good)
+    r = client.get(f"/m/{good}")
+    assert r.status_code == 200
+
+
+@pytest.mark.parametrize("bad", [
+    "ab",                # too short
+    "a" * 9,             # too short
+    "a" * 21,            # too long
+    "with$dollar1",      # bad char
+    "with.dot1234",      # bad char
+])
+def test_meet_page_rejects_invalid_friendly_id(client, bad):
+    r = client.get(f"/m/{bad}")
+    assert r.status_code == 400
+
+
+def _identity_validator(token: str):
+    from app.auth import InvalidPiTokenError, PiIdentity
+    if token == "good-oid1":
+        return PiIdentity(account_id="oid-1", upn="pi1@example.com", tenant_id="tid")
+    if token == "good-oid2":
+        return PiIdentity(account_id="oid-2", upn="pi2@example.com", tenant_id="tid")
+    raise InvalidPiTokenError("bad token")
+
+
+@pytest.fixture
+def client_with_validator(store):
+    app = FastAPI()
+    app.include_router(build_router(store=store, token_validator=_identity_validator))
+    return TestClient(app), store
+
+
+def test_availability_no_token_returns_401(client_with_validator):
+    client, _ = client_with_validator
+    r = client.get("/internal/meet_id/Midlakes-2026/availability")
+    assert r.status_code == 401
+
+
+def test_availability_bad_token_returns_401(client_with_validator):
+    client, _ = client_with_validator
+    r = client.get(
+        "/internal/meet_id/Midlakes-2026/availability",
+        headers={"Authorization": "Bearer bogus"},
+    )
+    assert r.status_code == 401
+
+
+def test_availability_invalid_name_returns_400(client_with_validator):
+    client, _ = client_with_validator
+    r = client.get(
+        "/internal/meet_id/short/availability",
+        headers={"Authorization": "Bearer good-oid1"},
+    )
+    assert r.status_code == 400
+
+
+def test_availability_free_name_returns_available(client_with_validator):
+    client, _ = client_with_validator
+    r = client.get(
+        "/internal/meet_id/Midlakes-2026/availability",
+        headers={"Authorization": "Bearer good-oid1"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data == {"available": True, "owner": None}
+
+
+def test_availability_self_owned_is_available(client_with_validator):
+    client, store = client_with_validator
+    name = "Midlakes-2026"
+    store.open_meet(name, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
+    r = client.get(
+        f"/internal/meet_id/{name}/availability",
+        headers={"Authorization": "Bearer good-oid1"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data == {"available": True, "owner": "self"}
+
+
+def test_availability_other_owned_is_unavailable(client_with_validator):
+    client, store = client_with_validator
+    name = "Midlakes-2026"
+    store.open_meet(name, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
+    r = client.get(
+        f"/internal/meet_id/{name}/availability",
+        headers={"Authorization": "Bearer good-oid2"},
+    )
+    assert r.status_code == 200
+    data = r.json()
+    assert data == {"available": False, "owner": "other"}
+
+
+def test_availability_disabled_when_no_validator(client):
+    # The default fixture builds the app without a token validator.
+    r = client.get(
+        "/internal/meet_id/Midlakes-2026/availability",
+        headers={"Authorization": "Bearer any"},
+    )
+    assert r.status_code == 503
