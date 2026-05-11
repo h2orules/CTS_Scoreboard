@@ -355,6 +355,17 @@
         }
     }
 
+    /* ── QR token insertion ────────────────────────────────────── */
+
+    function insertQr(ta) {
+        var token = '[[QR]]';
+        var val = ta.value;
+        var ss = ta.selectionStart;
+        var se = ta.selectionEnd;
+        ta.value = val.substring(0, ss) + token + val.substring(se);
+        ta.selectionStart = ta.selectionEnd = ss + token.length;
+    }
+
     /* ── Exports ───────────────────────────────────────────────── */
 
     exports.FMT = FMT;
@@ -371,5 +382,6 @@
     exports.togglePrefix = togglePrefix;
     exports.setHeading = setHeading;
     exports.fmtToggle = fmtToggle;
+    exports.insertQr = insertQr;
 
 })(typeof exports !== 'undefined' ? exports : (this.MsgFmt = {}));
