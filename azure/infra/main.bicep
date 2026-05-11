@@ -165,6 +165,8 @@ resource redis 'Microsoft.Cache/redis@2023-08-01' = {
 }
 
 // ---------- container apps environment ----------
+var customDomain = environmentName == 'prod' ? 'scoreboard.aquagnomeapps.com' : 'scoreboard-pre.aquagnomeapps.com'
+
 resource caEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: caEnvName
   location: location
@@ -176,6 +178,19 @@ resource caEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
         sharedKey: law.listKeys().primarySharedKey
       }
     }
+  }
+}
+
+// Managed certificate for the custom domain. Azure handles renewal automatically.
+// PREREQUISITE: DNS records must be in place before deploying this resource —
+// see azure/docs/CUSTOM_DOMAIN_SETUP.md for the required GoDaddy records.
+resource managedCert 'Microsoft.App/managedEnvironments/managedCertificates@2024-03-01' = {
+  parent: caEnv
+  name: '${prefix}-cert'
+  location: location
+  properties: {
+    subjectName: customDomain
+    domainControlValidation: 'CNAME'
   }
 }
 
@@ -201,6 +216,13 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
         // _rewrite_io_connect in app/routes.py and the Pi client's
         // transports=['websocket'] in azure_relay.py). Cross-worker /
         // cross-replica fanout is handled by socketio.AsyncRedisManager.
+        customDomains: [
+          {
+            name: customDomain
+            certificateId: managedCert.id
+            bindingType: 'SniEnabled'
+          }
+        ]
       }
       registries: [
         {
