@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Privacy Policy — CTS Scoreboard{% endblock %}
+{% block description %}Privacy Policy for the CTS Scoreboard live results service.{% endblock %}
+
+{% block main %}
+<article class="content">
+    <h1>Privacy Policy</h1>
+    <p class="updated">Last updated: {{ updated }}</p>
+
+    <p>
+        CTS Scoreboard is a free, open-source project. We aim to collect as
+        little information as possible about people viewing meet results.
+    </p>
+
+    <h2>Information we don't collect</h2>
+    <ul>
+        <li>We don't require you to create an account or sign in to watch a meet.</li>
+        <li>We don't collect your name, email address, phone number, or location.</li>
+        <li>We don't use advertising trackers or third-party analytics that build a profile of you across sites.</li>
+        <li>We don't sell or share viewer data with anyone.</li>
+    </ul>
+
+    <h2>Information we do process</h2>
+    <p>
+        To deliver the live scoreboard, our servers and our hosting provider
+        process standard request information such as your IP address, the
+        meet ID in the URL you opened, your browser's user-agent string, and
+        request timestamps. This is used to route live results to the right
+        viewers, to keep the service available, and to investigate abuse.
+        These records are retained only as long as needed for those operational
+        purposes.
+    </p>
+    <p>
+        Meet data &mdash; events, heats, swimmer names, times, and team codes &mdash;
+        is provided by the meet host's timing system. We display that data while
+        a meet is live and keep a small amount of it in transient server memory
+        and short-lived caches so the page loads quickly. Meet hosts control
+        what data is published.
+    </p>
+
+    <h2>Cookies</h2>
+    <p>
+        The public scoreboard pages do not set tracking cookies. We may use
+        short-lived session storage in your browser to remember view preferences
+        (for example, whether you've dismissed an in-page banner).
+    </p>
+
+    <h2>Children</h2>
+    <p>
+        Because swim meets often involve children, we are particularly careful
+        to limit what is collected from viewers. We do not knowingly collect
+        personal information from children. If you believe a child's personal
+        information is being displayed inappropriately by a meet host, contact
+        the host directly to have it removed at the source.
+    </p>
+
+    <h2>Open source</h2>
+    <p>
+        The source code that powers this service is available on
+        <a href="https://github.com/h2orules/CTS_Scoreboard" rel="noopener" target="_blank">GitHub</a>.
+        You can inspect exactly what the software does and how data flows.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+        Questions about privacy? Email
+        <a href="mailto:info@aquagnomeapps.com">info@aquagnomeapps.com</a>.
+    </p>
+</article>
+{% endblock %}
