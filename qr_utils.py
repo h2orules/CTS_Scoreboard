@@ -59,7 +59,19 @@ def render_qr_svg(
         svgns=True,
         omitsize=False,
     )
-    return buf.getvalue().decode("utf-8")
+    svg = buf.getvalue().decode("utf-8")
+    # segno emits explicit width/height but no viewBox, so when CSS resizes
+    # the <svg> the inner path (which uses absolute module coordinates) stays
+    # anchored to its native pixel size and ends up in the upper-left corner.
+    # Inject a matching viewBox so the QR scales to fill its rendered box.
+    if "viewBox" not in svg:
+        modules, _ = qr.symbol_size(scale=scale, border=border)
+        svg = svg.replace(
+            "<svg ",
+            f'<svg viewBox="0 0 {modules} {modules}" preserveAspectRatio="xMidYMid meet" ',
+            1,
+        )
+    return svg
 
 
 def build_meet_url(*, public_base: str, meet_id: str) -> str:
@@ -92,5 +104,38 @@ def substitute_qr_tokens(
 
 
 def render_overlay_svg(target_url: str) -> str:
-    """Render the small corner overlay QR (smaller scale, transparent bg)."""
-    return render_qr_svg(target_url, scale=_DEFAULT_OVERLAY_SCALE, light=None)
+    """Render the small corner overlay QR (smaller scale, transparent bg).
+
+    Uses a zero-module border because the on-screen overlay container
+    already provides a generous white quiet zone via CSS padding; baking
+    additional whitespace into the SVG just shrinks the visible modules.
+    """
+    return render_qr_svg(
+        target_url, scale=_DEFAULT_OVERLAY_SCALE, border=0, light=None
+    )
+
+
+def render_qr_png(
+    target_url: str,
+    *,
+    target_px: int = 1000,
+    border: int = _DEFAULT_BORDER,
+) -> bytes:
+    """Render a QR code as PNG bytes, sized to roughly ``target_px`` pixels.
+
+    Used for the "Download QR" button, which expects a 4" × 4" image at
+    250 dpi (1000 × 1000 px). Segno emits PNGs whose pixel dimensions are
+    ``(modules + 2 * border) * scale``, so the scale is chosen so the result
+    is the largest size that does not exceed ``target_px``. Returns ``b""``
+    when ``target_url`` is empty.
+    """
+    if not target_url:
+        return b""
+    qr = segno.make(target_url, error="m")
+    # qr.symbol_size returns (px, px) for a given scale+border. Compute the
+    # largest integer scale where the image fits within target_px.
+    modules = qr.symbol_size(scale=1, border=border)[0]  # = modules + 2*border
+    scale = max(1, target_px // modules)
+    buf = io.BytesIO()
+    qr.save(buf, kind="png", scale=scale, border=border, dark="#000", light="#fff")
+    return buf.getvalue()

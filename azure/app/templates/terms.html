@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Terms of Use — CTS Scoreboard{% endblock %}
+{% block description %}Terms of Use for the CTS Scoreboard live results service.{% endblock %}
+
+{% block main %}
+<article class="content">
+    <h1>Terms of Use</h1>
+    <p class="updated">Last updated: {{ updated }}</p>
+
+    <p>
+        CTS Scoreboard is a free, open-source project that relays live swim meet
+        results from a meet host's computer to anyone with a link or QR code.
+        By accessing this site you agree to these terms.
+    </p>
+
+    <h2>The service is provided "AS IS"</h2>
+    <p>
+        The software and this hosted service are provided <em>as is</em>, without
+        warranty of any kind, express or implied, including but not limited to
+        the warranties of merchantability, fitness for a particular purpose, and
+        non-infringement. In no event shall the authors or copyright holders be
+        liable for any claim, damages, or other liability arising from your use
+        of the service.
+    </p>
+    <p>
+        Results shown here are produced by third-party timing equipment operated
+        by the meet host. We do not guarantee their accuracy or availability.
+        Official results are issued by the meet host, not by this site.
+    </p>
+
+    <h2>Acceptable use</h2>
+    <p>You agree not to:</p>
+    <ul>
+        <li>Attempt to disrupt, overload, or probe the service for vulnerabilities.</li>
+        <li>Access or attempt to access meet data you have not been invited to view.</li>
+        <li>Reverse engineer, scrape, or redistribute live results in a way that misrepresents the source.</li>
+    </ul>
+
+    <h2>Open source</h2>
+    <p>
+        The source code for this project is available on
+        <a href="https://github.com/h2orules/CTS_Scoreboard" rel="noopener" target="_blank">GitHub</a>
+        and is licensed under an open-source license &mdash; see the repository's
+        <code>LICENSE</code> file for the authoritative terms that govern reuse of
+        the code itself.
+    </p>
+
+    <h2>Changes</h2>
+    <p>
+        We may update these terms from time to time. Continued use of the service
+        after a change indicates your acceptance of the revised terms.
+    </p>
+
+    <h2>Contact</h2>
+    <p>
+        Questions about these terms? Email
+        <a href="mailto:info@aquagnomeapps.com">info@aquagnomeapps.com</a>.
+    </p>
+</article>
+{% endblock %}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>{% block title %}CTS Scoreboard{% endblock %}</title>
+    <meta name="description" content="{% block description %}Live scoreboards for swim meets, viewable on any device.{% endblock %}">
+    <link rel="stylesheet" href="/static/css/site.css">
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <header class="site-header">
+        <div class="site-header-inner">
+            <a class="brand" href="/">
+                <span class="brand-mark">CTS Scoreboard</span>
+                <span class="brand-sub">Live swim meet results</span>
+            </a>
+        </div>
+    </header>
+
+    <main>
+        {% block main %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+        <div class="site-footer-inner">
+            <div>
+                Questions? <a href="mailto:info@aquagnomeapps.com">info@aquagnomeapps.com</a>
+            </div>
+            <nav>
+                <a href="https://github.com/h2orules/CTS_Scoreboard" rel="noopener" target="_blank">GitHub</a>
+                <a href="/terms">Terms of Use</a>
+                <a href="/privacy">Privacy Policy</a>
+            </nav>
+            <div class="copy">&copy; Aqua Gnome Apps</div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,317 @@
+/* Shared styles for the public-facing pages on the Azure relay
+   (homepage + Terms + Privacy). The state-page cards served from
+   `azure/app/routes.py::_state_page` keep their own self-contained CSS
+   block; this file only powers the marketing-style pages so the two
+   surfaces can evolve independently. The visual language (soft-grey
+   background, rounded white surfaces, system font stack) is shared so
+   the two surfaces feel like one product. */
+
+:root {
+    color-scheme: light;
+    --bg: #f5f7fa;
+    --surface: #ffffff;
+    --border: #e5e5e5;
+    --text: #2a3340;
+    --text-muted: #5a6573;
+    --text-faint: #8a94a4;
+    --accent: #2f6da3;
+    --accent-hover: #245680;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    --shadow-lg: 0 6px 24px rgba(20, 40, 80, 0.08);
+    --radius: 8px;
+    --radius-sm: 4px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+    color: var(--text);
+    background: var(--bg);
+    line-height: 1.5;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+a:hover,
+a:focus {
+    color: var(--accent-hover);
+    text-decoration: underline;
+}
+
+/* --- header -------------------------------------------------------- */
+.site-header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 24px;
+}
+
+.site-header-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.brand {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 18px;
+    color: var(--text);
+    text-decoration: none;
+}
+
+.brand:hover {
+    text-decoration: none;
+    color: var(--text);
+}
+
+.brand-mark {
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+.brand-sub {
+    color: var(--text-faint);
+    font-size: 13px;
+    font-weight: 400;
+}
+
+/* --- main / hero --------------------------------------------------- */
+main {
+    flex: 1;
+}
+
+.hero {
+    padding: 56px 24px 24px;
+    text-align: center;
+}
+
+.hero h1 {
+    font-size: 40px;
+    line-height: 1.15;
+    margin: 0 0 12px;
+    color: var(--text);
+    letter-spacing: -0.01em;
+}
+
+.hero .tagline {
+    font-size: 18px;
+    color: var(--text-muted);
+    margin: 0 auto 20px;
+    max-width: 36rem;
+}
+
+.hero .lede {
+    font-size: 15px;
+    color: var(--text-muted);
+    max-width: 32rem;
+    margin: 0 auto;
+}
+
+.hero .lede strong {
+    color: var(--text);
+}
+
+/* --- preview ------------------------------------------------------- */
+.preview-wrap {
+    max-width: 960px;
+    margin: 32px auto 8px;
+    padding: 0 24px;
+}
+
+.preview-frame {
+    position: relative;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-lg);
+    padding: 18px;
+    overflow: hidden;
+}
+
+.preview-frame .preview-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.preview-qr {
+    position: absolute;
+    top: 28px;
+    right: 28px;
+    width: 96px;
+    height: 96px;
+    background: #ffffff;
+    padding: 6px;
+    border-radius: var(--radius-sm);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+.preview-qr img {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.preview-caption {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-faint);
+    margin-top: 10px;
+}
+
+/* --- features ----------------------------------------------------- */
+.features {
+    max-width: 960px;
+    margin: 32px auto 48px;
+    padding: 0 24px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.feature {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    padding: 20px;
+}
+
+.feature h3 {
+    margin: 0 0 8px;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.feature p {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+/* --- content pages (terms / privacy) ------------------------------ */
+.content {
+    max-width: 720px;
+    margin: 48px auto;
+    padding: 32px 32px 28px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.content h1 {
+    font-size: 26px;
+    margin: 0 0 6px;
+    color: var(--text);
+}
+
+.content .updated {
+    font-size: 12px;
+    color: var(--text-faint);
+    margin: 0 0 20px;
+}
+
+.content h2 {
+    font-size: 17px;
+    margin: 24px 0 8px;
+    color: var(--text);
+}
+
+.content p,
+.content li {
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.content ul {
+    padding-left: 20px;
+}
+
+/* --- footer ------------------------------------------------------- */
+.site-footer {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 24px;
+    margin-top: auto;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.site-footer-inner {
+    max-width: 1100px;
+    margin: 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.site-footer nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.site-footer .copy {
+    color: var(--text-faint);
+    font-size: 12px;
+}
+
+@media (max-width: 720px) {
+    .hero {
+        padding-top: 36px;
+    }
+
+    .hero h1 {
+        font-size: 30px;
+    }
+
+    .hero .tagline {
+        font-size: 16px;
+    }
+
+    .features {
+        grid-template-columns: 1fr;
+    }
+
+    .preview-qr {
+        width: 72px;
+        height: 72px;
+        top: 22px;
+        right: 22px;
+    }
+
+    .content {
+        margin: 24px 12px;
+        padding: 24px 20px;
+    }
+
+    .site-footer-inner {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
