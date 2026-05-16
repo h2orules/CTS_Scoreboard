@@ -52,12 +52,14 @@ jobs:
 
       - name: Import image from pre-prod ACR to prod ACR
         run: |
-          # Strip @sha256:... back to repo:tag-style for the import; az acr
-          # import accepts digests on --source.
+          # --source accepts a digest reference (repo@sha256:...); --image
+          # must be repo:tag-style so the imported image is tagged in prod
+          # ACR with the commit SHA (matching what `containerapp update`
+          # references below).
           az acr import \
             --name $ACR_PROD \
             --source "${{ github.event.inputs.image_digest }}" \
-            --image "cts-relay@${GITHUB_SHA}" \
+            --image "cts-relay:${GITHUB_SHA}" \
             --force
 
       - name: Update prod Container App
