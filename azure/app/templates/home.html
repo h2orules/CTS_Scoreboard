@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}CTS Scoreboard — Live swim meet results{% endblock %}
+
+{% block main %}
+<section class="hero">
+    <h1>Live scoreboards for swim meets.</h1>
+    <p class="tagline">Real-time results on every phone, tablet, and TV in the building &mdash; no app to install.</p>
+    <p class="lede">
+        Looking for a meet? <strong>Scan the QR code or open the link from your meet host</strong>
+        to watch live results.
+    </p>
+</section>
+
+<section class="preview-wrap" aria-label="Example scoreboard preview">
+    <div class="preview-frame">
+        <svg class="preview-svg" viewBox="0 0 960 540" xmlns="http://www.w3.org/2000/svg"
+             role="img" aria-labelledby="preview-title preview-desc"
+             preserveAspectRatio="xMidYMid meet">
+            <title id="preview-title">Example scoreboard</title>
+            <desc id="preview-desc">An example swim event showing six lanes with names, teams, and final times.</desc>
+
+            <!-- Meet title bar -->
+            <rect x="0" y="0" width="960" height="56" fill="#87bdd8"/>
+            <text x="480" y="38" text-anchor="middle"
+                  font-family="'Overpass Mono','Courier New',monospace"
+                  font-size="28" font-weight="600" fill="#000000">Demo Invitational</text>
+
+            <!-- Event name bar -->
+            <rect x="0" y="56" width="960" height="48" fill="#505050"/>
+            <text x="480" y="88" text-anchor="middle"
+                  font-family="'Overpass Mono','Courier New',monospace"
+                  font-size="24" fill="#cfe0e8">Event 1 &#8212; Mixed 8 &amp; Under 25 Yard Freestyle</text>
+
+            <!-- Column header row -->
+            <rect x="0" y="104" width="960" height="44" fill="#daebe8"/>
+            <g font-family="'Overpass Mono','Courier New',monospace" font-size="20" fill="#000000">
+                <text x="40"  y="133" text-anchor="middle">LN</text>
+                <text x="110" y="133" text-anchor="middle">PL</text>
+                <text x="170" y="133">NAME</text>
+                <text x="640" y="133" text-anchor="middle">TEAM</text>
+                <text x="740" y="133" text-anchor="middle">AGE</text>
+                <text x="920" y="133" text-anchor="end">TIME</text>
+            </g>
+
+            <!-- Lane rows (1-6). Alternating row colors mirror scoreboard CSS. -->
+            <!-- Row 1 -->
+            <rect x="0" y="148" width="960" height="62" fill="#b7d7e8"/>
+            <g font-family="'Overpass Mono','Courier New',monospace" font-size="26" fill="#000000">
+                <text x="40"  y="190" text-anchor="middle">1</text>
+                <text x="110" y="190" text-anchor="middle">1</text>
+                <text x="170" y="190">Timmy Splash</text>
+                <text x="640" y="190" text-anchor="middle">HOME</text>
+                <text x="740" y="190" text-anchor="middle">8B</text>
+                <text x="920" y="190" text-anchor="end" font-weight="600">15.23</text>
+            </g>
+
+            <!-- Row 2 -->
+            <rect x="0" y="210" width="960" height="62" fill="#cfe0e8"/>
+            <g font-family="'Overpass Mono','Courier New',monospace" font-size="26" fill="#000000">
+                <text x="40"  y="252" text-anchor="middle">2</text>
+                <text x="110" y="252" text-anchor="middle">4</text>
+                <text x="170" y="252">Sally Wave</text>
+                <text x="640" y="252" text-anchor="middle">AWAY</text>
+                <text x="740" y="252" text-anchor="middle">8G</text>
+                <text x="920" y="252" text-anchor="end">16.89</text>
+            </g>
+
+            <!-- Row 3 -->
+            <rect x="0" y="272" width="960" height="62" fill="#b7d7e8"/>
+            <g font-family="'Overpass Mono','Courier New',monospace" font-size="26" fill="#000000">
+                <text x="40"  y="314" text-anchor="middle">3</text>
+                <text x="110" y="314" text-anchor="middle">5</text>
+                <text x="170" y="314">James Pullbuoy</text>
+                <text x="640" y="314" text-anchor="middle">HOME</text>
+                <text x="740" y="314" text-anchor="middle">7B</text>
+                <text x="920" y="314" text-anchor="end">17.54</text>
+            </g>
+
+            <!-- Row 4 -->
+            <rect x="0" y="334" width="960" height="62" fill="#cfe0e8"/>
+            <g font-family="'Overpass Mono','Courier New',monospace" font-size="26" fill="#000000">
+                <text x="40"  y="376" text-anchor="middle">4</text>
+                <text x="110" y="376" text-anchor="middle">5</text>
+                <text x="170" y="376">Bobby Kick</text>
+                <text x="640" y="376" text-anchor="middle">HOME</text>
+                <text x="740" y="376" text-anchor="middle">8B</text>
+                <text x="920" y="376" text-anchor="end">17.55</text>
+            </g>
+
+            <!-- Row 5 -->
+            <rect x="0" y="396" width="960" height="62" fill="#b7d7e8"/>
+            <g font-family="'Overpass Mono','Courier New',monospace" font-size="26" fill="#000000">
+                <text x="40"  y="438" text-anchor="middle">5</text>
+                <text x="110" y="438" text-anchor="middle">2</text>
+                <text x="170" y="438">Lily Laneline</text>
+                <text x="640" y="438" text-anchor="middle">AWAY</text>
+                <text x="740" y="438" text-anchor="middle">8G</text>
+                <text x="920" y="438" text-anchor="end">15.87</text>
+            </g>
+
+            <!-- Row 6 -->
+            <rect x="0" y="458" width="960" height="62" fill="#cfe0e8"/>
+            <g font-family="'Overpass Mono','Courier New',monospace" font-size="26" fill="#000000">
+                <text x="40"  y="500" text-anchor="middle">6</text>
+                <text x="110" y="500" text-anchor="middle">6</text>
+                <text x="170" y="500">Max Dive</text>
+                <text x="640" y="500" text-anchor="middle">HOME</text>
+                <text x="740" y="500" text-anchor="middle">8B</text>
+                <text x="920" y="500" text-anchor="end">18.50</text>
+            </g>
+        </svg>
+
+        <div class="preview-qr" aria-hidden="true">
+            <img src="/static/img/qr-demo.svg" alt="">
+        </div>
+    </div>
+    <p class="preview-caption">Example scoreboard.</p>
+</section>
+
+<section class="features" aria-label="Features">
+    <div class="feature">
+        <h3>Real-time results</h3>
+        <p>Lane data and finish times appear live as the meet runs, straight from the timing console at poolside.</p>
+    </div>
+    <div class="feature">
+        <h3>No app to install</h3>
+        <p>Any modern browser works. Share a single link or QR code with parents and spectators.</p>
+    </div>
+    <div class="feature">
+        <h3>Season-long links</h3>
+        <p>Each meet host gets a stable URL that's good all season &mdash; bookmark it once and check back on race day.</p>
+    </div>
+    <div class="feature">
+        <h3>Announcement board</h3>
+        <p>Post announcements for swimmers, coaches, and spectators.  Broadcast warmup schedule, volunteer info, and other important updates.</p>
+    </div>
+</section>
+{% endblock %}

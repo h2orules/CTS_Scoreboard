@@ -88,6 +88,7 @@ def build_bundle(
     template_root: str,
     static_root: str,
     template_relpath: str,
+    extra_static: list[str] | None = None,
 ) -> TemplateBundle:
     """Build a bundle for the named template (relative to ``template_root``).
 
@@ -96,6 +97,13 @@ def build_bundle(
     Walks ``{% include %}`` / ``{% extends %}`` references one level deep and
     enumerates every ``url_for('static', filename='...')`` literal. Missing
     static files are silently skipped (the browser will 404 on them).
+
+    ``extra_static`` is an optional list of additional static file paths
+    (relative to ``static_root``) to bundle even though they aren't
+    referenced via a literal ``url_for`` call. Use this for assets the
+    template references via a runtime expression — e.g.
+    ``url_for('static', filename='ad/' + ad_url)`` — where the bundler
+    can't statically discover the resolved path.
     """
     template_full = os.path.join(template_root, template_relpath)
     template_text = _read_text(template_full)
@@ -121,6 +129,15 @@ def build_bundle(
             full = os.path.join(static_root, rel)
             if os.path.isfile(full):
                 static_files[rel] = _read_bytes(full)
+
+    # --- caller-supplied extras (e.g. selected ad image) ---
+    for rel in extra_static or ():
+        if not rel or rel in seen:
+            continue
+        seen.add(rel)
+        full = os.path.join(static_root, rel)
+        if os.path.isfile(full):
+            static_files[rel] = _read_bytes(full)
 
     bundle_id = _hash_bundle(template_text, static_files, partials)
     return TemplateBundle(

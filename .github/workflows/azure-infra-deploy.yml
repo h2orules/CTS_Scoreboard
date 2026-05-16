@@ -93,6 +93,30 @@ jobs:
           echo "image=$IMG" >> $GITHUB_OUTPUT
           echo "::notice title=Pinned image::$IMG"
 
+      - name: Deactivate stale revisions
+        if: github.event.inputs.mode == 'apply'
+        run: |
+          # Deactivate ALL revisions before deploying. ARM's PUT fails with
+          # ContainerAppSecretInUse if any revision — including the live one —
+          # still has a secretRef pointing to a secret being removed from the
+          # Bicep template (e.g. webpubsub-conn). There is no way to avoid a
+          # brief outage without keeping the old secret indefinitely, so we
+          # accept ~30-60 s of downtime while the new revision starts.
+          RG="${{ steps.target.outputs.rg }}"
+          APP="${{ steps.target.outputs.app }}"
+          REVISIONS=$(az containerapp revision list -g "$RG" -n "$APP" \
+            --query "[].name" -o tsv 2>/dev/null || echo "")
+          if [[ -z "$REVISIONS" ]]; then
+            echo "No existing Container App / revisions found; skipping."
+            exit 0
+          fi
+          while read -r rev; do
+            [[ -z "$rev" ]] && continue
+            echo "Deactivating $rev"
+            az containerapp revision deactivate -g "$RG" -n "$APP" \
+              --revision "$rev" 2>/dev/null || true
+          done <<< "$REVISIONS"
+
       - name: Bicep what-if
         if: github.event.inputs.mode == 'what-if'
         run: |
@@ -129,6 +153,30 @@ jobs:
                   -n "${{ steps.target.outputs.app }}" \
                   --query properties.configuration.ingress.fqdn -o tsv)
           echo "url=https://$FQDN" >> $GITHUB_OUTPUT
+
+      - name: Bind managed certificate for custom domain
+        if: github.event.inputs.mode == 'apply'
+        run: |
+          # Registers a managed TLS certificate for the custom domain and sets
+          # bindingType to SniEnabled. This step is idempotent: it creates the
+          # cert on first run and reattaches it on subsequent infra deploys
+          # (Bicep registers the hostname with bindingType=Disabled, and this
+          # step upgrades it). The cert is free and auto-renewed by Azure.
+          #
+          # PREREQUISITE: DNS CNAME and TXT (asuid.*) records must be in place
+          # in GoDaddy before this step will succeed — see CUSTOM_DOMAIN_SETUP.md.
+          ENV=${{ github.event.inputs.environment }}
+          if [[ "$ENV" == "prod" ]]; then
+            CUSTOM_DOMAIN="scoreboard.aquagnomeapps.com"
+          else
+            CUSTOM_DOMAIN="scoreboard-pre.aquagnomeapps.com"
+          fi
+          az containerapp hostname bind \
+            -g "${{ steps.target.outputs.rg }}" \
+            -n "${{ steps.target.outputs.app }}" \
+            --hostname "$CUSTOM_DOMAIN" \
+            --environment "cts-sb-${ENV}-cae" \
+            --validation-method CNAME
 
       - name: Smoke test
         if: github.event.inputs.mode == 'apply'
