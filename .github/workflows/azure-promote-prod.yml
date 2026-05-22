@@ -69,6 +69,23 @@ jobs:
             --image "$ACR_PROD.azurecr.io/cts-relay:${{ github.sha }}" \
             --revision-suffix "${{ steps.rev.outputs.suffix }}"
 
+      - name: Activate new revision and route traffic
+        run: |
+          # The prod Container App runs in Multiple-revision mode (for
+          # `az containerapp revision activate` rollback). A new revision
+          # produced by `az containerapp update --image` is created in the
+          # inactive state and receives no replicas, so we must activate it
+          # and then point 100% of traffic at it. The previously-active
+          # revision is left in the inactive set so it can be re-activated
+          # as a rollback target.
+          NEW_REV="${APP_PROD}--${{ steps.rev.outputs.suffix }}"
+          echo "Activating $NEW_REV"
+          az containerapp revision activate \
+            -g "$RG_PROD" -n "$APP_PROD" --revision "$NEW_REV"
+          az containerapp ingress traffic set \
+            -g "$RG_PROD" -n "$APP_PROD" \
+            --revision-weight "$NEW_REV=100"
+
       - name: Health probe
         run: |
           FQDN=$(az containerapp show -g $RG_PROD -n $APP_PROD --query properties.configuration.ingress.fqdn -o tsv)

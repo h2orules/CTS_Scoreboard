@@ -171,12 +171,66 @@ jobs:
           else
             CUSTOM_DOMAIN="scoreboard-pre.aquagnomeapps.com"
           fi
-          az containerapp hostname bind \
-            -g "${{ steps.target.outputs.rg }}" \
-            -n "${{ steps.target.outputs.app }}" \
+          RG="${{ steps.target.outputs.rg }}"
+          APP="${{ steps.target.outputs.app }}"
+          CAE="cts-sb-${ENV}-cae"
+
+          # 1. Reuse an existing Succeeded managed cert for this hostname if one
+          #    is already present in the environment — avoids creating a new
+          #    cert every infra deploy (which would otherwise pile up Failed/
+          #    Pending certs and trip the bind step's wait).
+          EXISTING_CERT_ID=$(az containerapp env certificate list \
+            -g "$RG" --name "$CAE" \
+            --query "[?properties.subjectName=='$CUSTOM_DOMAIN' && properties.provisioningState=='Succeeded'].id | [0]" \
+            -o tsv)
+
+          if [[ -n "$EXISTING_CERT_ID" ]]; then
+            echo "Reusing existing managed cert: $EXISTING_CERT_ID"
+            az containerapp hostname bind \
+              -g "$RG" -n "$APP" \
+              --hostname "$CUSTOM_DOMAIN" \
+              --environment "$CAE" \
+              --certificate "$EXISTING_CERT_ID"
+            exit 0
+          fi
+
+          # 2. No usable cert yet — create one and poll until Succeeded before
+          #    binding. Managed cert issuance is async (2-10 min typical) and
+          #    `hostname bind --validation-method CNAME` does NOT wait, so a
+          #    naive call here races and fails the workflow.
+          echo "Creating new managed cert for $CUSTOM_DOMAIN ..."
+          NEW_CERT_ID=$(az containerapp env certificate create \
+            -g "$RG" --name "$CAE" \
             --hostname "$CUSTOM_DOMAIN" \
-            --environment "cts-sb-${ENV}-cae" \
-            --validation-method CNAME
+            --validation-method CNAME \
+            --query id -o tsv)
+          echo "Cert id: $NEW_CERT_ID"
+
+          # Poll for up to 15 minutes.
+          for i in $(seq 1 30); do
+            STATE=$(az containerapp env certificate show --ids "$NEW_CERT_ID" \
+              --query properties.provisioningState -o tsv)
+            echo "  attempt $i: $STATE"
+            if [[ "$STATE" == "Succeeded" ]]; then
+              break
+            fi
+            if [[ "$STATE" == "Failed" || "$STATE" == "Canceled" ]]; then
+              echo "::error::Managed cert provisioning ended in state $STATE"
+              az containerapp env certificate show --ids "$NEW_CERT_ID" -o json
+              exit 1
+            fi
+            sleep 30
+          done
+          if [[ "$STATE" != "Succeeded" ]]; then
+            echo "::error::Managed cert did not reach Succeeded within 15 minutes (last state: $STATE)"
+            exit 1
+          fi
+
+          az containerapp hostname bind \
+            -g "$RG" -n "$APP" \
+            --hostname "$CUSTOM_DOMAIN" \
+            --environment "$CAE" \
+            --certificate "$NEW_CERT_ID"
 
       - name: Smoke test
         if: github.event.inputs.mode == 'apply'
