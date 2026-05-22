@@ -24,7 +24,9 @@ class Settings(BaseSettings):
     )
 
     # ---- environment ----
-    environment: Literal["preprod", "production", "local"] = Field(
+    # Accept both "production" and the short "prod" form used by the Bicep
+    # infra (environmentName='prod'), so the same image works in either.
+    environment: Literal["preprod", "prod", "production", "local"] = Field(
         default="local",
         description="Deployment environment label, surfaced in telemetry.",
     )
