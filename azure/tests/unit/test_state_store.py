@@ -157,11 +157,30 @@ def test_is_meet_id_taken_other_when_owner_differs(store):
     assert store.is_meet_id_taken(mid, by_account_id="oid-2") == "other"
 
 
-def test_is_meet_id_taken_no_when_expired(store):
+def test_is_meet_id_taken_self_for_expired_id_rotated_when_owner_matches(store):
+    # After rotation the original owner may still reclaim their old name
+    # until the metadata TTL elapses.
     mid = "MidlakesMM-26"
     store.open_meet(mid, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
     store.mark_status(mid, "expired_id_rotated")
-    # Even the original owner sees "no" — the id is free for re-grab.
+    assert store.is_meet_id_taken(mid, by_account_id="oid-1") == "self"
+
+
+def test_is_meet_id_taken_other_for_expired_id_rotated_when_owner_differs(store):
+    # A different Pi must NOT be able to claim a name the original owner
+    # has just rotated away from — only the creator can reclaim.
+    mid = "MidlakesMM-26"
+    store.open_meet(mid, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
+    store.mark_status(mid, "expired_id_rotated")
+    assert store.is_meet_id_taken(mid, by_account_id="oid-2") == "other"
+
+
+def test_is_meet_id_taken_no_for_expired_id_rotated_when_orphaned(store):
+    # Back-compat: a rotated record with no recorded owner is free for
+    # anyone to claim (predates the ownership field).
+    mid = "OrphanedRotat1"
+    store.open_meet(mid, host_team_name="A", protocol_version=1, pi_account_id="")
+    store.mark_status(mid, "expired_id_rotated")
     assert store.is_meet_id_taken(mid, by_account_id="oid-1") == "no"
 
 

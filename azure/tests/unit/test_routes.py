@@ -309,6 +309,35 @@ def test_availability_other_owned_is_unavailable(client_with_validator):
     assert data == {"available": False, "owner": "other"}
 
 
+def test_availability_rotated_id_is_self_for_original_owner(client_with_validator):
+    # The original owner can still reclaim a rotated name until TTL elapses.
+    client, store = client_with_validator
+    name = "Midlakes-2026"
+    store.open_meet(name, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
+    store.mark_status(name, "expired_id_rotated")
+    r = client.get(
+        f"/internal/meet_id/{name}/availability",
+        headers={"Authorization": "Bearer good-oid1"},
+    )
+    assert r.status_code == 200
+    assert r.json() == {"available": True, "owner": "self"}
+
+
+def test_availability_rotated_id_is_other_for_different_user(client_with_validator):
+    # A different user must not be able to claim a name the original owner
+    # rotated away from.
+    client, store = client_with_validator
+    name = "Midlakes-2026"
+    store.open_meet(name, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
+    store.mark_status(name, "expired_id_rotated")
+    r = client.get(
+        f"/internal/meet_id/{name}/availability",
+        headers={"Authorization": "Bearer good-oid2"},
+    )
+    assert r.status_code == 200
+    assert r.json() == {"available": False, "owner": "other"}
+
+
 def test_availability_disabled_when_no_validator(client):
     # The default fixture builds the app without a token validator.
     r = client.get(

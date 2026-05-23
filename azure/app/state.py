@@ -187,19 +187,28 @@ class MeetStateStore:
     ) -> Literal["no", "self", "other"]:
         """Check whether ``meet_id`` is already claimed.
 
-        - ``"no"``: no live metadata exists for this id, or it's expired.
-        - ``"self"``: the current Pi (``by_account_id``) already owns it.
-        - ``"other"``: a different Pi owns it, OR metadata exists but is
-          orphaned (no recorded ``pi_account_id``); treated as taken so we
-          fail safely.
+        - ``"no"``: no metadata exists for this id (truly free, e.g. TTL
+          elapsed), or a rotated/closed record exists but has no owner
+          recorded (orphan — back-compat for records written before the
+          ``pi_account_id`` field existed).
+        - ``"self"``: the current Pi (``by_account_id``) owns the record.
+          This includes records marked ``expired_id_rotated`` or
+          ``closed`` — the original owner may reclaim their own name
+          until the metadata TTL elapses.
+        - ``"other"``: a different Pi owns the record (live, closed, or
+          rotated), OR live/closed metadata exists but is orphaned (no
+          recorded ``pi_account_id``); treated as taken so we fail safely.
         """
         meta = self.get_metadata(meet_id)
         if not meta:
             return "no"
-        # An expired/rotated id is no longer claimed by anyone.
-        if meta.get("status") == "expired_id_rotated":
-            return "no"
         owner = meta.get("pi_account_id") or ""
+        # Orphaned rotated/closed records (no owner recorded) are free for
+        # anyone to claim — there is nobody to gate reclaim against. Live
+        # orphaned records still fall through below and are treated as
+        # taken, since handing a live id to someone new would be unsafe.
+        if not owner and meta.get("status") == "expired_id_rotated":
+            return "no"
         if owner and by_account_id and owner == by_account_id:
             return "self"
         return "other"
