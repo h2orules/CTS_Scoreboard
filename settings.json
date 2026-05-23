@@ -32,7 +32,7 @@
     "num_lanes": 4,
     "password": "password",
     "pool_course": "SCY",
-    "qr_message_page_injected": false,
+    "qr_message_page_injected": true,
     "qr_overlay_corner": "bottom-right",
     "qr_overlay_enabled": false,
     "qr_overlay_visibility": "always",

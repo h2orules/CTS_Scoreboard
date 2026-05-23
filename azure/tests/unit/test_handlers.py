@@ -456,3 +456,54 @@ async def test_pi_connect_rejects_invalid_meet_id():
         await _handler(sio, "/pi", "connect")(
             "sidBad", {}, {"access_token": "ok", "meet_id": "bad name!", "protocol_version": 1}
         )
+
+
+@pytest.mark.asyncio
+async def test_meet_open_allows_original_owner_to_reclaim_rotated_id():
+    # The original Pi may reclaim a previously-rotated name until the
+    # metadata TTL elapses.
+    sio, _, _, _ = _make_sio_with_spies()
+    store = _store()
+    MID = "Midlakes-2026a"
+    # _ok_validator returns account_id="oid-pi".
+    store.open_meet(MID, host_team_name="Foo", protocol_version=1, pi_account_id="oid-pi")
+    store.mark_status(MID, "expired_id_rotated")
+    register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MID, "protocol_version": 1}
+    )
+    res = await _handler(sio, "/pi", "meet_open")(
+        "sidPi", {"meet_id": MID, "host_team_name": "Foo", "protocol_version": 1}
+    )
+    assert res == {"ok": True}
+    meta = store.get_metadata(MID)
+    assert meta["status"] == "live"
+    assert meta["pi_account_id"] == "oid-pi"
+
+
+@pytest.mark.asyncio
+async def test_meet_open_rejects_other_pi_reclaiming_rotated_id():
+    # A *different* Pi must not be able to grab a name the original owner
+    # has rotated away from.
+    sio, _, _, _ = _make_sio_with_spies()
+    store = _store()
+    MID = "Midlakes-2026b"
+    # Original owner is "oid-original"; the connecting Pi's validator
+    # returns "oid-pi" (different identity).
+    store.open_meet(MID, host_team_name="Orig", protocol_version=1, pi_account_id="oid-original")
+    store.mark_status(MID, "expired_id_rotated")
+    register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MID, "protocol_version": 1}
+    )
+    res = await _handler(sio, "/pi", "meet_open")(
+        "sidPi", {"meet_id": MID, "host_team_name": "Intruder", "protocol_version": 1}
+    )
+    assert res == {"ok": False, "error": "meet_id_taken"}
+    # Original metadata unchanged: still owned by oid-original, still rotated.
+    meta = store.get_metadata(MID)
+    assert meta["pi_account_id"] == "oid-original"
+    assert meta["status"] == "expired_id_rotated"
+    assert meta["host_team_name"] == "Orig"
