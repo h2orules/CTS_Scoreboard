@@ -29,7 +29,7 @@ You should be repo-owner of `STU940652/CTS_Scoreboard` on GitHub (or use a
 fork) so you can configure secrets and Environments.
 
 ---
-
+ 
 ## 1. Pick names and a region
 
 These names are referenced throughout. Override to taste; everything else
