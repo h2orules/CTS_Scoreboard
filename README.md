@@ -69,3 +69,18 @@ Or with arguments:
 ```
 uv run cts-scoreboard --in recording.dat --speed 2.0
 ```
+
+## Kiosk Mode on Raspberry Pi 5
+
+To boot the Pi straight into a fullscreen Chromium scoreboard with a
+keyboard shortcut to drop back to the desktop, see
+[docs/PI_KIOSK_SETUP.md](docs/PI_KIOSK_SETUP.md). Quick start:
+
+```bash
+cd ~/scoreboard
+./pi/scripts/install-kiosk.sh
+sudo reboot
+```
+
+Exit kiosk with `Ctrl+Alt+K`; re-enter via the **CTS Scoreboard Kiosk**
+desktop icon or `Ctrl+Alt+R`.

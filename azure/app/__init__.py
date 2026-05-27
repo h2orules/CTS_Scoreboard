@@ -1,4 +1,4 @@
-"""CTS Scoreboard Azure relay app."""
+"""Swimming Scoreboard Azure relay app."""
 
 __version__ = "0.1.0"
 
