@@ -62,6 +62,8 @@ def register(flask_app, app_module):
         schedule_error = None
         standards_error = None
         records_error = None
+        ad_error = None
+        ad_needs_update = False
         settings = _app.settings
 
         if flask.request.method == 'POST':
@@ -147,6 +149,106 @@ def register(flask_app, app_module):
                         except:
                             pass
 
+            # --- Ad images: multi-file upload, reorder, toggle, remove -------
+            ad_form_submitted = ('ad_form' in flask.request.form)
+            ad_changed = False
+            AD_ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+            AD_DIR = os.path.join(os.path.dirname(os.path.abspath(_app.__file__)), 'static', 'ad')
+
+            if 'ad_images' in flask.request.files:
+                from werkzeug.utils import secure_filename
+                ad_list = list(settings.get('ad_images') or [])
+                uploaded = flask.request.files.getlist('ad_images')
+                ad_errors = []
+                for upload in uploaded:
+                    if not upload or not upload.filename:
+                        continue
+                    base = secure_filename(upload.filename)
+                    if not base:
+                        ad_errors.append('Rejected file with invalid name')
+                        continue
+                    stem, ext = os.path.splitext(base)
+                    if ext.lower() not in AD_ALLOWED_EXTS:
+                        ad_errors.append('Rejected %s (unsupported type)' % upload.filename)
+                        continue
+                    try:
+                        os.makedirs(AD_DIR, exist_ok=True)
+                    except Exception:
+                        pass
+                    final_name = base
+                    n = 1
+                    while os.path.exists(os.path.join(AD_DIR, final_name)) or \
+                            any((a.get('filename') == final_name) for a in ad_list):
+                        final_name = '%s_%d%s' % (stem, n, ext)
+                        n += 1
+                    try:
+                        upload.save(os.path.join(AD_DIR, final_name))
+                    except Exception as e:
+                        ad_errors.append('Failed to save %s: %s' % (upload.filename, e))
+                        continue
+                    ad_list.append({'filename': final_name, 'enabled': True})
+                    ad_changed = True
+                if ad_changed:
+                    settings['ad_images'] = ad_list
+                    modified = True
+                if ad_errors:
+                    ad_error = '; '.join(ad_errors)
+
+            if ad_form_submitted:
+                ad_list = list(settings.get('ad_images') or [])
+                # Remove (process first so subsequent indices line up with the
+                # form we just rendered the user; remove takes priority).
+                removed_idx = None
+                for idx in range(len(ad_list)):
+                    if ('ad_remove_%d' % idx) in flask.request.form:
+                        removed_idx = idx
+                        break
+                if removed_idx is not None:
+                    entry = ad_list.pop(removed_idx)
+                    try:
+                        fname = entry.get('filename') if isinstance(entry, dict) else None
+                        if fname:
+                            os.unlink(os.path.join(AD_DIR, fname))
+                    except Exception:
+                        pass
+                    ad_changed = True
+                else:
+                    # Reorder: at most one swap per submit.
+                    swap = None
+                    for idx in range(len(ad_list)):
+                        if ('ad_up_%d' % idx) in flask.request.form and idx > 0:
+                            swap = (idx, idx - 1)
+                            break
+                        if ('ad_down_%d' % idx) in flask.request.form and idx < len(ad_list) - 1:
+                            swap = (idx, idx + 1)
+                            break
+                    if swap is not None:
+                        a, b = swap
+                        ad_list[a], ad_list[b] = ad_list[b], ad_list[a]
+                        ad_changed = True
+                    # Per-row enabled checkbox state (checkbox absent == False).
+                    for idx, entry in enumerate(ad_list):
+                        new_enabled = ('ad_enabled_%d' % idx) in flask.request.form
+                        if bool(entry.get('enabled')) != new_enabled:
+                            entry['enabled'] = new_enabled
+                            ad_changed = True
+                # Rotation interval dropdown.
+                try:
+                    new_interval = int(flask.request.form.get('ad_rotation_interval', '30'))
+                except (TypeError, ValueError):
+                    new_interval = 30
+                if new_interval < 5 or new_interval > 60 or new_interval % 5 != 0:
+                    new_interval = 30
+                if settings.get('ad_rotation_interval', 30) != new_interval:
+                    settings['ad_rotation_interval'] = new_interval
+                    ad_changed = True
+
+                if ad_changed:
+                    settings['ad_images'] = ad_list
+                    modified = True
+
+            ad_needs_update = ad_changed
+
             # --- Record set team tag dropdowns -------------------------------
 
             for rec_set in _app.swim_record_sets:
@@ -199,6 +301,8 @@ def register(flask_app, app_module):
                             modified = True
                     elif k.endswith('_tag'):
                         pass  # Already handled above
+                    elif k in ('ad_images', 'ad_rotation_interval'):
+                        pass  # Handled by the ad form block above
                     else:
                         val = flask.request.form.get(k)
                         if k.startswith('team_') and not k.endswith('_tag'):
@@ -311,15 +415,29 @@ def register(flask_app, app_module):
                 _app.send_message_overlay_state()
                 _app._update_message_rotation()
 
+            if ad_needs_update:
+                _app._update_ad_rotation()
+
         # --- GET: build template context -------------------------------------
 
         comm_port_list = [(port, "%s: %s" % (port, desc)) for port, desc, id in serial.tools.list_ports.comports()]
         if settings['serial_port'] not in [port for port, desc in comm_port_list]:
             comm_port_list.insert(0, (settings['serial_port'], settings['serial_port']))
 
-        ad_url_list = []
-        for dirpath, dir, file in os.walk(os.path.join("static", "ad")):
-            ad_url_list.extend(file)
+        # Build the list of ad image rows for the settings template. We render
+        # only entries that still have a backing file on disk so a stale
+        # settings.json doesn't show broken previews.
+        ad_images = []
+        for entry in (settings.get('ad_images') or []):
+            if not isinstance(entry, dict):
+                continue
+            fname = entry.get('filename', '')
+            if not fname:
+                continue
+            ad_images.append({
+                'filename': fname,
+                'enabled': bool(entry.get('enabled', True)),
+            })
 
         schedule_loaded = bool(_app.event_info.event_names)
         standards_loaded = _app.time_standards is not None
@@ -345,8 +463,9 @@ def register(flask_app, app_module):
                     serial_port=settings['serial_port'],
                     serial_port_list=comm_port_list,
                     user_name=settings['username'],
-                    ad_url_list=ad_url_list,
-                    ad_url=settings['ad_url'],
+                    ad_images=ad_images,
+                    ad_rotation_interval=settings.get('ad_rotation_interval', 30),
+                    ad_error=ad_error,
                     num_lanes=settings['num_lanes'],
                     pool_course=settings.get('pool_course', 'SCY'),
                     seed_time_label=settings.get('seed_time_label', 'Seed Time'),
