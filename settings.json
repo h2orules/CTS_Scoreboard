@@ -1,5 +1,19 @@
 {
-    "ad_url": "dolphins-logo.jpg",
+    "ad_images": [
+        {
+            "enabled": true,
+            "filename": "dolphins-logo.jpg"
+        },
+        {
+            "enabled": true,
+            "filename": "kgr_logo-large.jpg"
+        },
+        {
+            "enabled": true,
+            "filename": "GatorLogo-Green-SS-2023.png"
+        }
+    ],
+    "ad_rotation_interval": 5,
     "blank_message": "## Warmups\n**High Woodlands**: 4:30pm-5:00pm\n**Kingsgate**:      5:00pm-5:30pm\n## Meet Start\nPromptly at 6:00pm\n## Volunteer Meetings\n***Timers*** 5:30pm, ***Officials*** 5:45pm, ***Coaches*** 5:30pm",
     "blank_message_align": "center",
     "blank_message_visible": false,

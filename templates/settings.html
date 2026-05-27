@@ -1398,36 +1398,103 @@
 
         <div class="settings-section">
         <h3>Ad Display</h3>
+        {% if ad_error %}
+        <div class="row"><div class="col-lg-6">
+            <div class="alert alert-danger" style="margin-bottom: 5px; padding: 6px 12px;">{{ ad_error }}</div>
+        </div></div>
+        {% endif %}
         <div class="row">
             <div class="col-lg-6">
-                <form action="/settings" method="POST">
+                <form action="/settings" method="POST" enctype="multipart/form-data">
                     <div class="input-group">
-                        <label for="ad_url">Ad Image</label>
+                        <label for="ad_images_upload">Upload Ad Images</label>
                         <div class="input-group">
-                            <select id="ad_url" name="ad_url" class="form-control"
-                                oninput="document.getElementById('ad_url_submit').disabled=false;">
-                                <option value="" selected>-- None --</option>
-                                {% for url in ad_url_list %}
-                                {% if url == ad_url %}
-                                <option value="{{url}}" selected>{{url}}</option>
-                                {% else %}
-                                <option value="{{url}}">{{url}}</option>
-                                {% endif %}
-                                {% endfor %}
-                            </select>
+                            <input id="ad_images_upload" name="ad_images" type="file" multiple
+                                accept=".jpg,.jpeg,.png,.gif,.webp" class="form-control">
                             <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="ad_url_submit" disabled>Update</button>
+                                <button class="btn btn-default" type="submit">Upload</button>
                             </span>
                         </div>
+                        <small class="text-muted">JPG, PNG, GIF, or WebP. Select multiple files at once if you like.</small>
                     </div>
                 </form>
             </div>
         </div>
-        {% if ad_url and (ad_url != '') %}
-        <div class="row"><div class="col-lg-6">
-        <img src="{{url_for('static', filename='ad/'+ad_url)}}" style="max-width:300px;max-height:300px;width:auto;height:auto;border-radius:4px;margin-top:6px;" />
-        </div></div>
-        {% endif %}
+
+        <form action="/settings" method="POST" style="margin-top: 10px;">
+            <input type="hidden" name="ad_form" value="1">
+            <div class="row">
+                <div class="col-lg-6">
+                    <div class="input-group">
+                        <label for="ad_rotation_interval">Rotation Interval</label>
+                        <div class="input-group">
+                            <select id="ad_rotation_interval" name="ad_rotation_interval" class="form-control">
+                                {% for sec in [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60] %}
+                                <option value="{{ sec }}" {% if ad_rotation_interval == sec %}selected{% endif %}>{{ sec }}s</option>
+                                {% endfor %}
+                            </select>
+                            <span class="input-group-btn">
+                                <button class="btn btn-default" type="submit">Save</button>
+                            </span>
+                        </div>
+                        <small class="text-muted">Rotation only runs when at least 2 images are enabled.</small>
+                    </div>
+                </div>
+            </div>
+
+            {% if ad_images %}
+            <div class="row" style="margin-top: 10px;">
+                <div class="col-lg-10">
+                    <table class="table" style="margin-bottom: 0;">
+                        <thead>
+                            <tr>
+                                <th style="width: 170px;">Preview</th>
+                                <th>Filename</th>
+                                <th style="width: 90px;">Enabled</th>
+                                <th style="width: 180px;">Order</th>
+                                <th style="width: 100px;">&nbsp;</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ad in ad_images %}
+                            <tr>
+                                <td>
+                                    <img src="{{ url_for('static', filename='ad/' + ad.filename) }}"
+                                        style="max-width:150px;max-height:150px;width:auto;height:auto;object-fit:contain;border-radius:4px;" />
+                                </td>
+                                <td style="vertical-align: middle;">{{ ad.filename }}</td>
+                                <td style="vertical-align: middle;">
+                                    <input type="checkbox" name="ad_enabled_{{ loop.index0 }}"
+                                        {% if ad.enabled %}checked{% endif %}>
+                                </td>
+                                <td style="vertical-align: middle;">
+                                    <button class="btn btn-default btn-sm" type="submit"
+                                        name="ad_up_{{ loop.index0 }}" value="1"
+                                        {% if loop.first %}disabled{% endif %}>&uarr; Up</button>
+                                    <button class="btn btn-default btn-sm" type="submit"
+                                        name="ad_down_{{ loop.index0 }}" value="1"
+                                        {% if loop.last %}disabled{% endif %}>&darr; Down</button>
+                                </td>
+                                <td style="vertical-align: middle;">
+                                    <button class="btn btn-danger btn-sm" type="submit"
+                                        name="ad_remove_{{ loop.index0 }}" value="1">Remove</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% else %}
+            <div class="row" style="margin-top: 10px;">
+                <div class="col-lg-6">
+                    <div class="alert alert-warning" style="margin-bottom: 5px; padding: 6px 12px;">
+                        No ad images uploaded.
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </form>
         </div>
 
         <div class="settings-section">
