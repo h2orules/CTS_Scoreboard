@@ -1070,7 +1070,7 @@ table.scoreboard_table td[id^="lane_place"] {
     /* Footer message: shrink the type slightly and keep some breathing
        room around the edges on small screens. */
     .scoreboard_footer_cell {
-        font-size: 16px;
+        font-size: 12px !important;
         padding: 6px 10px;
     }
 }
