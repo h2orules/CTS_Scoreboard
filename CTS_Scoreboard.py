@@ -67,7 +67,10 @@ settings = {
     'serial_port': 'COM1',
     'username': 'admin',
     'password': 'password',
-    'ad_url': '',
+    # Ad rotation: list of dicts {'filename': str, 'enabled': bool}.
+    # Files live in static/ad/. Order in the list is rotation order.
+    'ad_images': [],
+    'ad_rotation_interval': 30,
     'num_lanes': 6,
     'pool_course': 'SCY',
     'show_pr_tags': True,
@@ -125,6 +128,11 @@ time_standards = None
 # Swim Records (list of dicts: {rec_file, filename, team_tag, set_id})
 swim_record_sets = []
 _next_rec_set_id = 0
+
+# Ad rotation state. Index into settings['ad_images']; clamped to a currently
+# enabled entry by _update_ad_rotation().
+_ad_rotation_index = 0
+_ad_rotation_running = False
 
 app = flask.Flask(__name__)
 # config
@@ -215,6 +223,27 @@ def load_settings():
             }]
             settings['message_overlay_enabled'] = settings['message_pages'][0]['enabled']
             settings.setdefault('message_rotation_interval', 30)
+            save_settings()
+        # Drop the legacy single-image ``ad_url`` key. Ad images are now a list
+        # of {filename, enabled} dicts in settings['ad_images']; the old value
+        # is intentionally not migrated (operators re-select images via upload).
+        if 'ad_url' in settings:
+            settings.pop('ad_url', None)
+            save_settings()
+        # Normalise ad_images entries (older saves or hand-edits may produce
+        # plain filename strings instead of the {'filename', 'enabled'} dict).
+        raw_ads = settings.get('ad_images') or []
+        norm_ads = []
+        for entry in raw_ads:
+            if isinstance(entry, str):
+                norm_ads.append({'filename': entry, 'enabled': True})
+            elif isinstance(entry, dict) and entry.get('filename'):
+                norm_ads.append({
+                    'filename': entry['filename'],
+                    'enabled': bool(entry.get('enabled', True)),
+                })
+        if norm_ads != raw_ads:
+            settings['ad_images'] = norm_ads
             save_settings()
         # Migrate legacy single-environment Azure URLs into the preprod slot.
         if settings.get('azure_relay_url') and not settings.get('azure_relay_url_preprod'):
@@ -1109,6 +1138,80 @@ def _update_message_rotation():
         _stop_message_rotation()
 
 
+# --- Ad image rotation timer ---
+
+def _enabled_ad_indices():
+    """Return list of indices into settings['ad_images'] where enabled is True."""
+    return [i for i, a in enumerate(settings.get('ad_images', []) or [])
+            if a.get('enabled')]
+
+
+def _start_ad_rotation():
+    """Start the background ad rotation task if 2+ enabled images exist."""
+    global _ad_rotation_running
+    if _ad_rotation_running:
+        return
+    if len(_enabled_ad_indices()) < 2:
+        return
+    _ad_rotation_running = True
+    socketio.start_background_task(_ad_rotation_tick)
+
+
+def _stop_ad_rotation():
+    """Signal the ad rotation timer to stop."""
+    global _ad_rotation_running
+    _ad_rotation_running = False
+
+
+def _ad_rotation_tick():
+    """Background task: rotate through enabled ads and broadcast changes."""
+    global _ad_rotation_index, _ad_rotation_running
+    while _ad_rotation_running:
+        interval = settings.get('ad_rotation_interval', 30)
+        try:
+            interval = int(interval)
+        except (TypeError, ValueError):
+            interval = 30
+        if interval < 5 or interval > 60 or interval % 5 != 0:
+            interval = 30
+        socketio.sleep(interval)
+        if not _ad_rotation_running:
+            break
+        enabled = _enabled_ad_indices()
+        if len(enabled) < 2:
+            _ad_rotation_running = False
+            break
+        try:
+            cur_pos = enabled.index(_ad_rotation_index)
+            next_pos = (cur_pos + 1) % len(enabled)
+        except ValueError:
+            next_pos = 0
+        _ad_rotation_index = enabled[next_pos]
+        broadcast_scoreboard({
+            'active_ad_index': _ad_rotation_index,
+            'ad_images': list(settings.get('ad_images', []) or []),
+        })
+
+
+def _update_ad_rotation():
+    """Re-evaluate whether the ad rotation timer should be running.
+
+    Call after any change to ad_images (add/remove/reorder/toggle) or to
+    ad_rotation_interval. Clamps the active index to a currently-enabled
+    entry and starts/stops the timer based on the enabled count.
+    """
+    global _ad_rotation_index
+    enabled = _enabled_ad_indices()
+    if not enabled:
+        _ad_rotation_index = 0
+    elif _ad_rotation_index not in enabled:
+        _ad_rotation_index = enabled[0]
+    if len(enabled) >= 2:
+        _start_ad_rotation()
+    else:
+        _stop_ad_rotation()
+
+
 def send_event_info():            
     update={}
     update["current_event"] = str(last_event_sent[0])
@@ -1257,10 +1360,14 @@ def _build_render_context():
         else ''
     )
 
+    ad_images = list(settings.get('ad_images', []) or [])
+
     return dict(
         meet_title=settings['meet_title'],
         num_lanes=num_lanes,
-        ad_url=settings['ad_url'],
+        ad_images=ad_images,
+        active_ad_index=_ad_rotation_index,
+        ad_rotation_interval=settings.get('ad_rotation_interval', 30),
         schedule_has_names=event_info.has_names,
         team_names=[
             ('score_home', settings.get('team_home', '')),
@@ -1325,10 +1432,16 @@ def _azure_bundle_provider():
         # (url_for('static', filename='ad/' + ad_url)), which the bundler
         # can't auto-discover. Pass the currently selected ad image as an
         # explicit extra so it lands in the cache served by Azure.
+        # The template references ad images via runtime expressions
+        # (url_for('static', filename='ad/' + name)), which the bundler can't
+        # auto-discover. Pass every uploaded ad filename (enabled or not) as
+        # an explicit extra so toggling an image on at runtime doesn't
+        # require a fresh bundle push.
         extra_static = []
-        ad_url = (settings.get('ad_url') or '').strip()
-        if ad_url:
-            extra_static.append('ad/' + ad_url)
+        for ad in (settings.get('ad_images') or []):
+            name = (ad.get('filename') or '').strip() if isinstance(ad, dict) else ''
+            if name:
+                extra_static.append('ad/' + name)
         bundle = build_bundle(
             template_root=os.path.join(repo_root, 'templates'),
             static_root=os.path.join(repo_root, 'static'),
@@ -1520,7 +1633,11 @@ def route_site_map():
 
 @app.context_processor
 def inject_ad():
-    return dict(ad_url=settings['ad_url'])
+    return dict(
+        ad_images=list(settings.get('ad_images', []) or []),
+        active_ad_index=_ad_rotation_index,
+        ad_rotation_interval=settings.get('ad_rotation_interval', 30),
+    )
     
 # callback to reload the user object        
 @login_manager.user_loader
@@ -1563,6 +1680,7 @@ azure_relay_client.subscribe_status(_on_azure_status)
 if azure_relay_client.meet_id:
     azure_relay_client.start()
 _update_message_rotation()
+_update_ad_rotation()
 
 
 def main():
