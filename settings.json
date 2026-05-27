@@ -35,6 +35,17 @@
             "is_default": false,
             "strokes": [],
             "text": "Finish times are not available for 25yd events\nSee *Meet Mobile* for results in a few minutes"
+        },
+        {
+            "age_groups": [],
+            "align": "left",
+            "created_at": 1779862478.413855,
+            "distances": [],
+            "genders": [],
+            "id": "791c5944eadc",
+            "is_default": true,
+            "strokes": [],
+            "text": "This is a message."
         }
     ],
     "meet_title": "Test Betz Meet 4",
@@ -65,7 +76,7 @@
     "num_lanes": 4,
     "password": "password",
     "pool_course": "SCY",
-    "qr_message_page_injected": true,
+    "qr_message_page_injected": false,
     "qr_overlay_corner": "bottom-left",
     "qr_overlay_enabled": false,
     "qr_overlay_visibility": "always",

@@ -156,31 +156,25 @@ def register(flask_app, app_module):
             AD_DIR = os.path.join(os.path.dirname(os.path.abspath(_app.__file__)), 'static', 'ad')
 
             if 'ad_images' in flask.request.files:
-                from werkzeug.utils import secure_filename
+                import uuid
                 ad_list = list(settings.get('ad_images') or [])
                 uploaded = flask.request.files.getlist('ad_images')
                 ad_errors = []
                 for upload in uploaded:
                     if not upload or not upload.filename:
                         continue
-                    base = secure_filename(upload.filename)
-                    if not base:
-                        ad_errors.append('Rejected file with invalid name')
-                        continue
-                    stem, ext = os.path.splitext(base)
-                    if ext.lower() not in AD_ALLOWED_EXTS:
+                    _, ext = os.path.splitext(upload.filename)
+                    ext = ext.lower()
+                    if ext not in AD_ALLOWED_EXTS:
                         ad_errors.append('Rejected %s (unsupported type)' % upload.filename)
                         continue
                     try:
                         os.makedirs(AD_DIR, exist_ok=True)
                     except Exception:
                         pass
-                    final_name = base
-                    n = 1
-                    while os.path.exists(os.path.join(AD_DIR, final_name)) or \
-                            any((a.get('filename') == final_name) for a in ad_list):
-                        final_name = '%s_%d%s' % (stem, n, ext)
-                        n += 1
+                    # Use a UUID-based filename so uploads never collide with
+                    # existing files (regardless of the user's original name).
+                    final_name = 'ad_%s%s' % (uuid.uuid4().hex, ext)
                     try:
                         upload.save(os.path.join(AD_DIR, final_name))
                     except Exception as e:
@@ -584,6 +578,15 @@ def register(flask_app, app_module):
                 'summary': _footer_summary(m),
             })
 
+        # Section anchor to scroll to after a settings update. Forms inject
+        # `_section` automatically via JS, and the clear/remove redirect
+        # routes pass `?section=` so we can return the user to where they
+        # were working.
+        if flask.request.method == 'POST':
+            scroll_to_section = flask.request.form.get('_section') or None
+        else:
+            scroll_to_section = flask.request.args.get('section') or None
+
         return flask.render_template('settings.html',
                     meet_title=settings['meet_title'],
                     serial_port=settings['serial_port'],
@@ -627,7 +630,8 @@ def register(flask_app, app_module):
                     footer_gender_options=_app.FOOTER_GENDER_LABELS,
                     footer_distance_options=_app.FOOTER_DISTANCE_VALUES,
                     footer_stroke_options=_app.FOOTER_STROKE_LABELS,
-                    footer_age_group_options=_app.FOOTER_AGE_GROUP_LABELS)
+                    footer_age_group_options=_app.FOOTER_AGE_GROUP_LABELS,
+                    scroll_to_section=scroll_to_section)
 
     # -- WiFi management API -------------------------------------------------
 
@@ -686,7 +690,7 @@ def register(flask_app, app_module):
         _app.settings['event_info'] = _app.event_info.to_object()
         _app.settings.pop('schedule_filename', None)
         _app.save_settings()
-        return flask.redirect('/settings')
+        return flask.redirect('/settings?section=section-meet-manager')
 
     @flask_app.route('/standards_clear')
     @flask_login.login_required
@@ -696,7 +700,7 @@ def register(flask_app, app_module):
         _app.settings.pop('standards_filename', None)
         _app.settings.pop('std_desc_overrides', None)
         _app.save_settings()
-        return flask.redirect('/settings')
+        return flask.redirect('/settings?section=section-meet-manager')
 
     @flask_app.route('/records_remove/<int:set_id>')
     @flask_login.login_required
@@ -708,7 +712,7 @@ def register(flask_app, app_module):
         else:
             _app.settings.pop('swim_record_sets', None)
         _app.save_settings()
-        return flask.redirect('/settings')
+        return flask.redirect('/settings?section=section-meet-manager')
 
     # -- Shutdown ------------------------------------------------------------
 
