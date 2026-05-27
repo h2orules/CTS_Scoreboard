@@ -90,9 +90,10 @@
         </div>
         </div>
         <div class="content_scoreboard_ad" id="content_scoreboard_ad">
-            {% if ad_url and (ad_url != '') %}
-            <img src="{{url_for('static', filename='ad/'+ad_url)}}" />
-            {% endif %}
+            {% set _initial_ad = ad_images[active_ad_index] if (ad_images and active_ad_index is defined and active_ad_index < ad_images|length) else None %}
+            <img id="ad_layer_a" class="ad-layer"
+                {% if _initial_ad and _initial_ad.enabled %}src="{{ url_for('static', filename='ad/' + _initial_ad.filename) }}" style="opacity:1;"{% else %}style="opacity:0;"{% endif %} />
+            <img id="ad_layer_b" class="ad-layer" style="opacity:0;" />
         </div>
         {% if test_background and is_dev_mode and serving_context == 'pi' %}
         <div class="controls">
@@ -185,6 +186,49 @@
     var messagePages = {{ initial_message_pages | tojson }};
     var messageRotationInterval = {{ initial_settings.message_rotation_interval | tojson }};
     var activeMessagePage = {{ initial_active_message_page | tojson }};
+    var adImages = {{ ad_images | tojson }};
+    var activeAdIndex = {{ active_ad_index | tojson }};
+    var _adActiveLayer = 'a';   // which layer ('a' or 'b') is currently shown
+    var AD_STATIC_BASE = {{ url_for('static', filename='ad/') | tojson }};
+
+    function renderAdRotation() {
+        var layerA = document.getElementById('ad_layer_a');
+        var layerB = document.getElementById('ad_layer_b');
+        if (!layerA || !layerB) return;
+        var entry = null;
+        if (Array.isArray(adImages) && activeAdIndex >= 0 && activeAdIndex < adImages.length) {
+            entry = adImages[activeAdIndex];
+        }
+        if (!entry || !entry.enabled || !entry.filename) {
+            // Hide both layers.
+            layerA.style.opacity = '0';
+            layerB.style.opacity = '0';
+            return;
+        }
+        var newSrc = AD_STATIC_BASE + entry.filename;
+        var activeEl = (_adActiveLayer === 'a') ? layerA : layerB;
+        var nextEl   = (_adActiveLayer === 'a') ? layerB : layerA;
+        // If active layer already shows this image (e.g. first paint), nothing to do.
+        if (activeEl.getAttribute('src') === newSrc && activeEl.style.opacity !== '0') {
+            return;
+        }
+        // Preload onto inactive layer, then swap opacities for a cross-fade.
+        nextEl.onload = function () {
+            nextEl.style.opacity = '1';
+            activeEl.style.opacity = '0';
+            _adActiveLayer = (_adActiveLayer === 'a') ? 'b' : 'a';
+            nextEl.onload = null;
+        };
+        nextEl.setAttribute('src', newSrc);
+        // If the browser already has the image cached, onload may not fire
+        // again — handle that case synchronously.
+        if (nextEl.complete && nextEl.naturalWidth > 0) {
+            nextEl.style.opacity = '1';
+            activeEl.style.opacity = '0';
+            _adActiveLayer = (_adActiveLayer === 'a') ? 'b' : 'a';
+            nextEl.onload = null;
+        }
+    }
     var qualifyingTimesKey = {{ initial_qt_key | tojson }};
     var _fragmentCache = {};       // { url: { key, html } }
 
@@ -885,6 +929,13 @@
         if ("active_message_page" in s) { activeMessagePage = s["active_message_page"]; msgChanged = true; }
         if (msgChanged || ("race_state" in s)) {
             renderMessageOverlay();
+        }
+
+        var adChanged = false;
+        if ("ad_images" in s) { adImages = s["ad_images"] || []; adChanged = true; }
+        if ("active_ad_index" in s) { activeAdIndex = s["active_ad_index"]; adChanged = true; }
+        if (adChanged) {
+            renderAdRotation();
         }
 
         // Evaluate all lanes for time standard qualifications (skip if event/heat just changed with stale times)
