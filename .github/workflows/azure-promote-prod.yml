@@ -44,9 +44,15 @@ jobs:
       - name: Compute revision suffix
         id: rev
         run: |
+          # Container Apps reserves revision names permanently (even after
+          # deactivation), so a suffix can never be reused. Include the
+          # workflow run number and attempt so re-runs always produce a
+          # fresh, unique suffix while keeping the SHA prefix for
+          # traceability.
           SUFFIX="${{ github.event.inputs.revision_suffix }}"
           if [[ -z "$SUFFIX" ]]; then
-            SUFFIX="r$(echo ${{ github.sha }} | cut -c1-8)"
+            SHA8=$(echo ${{ github.sha }} | cut -c1-8)
+            SUFFIX="r${SHA8}-${{ github.run_number }}-${{ github.run_attempt }}"
           fi
           echo "suffix=$SUFFIX" >> $GITHUB_OUTPUT
 
