@@ -80,6 +80,14 @@ settings = {
     'message_pages': [{'text': '', 'align': 'left', 'enabled': False}],
     'message_overlay_enabled': False,
     'message_rotation_interval': 30,
+    # Footer messages: list of dicts shown as a row at the bottom of the
+    # scoreboard table. Each entry is gated by optional selectors (Gender,
+    # Distance, Stroke, Age Group); see _select_footer_message() for the
+    # matching rule. Schema per entry:
+    #   {id: str, text: str, align: 'left'|'center'|'right', is_default: bool,
+    #    genders: [str], distances: [int], strokes: [str], age_groups: [str],
+    #    created_at: float}
+    'footer_messages': [],
     'team_home': '',
     'team_home_tag': '',
     'team_guest1': '',
@@ -908,6 +916,181 @@ def _render_blank_message_html(text):
     return ''.join(out)
 
 
+# ---- Footer messages -------------------------------------------------------
+# Footer-message selector vocab. Stored values match these labels exactly.
+FOOTER_GENDER_LABELS = ['Female', 'Male', 'Mixed']
+FOOTER_STROKE_LABELS = ['Freestyle', 'Backstroke', 'Breaststroke', 'Butterfly', 'Medley']
+FOOTER_DISTANCE_VALUES = [25, 50, 100, 200, 400, 500, 800, 1000, 1500, 1650]
+FOOTER_AGE_GROUP_LABELS = ['8-Under', '9-10', '11-12', '13-14', '15-18', 'Open']
+# (min, max) inclusive; None means unbounded on that side.
+FOOTER_AGE_GROUP_RANGES = {
+    '8-Under': (None, 8),
+    '9-10': (9, 10),
+    '11-12': (11, 12),
+    '13-14': (13, 14),
+    '15-18': (15, 18),
+    'Open': (None, None),
+}
+# st2 stroke_code -> label (matches FOOTER_STROKE_LABELS).
+_FOOTER_STROKE_CODE_TO_LABEL = {
+    1: 'Freestyle', 2: 'Backstroke', 3: 'Breaststroke',
+    4: 'Butterfly', 5: 'Medley',
+}
+
+
+def _footer_event_gender_label(meta):
+    """Map event_meta.sex_codes to a footer-vocab gender label, or None."""
+    codes = meta.get('sex_codes') or []
+    if len(codes) > 1:
+        return 'Mixed'
+    if codes == [1]:
+        return 'Male'
+    if codes == [2]:
+        return 'Female'
+    return None
+
+
+def _footer_age_groups_overlap(group_label, event_age_min, event_age_max):
+    """True if the selector's age range overlaps the event's age range."""
+    grange = FOOTER_AGE_GROUP_RANGES.get(group_label)
+    if grange is None:
+        return False
+    gmin, gmax = grange
+    NEG = -10 ** 9
+    POS = 10 ** 9
+    emin = event_age_min if event_age_min is not None else NEG
+    emax = event_age_max if event_age_max is not None else POS
+    smin = gmin if gmin is not None else NEG
+    smax = gmax if gmax is not None else POS
+    return not (emax < smin or emin > smax)
+
+
+def _event_matches_footer(msg, meta):
+    """True if this footer message's non-empty selectors all match *meta*.
+
+    A category with no selected values contributes True (matches anything).
+    Within a category, OR across selected values. Across categories, AND.
+    Default messages (``is_default``) are handled separately by the
+    selector — this function only evaluates the explicit selector match.
+    """
+    if meta is None:
+        return False
+    sel = msg.get('genders') or []
+    if sel:
+        if _footer_event_gender_label(meta) not in sel:
+            return False
+    sel = msg.get('distances') or []
+    if sel:
+        d = meta.get('distance')
+        try:
+            d_int = int(d)
+        except (TypeError, ValueError):
+            return False
+        if d_int not in [int(x) for x in sel if x is not None]:
+            return False
+    sel = msg.get('strokes') or []
+    if sel:
+        label = _FOOTER_STROKE_CODE_TO_LABEL.get(meta.get('stroke_code'))
+        if label not in sel:
+            return False
+    sel = msg.get('age_groups') or []
+    if sel:
+        emin = meta.get('age_min')
+        emax = meta.get('age_max')
+        if not any(_footer_age_groups_overlap(g, emin, emax) for g in sel):
+            return False
+    return True
+
+
+def _footer_specificity(msg):
+    """Number of selector categories that have at least one value set."""
+    n = 0
+    for k in ('genders', 'distances', 'strokes', 'age_groups'):
+        if msg.get(k):
+            n += 1
+    return n
+
+
+def _select_footer_message(meta):
+    """Pick the best matching footer message for the given event_meta.
+
+    Rules:
+      * Non-default messages are matched first. Highest specificity wins;
+        ties broken by most recent ``created_at``.
+      * If no non-default message matches, the most recently added default
+        is used.
+      * Returns None when there are no eligible messages.
+    """
+    msgs = settings.get('footer_messages') or []
+    if not msgs:
+        return None
+    matches = []
+    defaults = []
+    for m in msgs:
+        if m.get('is_default'):
+            defaults.append(m)
+        elif _event_matches_footer(m, meta):
+            matches.append(m)
+    if matches:
+        matches.sort(
+            key=lambda m: (_footer_specificity(m), m.get('created_at') or 0),
+            reverse=True,
+        )
+        return matches[0]
+    if defaults:
+        defaults.sort(key=lambda m: m.get('created_at') or 0, reverse=True)
+        return defaults[0]
+    return None
+
+
+def _render_footer_message_html(msg):
+    """Render a footer message dict to HTML. Strips [[QR]] tokens."""
+    if not msg:
+        return ''
+    text = (msg.get('text') or '').replace(QR_TOKEN, '')
+    if not text.strip():
+        return ''
+    inner = _render_blank_message_html(text)
+    align = msg.get('align', 'left')
+    if align not in ('left', 'center', 'right'):
+        align = 'left'
+    return ('<div class="scoreboard-footer-message align-%s">%s</div>'
+            % (align, inner))
+
+
+def _current_event_meta():
+    """Return the event_meta dict for the currently-selected event, or None."""
+    try:
+        ev = last_event_sent[0]
+    except Exception:
+        return None
+    try:
+        return event_info.event_meta.get(ev)
+    except Exception:
+        return None
+
+
+def _render_and_cache_footer_message():
+    """Render the active footer message and cache under 'footer_message'.
+
+    Returns the content cache key. Empty cache (no matching message) still
+    gets a stable key so clients can detect the no-message state.
+    """
+    msg = _select_footer_message(_current_event_meta())
+    html = _render_footer_message_html(msg) if msg else ''
+    return _cache_put('footer_message', html)
+
+
+def broadcast_footer_message_refresh():
+    """Re-render the active footer message and broadcast the new key.
+
+    Called whenever the saved footer-messages list changes (add/remove) or
+    when the live event/heat changes (so the selector logic re-evaluates).
+    """
+    key = _render_and_cache_footer_message()
+    broadcast_scoreboard({'footer_message_key': key})
+
+
 def _render_qualifying_html(qt_groups, rec_set_list):
     """Render qualifying times + records into an HTML fragment and cache it.
 
@@ -1246,6 +1429,7 @@ def send_event_info():
     ]
     update["message_rotation_interval"] = settings.get('message_rotation_interval', 30)
     update["active_message_page"] = _message_rotation_index
+    update["footer_message_key"] = _render_and_cache_footer_message()
     update["race_state"] = race_fsm.state_name
 
     broadcast_scoreboard(update)
@@ -1329,7 +1513,9 @@ def _build_render_context():
     show_age_codes = qt_show_age or rec_show_age
     qt_key = _render_qualifying_html(qt_results, rec_set_results)
     page_keys = _render_and_cache_message_pages()
+    footer_key = _render_and_cache_footer_message()
     _, qt_html = _cache_get('qualifying_info')
+    _, footer_html = _cache_get('footer_message')
     num_lanes = settings['num_lanes']
 
     initial_lanes = {}
@@ -1382,6 +1568,8 @@ def _build_render_context():
         initial_rec_sets=rec_set_results,
         initial_qt_key=qt_key,
         initial_qt_html=qt_html or '',
+        initial_footer_key=footer_key,
+        initial_footer_html=footer_html or '',
         initial_lanes=initial_lanes,
         initial_scores=team_scores,
         initial_race_state=race_fsm.state_name,
@@ -1533,6 +1721,19 @@ def api_qualifying_info():
 def api_message_page(index):
     resource = 'message_page_%d' % index
     key, html = _cache_get(resource)
+    if key is None:
+        return flask.Response('', status=200, content_type='text/html; charset=utf-8')
+    etag = '"' + key + '"'
+    if flask.request.headers.get('If-None-Match') == etag:
+        return flask.Response('', status=304)
+    resp = flask.Response(html, status=200, content_type='text/html; charset=utf-8')
+    resp.headers['ETag'] = etag
+    resp.headers['Cache-Control'] = 'public, max-age=60'
+    return resp
+
+@app.route('/api/footer-message')
+def api_footer_message():
+    key, html = _cache_get('footer_message')
     if key is None:
         return flask.Response('', status=200, content_type='text/html; charset=utf-8')
     etag = '"' + key + '"'
