@@ -420,6 +420,10 @@ def build_router(
     async def meet_message_page(meet_id: str, index: int, request: Request) -> Response:
         return _serve_fragment(meet_id, f"message_page_{index}", request)
 
+    @router.get("/m/{meet_id}/api/footer-message")
+    async def meet_footer_message(meet_id: str, request: Request) -> Response:
+        return _serve_fragment(meet_id, "footer_message", request)
+
     @router.get("/internal/meet_id/{name}/availability")
     async def meet_id_availability(
         name: str,
