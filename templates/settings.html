@@ -274,7 +274,7 @@
             <a href="/" class="btn btn-default btn-sm">Back to Site Map</a>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-meet-settings">
         <h3>Meet Settings</h3>
         <div class="row">
             <div class="col-lg-6">
@@ -296,7 +296,7 @@
         </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-pool-settings">
         <h3>Pool Settings</h3>
         <div class="row">
             <div class="col-lg-6">
@@ -325,7 +325,7 @@
         </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-display-options">
         <h3>Display Options</h3>
         <div class="row">
             <div class="col-lg-6">
@@ -372,7 +372,7 @@
         </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-message-board">
         <h3>Message Board</h3>
         <div class="row">
             <div class="col-lg-8">
@@ -1195,19 +1195,87 @@
         </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-footer-messages">
         <h3>Footer Messages</h3>
         <div class="section-hint">Show a message at the bottom of the scoreboard table for matching events.
-            Pick selectors (Gender, Distance, Stroke, Age Group); selectors with no values match any event.
-            When more than one message matches, the most specific wins (ties broken by the most recently added).
+            <br/>When more than one message matches, the most specific wins.
             Mark a message as <em>Default</em> to use it when nothing else matches.</div>
         <div class="row">
-            <div class="col-lg-12">
+            <div class="col-lg-8">
                 <style>
-                    .footer-selectors { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 8px; }
-                    .footer-selector-group { border: 1px solid #ddd; padding: 6px 8px; border-radius: 4px; background: #fafafa; }
-                    .footer-selector-group .group-title { font-weight: 600; font-size: 0.85em; margin-bottom: 4px; color: #555; }
-                    .footer-selector-group label { display: inline-block; margin-right: 8px; font-size: 0.9em; font-weight: normal; }
+                    .footer-msg-textarea { max-width: 560px; }
+                    .footer-msg-list { max-width: 720px; }
+                    .footer-selectors {
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 8px;
+                        margin-bottom: 10px;
+                    }
+                    .ms-dd { position: relative; display: inline-block; }
+                    .ms-dd-btn {
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 6px;
+                        padding: 4px 10px;
+                        min-height: 30px;
+                        background: #fff;
+                        border: 1px solid #bbb;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 0.9em;
+                        color: #333;
+                        max-width: 280px;
+                    }
+                    .ms-dd-btn:hover { border-color: #888; }
+                    .ms-dd-btn .ms-dd-cat { color: #555; font-weight: 600; }
+                    .ms-dd-btn .ms-dd-val {
+                        color: #333;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                        max-width: 200px;
+                    }
+                    .ms-dd-btn .ms-dd-val.empty { color: #999; font-style: italic; }
+                    .ms-dd-btn .caret {
+                        width: 0; height: 0;
+                        border-left: 4px solid transparent;
+                        border-right: 4px solid transparent;
+                        border-top: 4px solid #666;
+                        margin-left: auto;
+                    }
+                    .ms-dd-menu {
+                        position: absolute;
+                        top: 100%;
+                        left: 0;
+                        margin-top: 2px;
+                        background: #fff;
+                        border: 1px solid #bbb;
+                        border-radius: 4px;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+                        padding: 6px 4px;
+                        z-index: 100;
+                        min-width: 100%;
+                        max-height: 260px;
+                        overflow-y: auto;
+                        white-space: nowrap;
+                    }
+                    .ms-dd-menu[hidden] { display: none; }
+                    .ms-dd-menu label {
+                        display: block;
+                        padding: 3px 10px;
+                        margin: 0;
+                        font-weight: normal;
+                        font-size: 0.9em;
+                        cursor: pointer;
+                        border-radius: 3px;
+                    }
+                    .ms-dd-menu label:hover { background: #f0f4f8; }
+                    .ms-dd-menu input[type="checkbox"] { margin-right: 6px; }
+                    .ms-dd[data-disabled="1"] .ms-dd-btn {
+                        background: #f5f5f5;
+                        color: #999;
+                        cursor: not-allowed;
+                    }
                     .footer-msg-list { width: 100%; border-collapse: collapse; margin-top: 12px; }
                     .footer-msg-list th, .footer-msg-list td { padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: top; text-align: left; }
                     .footer-msg-list th { background: #f5f5f5; font-size: 0.85em; }
@@ -1218,29 +1286,53 @@
                     <input type="hidden" name="footer_form" value="1">
 
                     <div class="footer-selectors">
-                        <div class="footer-selector-group">
-                            <div class="group-title">Gender</div>
-                            {% for g in footer_gender_options %}
-                            <label><input type="checkbox" name="footer_genders" value="{{ g }}"> {{ g }}</label>
-                            {% endfor %}
+                        <div class="ms-dd" data-name="footer_genders" data-label="Gender">
+                            <button type="button" class="ms-dd-btn">
+                                <span class="ms-dd-cat">Gender:</span>
+                                <span class="ms-dd-val empty">any</span>
+                                <span class="caret"></span>
+                            </button>
+                            <div class="ms-dd-menu" hidden>
+                                {% for g in footer_gender_options %}
+                                <label><input type="checkbox" name="footer_genders" value="{{ g }}"> {{ g }}</label>
+                                {% endfor %}
+                            </div>
                         </div>
-                        <div class="footer-selector-group">
-                            <div class="group-title">Distance</div>
-                            {% for d in footer_distance_options %}
-                            <label><input type="checkbox" name="footer_distances" value="{{ d }}"> {{ d }}</label>
-                            {% endfor %}
+                        <div class="ms-dd" data-name="footer_distances" data-label="Distance">
+                            <button type="button" class="ms-dd-btn">
+                                <span class="ms-dd-cat">Distance:</span>
+                                <span class="ms-dd-val empty">any</span>
+                                <span class="caret"></span>
+                            </button>
+                            <div class="ms-dd-menu" hidden>
+                                {% for d in footer_distance_options %}
+                                <label><input type="checkbox" name="footer_distances" value="{{ d }}"> {{ d }}</label>
+                                {% endfor %}
+                            </div>
                         </div>
-                        <div class="footer-selector-group">
-                            <div class="group-title">Stroke</div>
-                            {% for s in footer_stroke_options %}
-                            <label><input type="checkbox" name="footer_strokes" value="{{ s }}"> {{ s }}</label>
-                            {% endfor %}
+                        <div class="ms-dd" data-name="footer_strokes" data-label="Stroke">
+                            <button type="button" class="ms-dd-btn">
+                                <span class="ms-dd-cat">Stroke:</span>
+                                <span class="ms-dd-val empty">any</span>
+                                <span class="caret"></span>
+                            </button>
+                            <div class="ms-dd-menu" hidden>
+                                {% for s in footer_stroke_options %}
+                                <label><input type="checkbox" name="footer_strokes" value="{{ s }}"> {{ s }}</label>
+                                {% endfor %}
+                            </div>
                         </div>
-                        <div class="footer-selector-group">
-                            <div class="group-title">Age Group</div>
-                            {% for a in footer_age_group_options %}
-                            <label><input type="checkbox" name="footer_age_groups" value="{{ a }}"> {{ a }}</label>
-                            {% endfor %}
+                        <div class="ms-dd" data-name="footer_age_groups" data-label="Age Group">
+                            <button type="button" class="ms-dd-btn">
+                                <span class="ms-dd-cat">Age Group:</span>
+                                <span class="ms-dd-val empty">any</span>
+                                <span class="caret"></span>
+                            </button>
+                            <div class="ms-dd-menu" hidden>
+                                {% for a in footer_age_group_options %}
+                                <label><input type="checkbox" name="footer_age_groups" value="{{ a }}"> {{ a }}</label>
+                                {% endfor %}
+                            </div>
                         </div>
                     </div>
 
@@ -1255,7 +1347,22 @@
                     <div class="form-group">
                         <div class="msg-toolbar">
                             <div class="msg-toolbar-top">
-                                <label style="margin:0;font-size:0.85em;color:#666;">Message (max 3 lines &times; 60 visible chars)</label>
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <label style="margin:0;font-size:0.85em;color:#666;">Message (max 3 lines &times; 60 visible chars)</label>
+                                    <span class="md-legend-wrap">
+                                        <span class="md-legend-trigger">Markdown&nbsp;Legend</span>
+                                        <div class="md-legend-popup">
+                                            <div class="legend-title">Supported Markdown</div>
+                                            <table>
+                                                <tr><td>**text**</td><td><strong>Bold</strong></td></tr>
+                                                <tr><td>*text*</td><td><em>Italic</em></td></tr>
+                                                <tr><td>_text_</td><td><u>Underline</u></td></tr>
+                                                <tr><td>~~text~~</td><td><s>Strikethrough</s></td></tr>
+                                                <tr><td>`text`</td><td><code>Code</code></td></tr>
+                                            </table>
+                                        </div>
+                                    </span>
+                                </div>
                             </div>
                             <div class="msg-toolbar-bottom" onmousedown="event.preventDefault()">
                                 <div class="msg-toolbar-left">
@@ -1290,7 +1397,7 @@
                             </div>
                         </div>
                         <textarea name="footer_text" id="footer_text" rows="3" cols="60" maxlength="500"
-                            class="form-control"
+                            class="form-control footer-msg-textarea"
                             style="font-family:'Overpass Mono',monospace;white-space:pre;overflow:auto;text-align:left;"
                             placeholder="e.g. Race times are not available for 25yrd events. See Meet Mobile a few minutes after the race for results."
                             oninput="footerOnInput(this);"></textarea>
@@ -1366,13 +1473,94 @@
                             MsgFmt.fmtToggle(ta, fmt);
                             enforce(ta);
                         };
+
+                        // When the Default switch is on, the message applies to all
+                        // events, so the per-category selectors are meaningless —
+                        // clear and disable them. Restore on toggle off.
+                        var defaultCb = document.getElementById('footer_is_default');
+                        function selectorCheckboxes() {
+                            var form = document.getElementById('footer_form');
+                            if (!form) return [];
+                            return form.querySelectorAll(
+                                'input[name="footer_genders"],'
+                                + 'input[name="footer_distances"],'
+                                + 'input[name="footer_strokes"],'
+                                + 'input[name="footer_age_groups"]'
+                            );
+                        }
+                        function applyDefaultState() {
+                            if (!defaultCb) return;
+                            var on = defaultCb.checked;
+                            selectorCheckboxes().forEach(function (cb) {
+                                if (on) cb.checked = false;
+                                cb.disabled = on;
+                            });
+                            document.querySelectorAll('#footer_form .ms-dd').forEach(function (dd) {
+                                dd.setAttribute('data-disabled', on ? '1' : '0');
+                                var btn = dd.querySelector('.ms-dd-btn');
+                                if (btn) btn.disabled = on;
+                                var menu = dd.querySelector('.ms-dd-menu');
+                                if (menu && on) menu.hidden = true;
+                                updateDdLabel(dd);
+                            });
+                        }
+                        if (defaultCb) {
+                            defaultCb.addEventListener('change', applyDefaultState);
+                        }
+
+                        // ── Multi-select dropdowns for footer selectors ──────
+                        function updateDdLabel(dd) {
+                            var valEl = dd.querySelector('.ms-dd-val');
+                            if (!valEl) return;
+                            var checked = dd.querySelectorAll('input[type="checkbox"]:checked');
+                            if (checked.length === 0) {
+                                valEl.textContent = 'any';
+                                valEl.classList.add('empty');
+                            } else {
+                                var vals = [];
+                                checked.forEach(function (c) {
+                                    var label = c.parentElement;
+                                    vals.push((label ? label.textContent : c.value).trim());
+                                });
+                                valEl.textContent = vals.join(', ');
+                                valEl.classList.remove('empty');
+                            }
+                        }
+                        document.querySelectorAll('#footer_form .ms-dd').forEach(function (dd) {
+                            var btn = dd.querySelector('.ms-dd-btn');
+                            var menu = dd.querySelector('.ms-dd-menu');
+                            if (!btn || !menu) return;
+                            btn.addEventListener('click', function (e) {
+                                e.stopPropagation();
+                                if (dd.getAttribute('data-disabled') === '1') return;
+                                // Close other open menus
+                                document.querySelectorAll('#footer_form .ms-dd-menu').forEach(function (m) {
+                                    if (m !== menu) m.hidden = true;
+                                });
+                                menu.hidden = !menu.hidden;
+                            });
+                            menu.addEventListener('change', function () { updateDdLabel(dd); });
+                            updateDdLabel(dd);
+                        });
+                        document.addEventListener('click', function (e) {
+                            document.querySelectorAll('#footer_form .ms-dd').forEach(function (dd) {
+                                if (!dd.contains(e.target)) {
+                                    var menu = dd.querySelector('.ms-dd-menu');
+                                    if (menu) menu.hidden = true;
+                                }
+                            });
+                        });
+
+                        // Apply the initial Default state after the dropdowns
+                        // have been wired so labels reflect the disabled state.
+                        applyDefaultState();
                     })();
                 </script>
             </div>
         </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-team-names">
         <h3>Team Names</h3>
         <div class="section-hint">Clear team names to prevent showing scores for that team.</div>
         <div class="row">
@@ -1402,7 +1590,7 @@
         </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-meet-manager">
         <h3>Meet Manager (Hytek/Active) Data</h3>
         <div class="row">
             <div class="col-lg-6">
@@ -1573,7 +1761,7 @@
         {% endif %}
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-ad-display">
         <h3>Ad Display</h3>
         {% if ad_error %}
         <div class="row"><div class="col-lg-6">
@@ -1604,15 +1792,14 @@
                 <div class="col-lg-6">
                     <div class="input-group">
                         <label for="ad_rotation_interval">Rotation Interval</label>
-                        <div class="input-group">
-                            <select id="ad_rotation_interval" name="ad_rotation_interval" class="form-control">
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <select id="ad_rotation_interval" name="ad_rotation_interval" class="form-control"
+                                style="width:auto;display:inline-block;">
                                 {% for sec in [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60] %}
                                 <option value="{{ sec }}" {% if ad_rotation_interval == sec %}selected{% endif %}>{{ sec }}s</option>
                                 {% endfor %}
                             </select>
-                            <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit">Save</button>
-                            </span>
+                            <button class="btn btn-default" type="submit">Save</button>
                         </div>
                         <small class="text-muted">Rotation only runs when at least 2 images are enabled.</small>
                     </div>
@@ -1622,14 +1809,25 @@
             {% if ad_images %}
             <div class="row" style="margin-top: 10px;">
                 <div class="col-lg-10">
+                    <style>
+                        .ad-icon-btn {
+                            padding: 4px 8px;
+                            line-height: 1;
+                        }
+                        .ad-icon-btn svg {
+                            width: 16px;
+                            height: 16px;
+                            display: block;
+                            fill: currentColor;
+                        }
+                    </style>
                     <table class="table" style="margin-bottom: 0;">
                         <thead>
                             <tr>
                                 <th style="width: 170px;">Preview</th>
-                                <th>Filename</th>
                                 <th style="width: 90px;">Enabled</th>
-                                <th style="width: 180px;">Order</th>
-                                <th style="width: 100px;">&nbsp;</th>
+                                <th style="width: 110px;">Order</th>
+                                <th style="width: 60px;">&nbsp;</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1639,22 +1837,30 @@
                                     <img src="{{ url_for('static', filename='ad/' + ad.filename) }}"
                                         style="max-width:150px;max-height:150px;width:auto;height:auto;object-fit:contain;border-radius:4px;" />
                                 </td>
-                                <td style="vertical-align: middle;">{{ ad.filename }}</td>
                                 <td style="vertical-align: middle;">
                                     <input type="checkbox" name="ad_enabled_{{ loop.index0 }}"
                                         {% if ad.enabled %}checked{% endif %}>
                                 </td>
                                 <td style="vertical-align: middle;">
-                                    <button class="btn btn-default btn-sm" type="submit"
+                                    <button class="btn btn-default btn-sm ad-icon-btn" type="submit"
                                         name="ad_up_{{ loop.index0 }}" value="1"
-                                        {% if loop.first %}disabled{% endif %}>&uarr; Up</button>
-                                    <button class="btn btn-default btn-sm" type="submit"
+                                        title="Move up"
+                                        {% if loop.first %}disabled{% endif %}>
+                                        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3l6 7H2z"/></svg>
+                                    </button>
+                                    <button class="btn btn-default btn-sm ad-icon-btn" type="submit"
                                         name="ad_down_{{ loop.index0 }}" value="1"
-                                        {% if loop.last %}disabled{% endif %}>&darr; Down</button>
+                                        title="Move down"
+                                        {% if loop.last %}disabled{% endif %}>
+                                        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13L2 6h12z"/></svg>
+                                    </button>
                                 </td>
                                 <td style="vertical-align: middle;">
-                                    <button class="btn btn-danger btn-sm" type="submit"
-                                        name="ad_remove_{{ loop.index0 }}" value="1">Remove</button>
+                                    <button class="btn btn-danger btn-sm ad-icon-btn" type="submit"
+                                        name="ad_remove_{{ loop.index0 }}" value="1"
+                                        title="Remove">
+                                        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2h6l1 1h3v2H1V3h3l1-1zm-2 4h10l-1 9H4L3 6z"/></svg>
+                                    </button>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -1674,7 +1880,7 @@
         </form>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-wifi-network">
         <h3>WiFi Network</h3>
         {% if wifi_available %}
         <div class="row">
@@ -1718,7 +1924,7 @@
         {% endif %}
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-cloud-hosting">
             <h3>Cloud Hosting</h3>
             <div class="section-hint">
                 Sign in to publish this scoreboard to viewers over the internet.
@@ -1796,7 +2002,7 @@
             </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-advanced-settings">
         <h3>Advanced Settings</h3>
         <div class="row">
             <div class="col-lg-6">
@@ -1868,7 +2074,7 @@
         </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-danger-zone">
         <h3 style="color:#a94442;">Danger Zone</h3>
         <div class="row">
             <div class="col-lg-6">
@@ -2906,6 +3112,42 @@
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"
         integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
         crossorigin="anonymous"></script>
+
+    <!-- Auto-scroll to the section that submitted the most recent POST.
+         Each settings form has its enclosing <div class="settings-section">
+         id (e.g. "section-footer-messages") injected as a hidden _section
+         field on submit, and the server passes that id back as
+         `scroll_to_section` so we can restore scroll position after reload. -->
+    <script>
+    (function () {
+        // Auto-inject the enclosing section id into any /settings POST form.
+        document.addEventListener('submit', function (e) {
+            var form = e.target;
+            if (!form || form.tagName !== 'FORM') return;
+            var action = (form.getAttribute('action') || '').split('?')[0];
+            if (action !== '/settings') return;
+            var section = form.closest('.settings-section');
+            if (!section || !section.id) return;
+            if (form.querySelector('input[name="_section"]')) return;
+            var hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = '_section';
+            hidden.value = section.id;
+            form.appendChild(hidden);
+        }, true);
+
+        // Scroll to the section returned by the server (if any).
+        {% if scroll_to_section %}
+        var target = document.getElementById({{ scroll_to_section | tojson }});
+        if (target) {
+            // Defer until layout settles so headers / fonts don't throw off offset.
+            window.addEventListener('load', function () {
+                target.scrollIntoView({ block: 'start' });
+            });
+        }
+        {% endif %}
+    })();
+    </script>
 </body>
 
 </html>
