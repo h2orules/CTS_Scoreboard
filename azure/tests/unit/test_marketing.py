@@ -24,7 +24,7 @@ def test_homepage_renders(client):
     assert r.headers["content-type"].startswith("text/html")
     body = r.text
     # Brand + tagline.
-    assert "CTS Scoreboard" in body
+    assert "Swimming Scoreboard" in body
     assert "Live scoreboards for swim meets" in body
     # Footer + nav links.
     assert "info@aquagnomeapps.com" in body

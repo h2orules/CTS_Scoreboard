@@ -11,6 +11,10 @@
         {
             "enabled": true,
             "filename": "GatorLogo-Green-SS-2023.png"
+        },
+        {
+            "enabled": true,
+            "filename": "monarchs-logo-2017_047876-tsm-med.jpg"
         }
     ],
     "ad_rotation_interval": 5,
@@ -46,7 +50,7 @@
     "num_lanes": 4,
     "password": "password",
     "pool_course": "SCY",
-    "qr_message_page_injected": true,
+    "qr_message_page_injected": false,
     "qr_overlay_corner": "bottom-right",
     "qr_overlay_enabled": false,
     "qr_overlay_visibility": "always",
