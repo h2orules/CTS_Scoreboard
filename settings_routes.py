@@ -396,6 +396,98 @@ def register(flask_app, app_module):
             else:
                 overlay_needs_broadcast = False
 
+            # --- Footer messages --------------------------------------------
+            # The form posts ``footer_form=1`` for any action (add / remove).
+            # Add submits a single new message with selector lists + text;
+            # Remove submits ``footer_remove_<id>``.
+
+            footer_changed = False
+            if 'footer_form' in flask.request.form:
+                import uuid
+                import time as _time
+
+                fm_list = list(settings.get('footer_messages') or [])
+
+                # Remove first (takes priority over Add on a same-submit).
+                remove_id = None
+                for k in flask.request.form.keys():
+                    if k.startswith('footer_remove_'):
+                        remove_id = k[len('footer_remove_'):]
+                        break
+                if remove_id:
+                    new_list = [m for m in fm_list if m.get('id') != remove_id]
+                    if len(new_list) != len(fm_list):
+                        fm_list = new_list
+                        footer_changed = True
+
+                elif 'footer_add' in flask.request.form:
+                    # Vocab — must match CTS_Scoreboard module constants.
+                    allowed_genders = set(_app.FOOTER_GENDER_LABELS)
+                    allowed_strokes = set(_app.FOOTER_STROKE_LABELS)
+                    allowed_distances = set(int(v) for v in _app.FOOTER_DISTANCE_VALUES)
+                    allowed_age_groups = set(_app.FOOTER_AGE_GROUP_LABELS)
+
+                    raw_text = flask.request.form.get('footer_text', '') or ''
+                    raw_text = raw_text.replace('\r\n', '\n').replace('\r', '\n')
+                    # Defensively strip the QR token even though the UI hides
+                    # the QR button — footer never renders a QR code.
+                    raw_text = raw_text.replace('[[QR]]', '')
+
+                    # Cap at 3 lines x 60 visible chars (mirrors the editor).
+                    def _vlen(line):
+                        s = re.sub(r'^\s*#{1,4}\s+', '', line)
+                        s = re.sub(r'^\s*(\d+\.|[-*])\s+', '', s)
+                        s = re.sub(r'`([^`\n]+)`', r'\1', s)
+                        s = re.sub(r'\*\*([^*\n]+)\*\*', r'\1', s)
+                        s = re.sub(r'~~([^~\n]+)~~', r'\1', s)
+                        s = re.sub(r'(^|[^*])\*([^*\n]+)\*(?!\*)', r'\1\2', s)
+                        s = re.sub(r'(^|[^_])_([^_\n]+)_(?!_)', r'\1\2', s)
+                        return len(s)
+                    lines = raw_text.split('\n')[:3]
+                    trimmed = []
+                    for ln in lines:
+                        while _vlen(ln) > 60:
+                            ln = ln[:-1]
+                        trimmed.append(ln)
+                    text = '\n'.join(trimmed).strip('\n')
+
+                    if text.strip():
+                        align = flask.request.form.get('footer_align', 'left')
+                        if align not in ('left', 'center', 'right'):
+                            align = 'left'
+                        is_default = ('footer_is_default' in flask.request.form)
+                        genders = [v for v in flask.request.form.getlist('footer_genders')
+                                   if v in allowed_genders]
+                        strokes = [v for v in flask.request.form.getlist('footer_strokes')
+                                   if v in allowed_strokes]
+                        age_groups = [v for v in flask.request.form.getlist('footer_age_groups')
+                                      if v in allowed_age_groups]
+                        distances = []
+                        for v in flask.request.form.getlist('footer_distances'):
+                            try:
+                                iv = int(v)
+                            except (TypeError, ValueError):
+                                continue
+                            if iv in allowed_distances:
+                                distances.append(iv)
+                        new_entry = {
+                            'id': uuid.uuid4().hex[:12],
+                            'text': text,
+                            'align': align,
+                            'is_default': bool(is_default),
+                            'genders': genders,
+                            'distances': distances,
+                            'strokes': strokes,
+                            'age_groups': age_groups,
+                            'created_at': _time.time(),
+                        }
+                        fm_list.append(new_entry)
+                        footer_changed = True
+
+                if footer_changed:
+                    settings['footer_messages'] = fm_list
+                    modified = True
+
             # --- Persist & broadcast -----------------------------------------
 
             if modified:
@@ -417,6 +509,12 @@ def register(flask_app, app_module):
 
             if ad_needs_update:
                 _app._update_ad_rotation()
+
+            if footer_changed:
+                try:
+                    _app.broadcast_footer_message_refresh()
+                except Exception:
+                    pass
 
         # --- GET: build template context -------------------------------------
 
@@ -458,6 +556,34 @@ def register(flask_app, app_module):
             if tag:
                 team_tag_options.append((tag, '%s (%s)' % (tag, name) if name else tag))
 
+        # --- Footer message list summaries -------------------------------
+        # Each saved entry gets a human-readable summary used by the UI.
+        def _footer_summary(m):
+            if m.get('is_default'):
+                return 'Default (any event)'
+            parts = []
+            if m.get('genders'):
+                parts.append('Gender: ' + ', '.join(m['genders']))
+            if m.get('distances'):
+                parts.append('Distance: ' + ', '.join(str(d) for d in m['distances']))
+            if m.get('strokes'):
+                parts.append('Stroke: ' + ', '.join(m['strokes']))
+            if m.get('age_groups'):
+                parts.append('Age: ' + ', '.join(m['age_groups']))
+            if not parts:
+                return 'Any event'
+            return ' | '.join(parts)
+
+        footer_messages_view = []
+        for m in (settings.get('footer_messages') or []):
+            footer_messages_view.append({
+                'id': m.get('id', ''),
+                'text': m.get('text', ''),
+                'align': m.get('align', 'left'),
+                'is_default': bool(m.get('is_default')),
+                'summary': _footer_summary(m),
+            })
+
         return flask.render_template('settings.html',
                     meet_title=settings['meet_title'],
                     serial_port=settings['serial_port'],
@@ -496,7 +622,12 @@ def register(flask_app, app_module):
                     shutdown_nonce=_new_shutdown_nonce(),
                     wifi_available=wifi_manager.is_available(),
                     qr_overlay_visibility=settings.get('qr_overlay_visibility', 'off'),
-                    qr_overlay_corner=settings.get('qr_overlay_corner', 'top-right'))
+                    qr_overlay_corner=settings.get('qr_overlay_corner', 'top-right'),
+                    footer_messages=footer_messages_view,
+                    footer_gender_options=_app.FOOTER_GENDER_LABELS,
+                    footer_distance_options=_app.FOOTER_DISTANCE_VALUES,
+                    footer_stroke_options=_app.FOOTER_STROKE_LABELS,
+                    footer_age_group_options=_app.FOOTER_AGE_GROUP_LABELS)
 
     # -- WiFi management API -------------------------------------------------
 

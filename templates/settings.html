@@ -1196,6 +1196,183 @@
         </div>
 
         <div class="settings-section">
+        <h3>Footer Messages</h3>
+        <div class="section-hint">Show a message at the bottom of the scoreboard table for matching events.
+            Pick selectors (Gender, Distance, Stroke, Age Group); selectors with no values match any event.
+            When more than one message matches, the most specific wins (ties broken by the most recently added).
+            Mark a message as <em>Default</em> to use it when nothing else matches.</div>
+        <div class="row">
+            <div class="col-lg-12">
+                <style>
+                    .footer-selectors { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin-bottom: 8px; }
+                    .footer-selector-group { border: 1px solid #ddd; padding: 6px 8px; border-radius: 4px; background: #fafafa; }
+                    .footer-selector-group .group-title { font-weight: 600; font-size: 0.85em; margin-bottom: 4px; color: #555; }
+                    .footer-selector-group label { display: inline-block; margin-right: 8px; font-size: 0.9em; font-weight: normal; }
+                    .footer-msg-list { width: 100%; border-collapse: collapse; margin-top: 12px; }
+                    .footer-msg-list th, .footer-msg-list td { padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: top; text-align: left; }
+                    .footer-msg-list th { background: #f5f5f5; font-size: 0.85em; }
+                    .footer-msg-text-preview { font-family: 'Overpass Mono', monospace; white-space: pre-wrap; max-width: 500px; }
+                    .footer-msg-default-tag { display: inline-block; background: #ffd24d; color: #553; padding: 1px 6px; border-radius: 3px; font-size: 0.75em; margin-right: 4px; }
+                </style>
+                <form id="footer_form" action="/settings" method="POST">
+                    <input type="hidden" name="footer_form" value="1">
+
+                    <div class="footer-selectors">
+                        <div class="footer-selector-group">
+                            <div class="group-title">Gender</div>
+                            {% for g in footer_gender_options %}
+                            <label><input type="checkbox" name="footer_genders" value="{{ g }}"> {{ g }}</label>
+                            {% endfor %}
+                        </div>
+                        <div class="footer-selector-group">
+                            <div class="group-title">Distance</div>
+                            {% for d in footer_distance_options %}
+                            <label><input type="checkbox" name="footer_distances" value="{{ d }}"> {{ d }}</label>
+                            {% endfor %}
+                        </div>
+                        <div class="footer-selector-group">
+                            <div class="group-title">Stroke</div>
+                            {% for s in footer_stroke_options %}
+                            <label><input type="checkbox" name="footer_strokes" value="{{ s }}"> {{ s }}</label>
+                            {% endfor %}
+                        </div>
+                        <div class="footer-selector-group">
+                            <div class="group-title">Age Group</div>
+                            {% for a in footer_age_group_options %}
+                            <label><input type="checkbox" name="footer_age_groups" value="{{ a }}"> {{ a }}</label>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+                        <label class="toggle-switch" title="Use this as the default message when no specific match">
+                            <input type="checkbox" name="footer_is_default" id="footer_is_default">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span style="font-weight:500;">Default (used when no specific message matches)</span>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="msg-toolbar">
+                            <div class="msg-toolbar-top">
+                                <label style="margin:0;font-size:0.85em;color:#666;">Message (max 3 lines &times; 60 visible chars)</label>
+                            </div>
+                            <div class="msg-toolbar-bottom" onmousedown="event.preventDefault()">
+                                <div class="msg-toolbar-left">
+                                    <div class="fmt-btn-group">
+                                        <button type="button" class="fmt-btn" data-fmt="bold" title="Bold"
+                                            onclick="footerFmtToggle('bold')"><strong>B</strong></button>
+                                        <button type="button" class="fmt-btn" data-fmt="italic" title="Italic"
+                                            onclick="footerFmtToggle('italic')"><em>I</em></button>
+                                        <button type="button" class="fmt-btn" data-fmt="underline" title="Underline"
+                                            onclick="footerFmtToggle('underline')"><u>U</u></button>
+                                        <button type="button" class="fmt-btn" data-fmt="strike" title="Strikethrough"
+                                            onclick="footerFmtToggle('strike')"><s>S</s></button>
+                                        <button type="button" class="fmt-btn" data-fmt="code" title="Code"
+                                            onclick="footerFmtToggle('code')" style="font-family:monospace;">&lt;/&gt;</button>
+                                    </div>
+                                    <div class="justify-btn-group" id="footer_align_group">
+                                        <button type="button" class="justify-btn active" data-align="left" title="Align left"
+                                            onclick="footerSetAlign('left',this);">
+                                            <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="1" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="1" y="14" width="8" height="2"/></svg>
+                                        </button>
+                                        <button type="button" class="justify-btn" data-align="center" title="Center"
+                                            onclick="footerSetAlign('center',this);">
+                                            <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="3" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="4" y="14" width="8" height="2"/></svg>
+                                        </button>
+                                        <button type="button" class="justify-btn" data-align="right" title="Align right"
+                                            onclick="footerSetAlign('right',this);">
+                                            <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="5" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="7" y="14" width="8" height="2"/></svg>
+                                        </button>
+                                    </div>
+                                    <input type="hidden" name="footer_align" id="footer_align" value="left">
+                                </div>
+                            </div>
+                        </div>
+                        <textarea name="footer_text" id="footer_text" rows="3" cols="60" maxlength="500"
+                            class="form-control"
+                            style="font-family:'Overpass Mono',monospace;white-space:pre;overflow:auto;text-align:left;"
+                            placeholder="e.g. Race times are not available for 25yrd events. See Meet Mobile a few minutes after the race for results."
+                            oninput="footerOnInput(this);"></textarea>
+                    </div>
+
+                    <div class="form-group" style="margin-top:8px;">
+                        <button class="btn btn-default" type="submit" name="footer_add" value="1">Add Message</button>
+                    </div>
+                </form>
+
+                {% if footer_messages %}
+                <table class="footer-msg-list">
+                    <thead>
+                        <tr>
+                            <th style="width:35%;">Filters</th>
+                            <th>Message</th>
+                            <th style="width:90px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for fm in footer_messages %}
+                        <tr>
+                            <td>
+                                {% if fm.is_default %}<span class="footer-msg-default-tag">DEFAULT</span>{% endif %}
+                                {{ fm.summary }}
+                            </td>
+                            <td><div class="footer-msg-text-preview" style="text-align:{{ fm.align }};">{{ fm.text }}</div></td>
+                            <td>
+                                <form action="/settings" method="POST" style="margin:0;">
+                                    <input type="hidden" name="footer_form" value="1">
+                                    <button class="btn btn-default" type="submit"
+                                        name="footer_remove_{{ fm.id }}" value="1"
+                                        onclick="return confirm('Remove this footer message?');">Remove</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <p style="color:#888;font-style:italic;margin-top:12px;">No footer messages configured.</p>
+                {% endif %}
+
+                <script>
+                    (function() {
+                        var visibleLen = MsgFmt.visibleLen;
+                        function enforce(ta) {
+                            var lines = ta.value.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+                            var changed = false;
+                            if (lines.length > 3) { lines = lines.slice(0, 3); changed = true; }
+                            for (var i = 0; i < lines.length; i++) {
+                                while (visibleLen(lines[i]) > 60) {
+                                    lines[i] = lines[i].slice(0, -1);
+                                    changed = true;
+                                }
+                            }
+                            if (changed) ta.value = lines.join('\n');
+                        }
+                        window.footerOnInput = function(ta) { enforce(ta); };
+                        window.footerSetAlign = function(val, btn) {
+                            var hidden = document.getElementById('footer_align');
+                            if (hidden) hidden.value = val;
+                            var ta = document.getElementById('footer_text');
+                            if (ta) ta.style.textAlign = val;
+                            var group = btn.parentElement;
+                            group.querySelectorAll('.justify-btn').forEach(function(b) { b.classList.remove('active'); });
+                            btn.classList.add('active');
+                        };
+                        window.footerFmtToggle = function(fmt) {
+                            var ta = document.getElementById('footer_text');
+                            if (!ta) return;
+                            ta.focus();
+                            MsgFmt.fmtToggle(ta, fmt);
+                            enforce(ta);
+                        };
+                    })();
+                </script>
+            </div>
+        </div>
+        </div>
+
+        <div class="settings-section">
         <h3>Team Names</h3>
         <div class="section-hint">Clear team names to prevent showing scores for that team.</div>
         <div class="row">

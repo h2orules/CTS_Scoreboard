@@ -81,6 +81,11 @@
                         <td align="right"><span id="lane_time{{ i }}"></span><span class="lane_qt_tag" id="lane_qt_tag{{ i }}"></span>&nbsp;</td>
                     </tr>
                     {% endfor %}
+                    <tbody id="scoreboard_footer_tbody"{% if not initial_footer_html %} style="display:none;"{% endif %}>
+                        <tr class="scoreboard_footer_row">
+                            <td colspan="4" id="scoreboard_footer_cell" class="scoreboard_footer_cell">{{ initial_footer_html | safe }}</td>
+                        </tr>
+                    </tbody>
                 </table>
                 </div>
                 <div id="blank_clock" class="blank-clock"></div>
@@ -231,6 +236,7 @@
         }
     }
     var qualifyingTimesKey = {{ initial_qt_key | tojson }};
+    var footerMessageKey = {{ initial_footer_key | tojson }};
     var _fragmentCache = {};       // { url: { key, html } }
 
     // Fetch a server-rendered HTML fragment with ETag caching.
@@ -364,6 +370,24 @@
             if (tagEl) tagEl.textContent = result.tag;
             spawnConfetti(lane, timeEl.parentElement);
         }
+    }
+
+    // Render the footer message row via server-rendered HTML fragment.
+    // Hides the row when the fragment is empty.
+    function renderFooterMessage(newKey) {
+        var tbody = document.getElementById('scoreboard_footer_tbody');
+        var cell = document.getElementById('scoreboard_footer_cell');
+        if (!tbody || !cell) return;
+        if (!newKey) {
+            cell.innerHTML = '';
+            tbody.style.display = 'none';
+            return;
+        }
+        footerMessageKey = newKey;
+        fetchFragment('/api/footer-message', newKey, function(html) {
+            cell.innerHTML = html || '';
+            tbody.style.display = (html && html.trim()) ? '' : 'none';
+        });
     }
 
     // Render qualifying times and records via server-rendered HTML fragment
@@ -937,6 +961,10 @@
         if ("active_ad_index" in s) { activeAdIndex = s["active_ad_index"]; adChanged = true; }
         if (adChanged) {
             renderAdRotation();
+        }
+
+        if ("footer_message_key" in s) {
+            renderFooterMessage(s["footer_message_key"]);
         }
 
         // Evaluate all lanes for time standard qualifications (skip if event/heat just changed with stale times)
