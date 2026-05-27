@@ -1,0 +1,14 @@
+<!-- CTS Scoreboard kiosk keybinds (managed by pi/scripts/install-kiosk.sh)
+     Ctrl+Alt+K  Exit kiosk: close Chromium and drop to the labwc desktop.
+     Ctrl+Alt+S  Open the scoreboard Settings page in a normal Chromium window.
+     Ctrl+Alt+R  Re-enter kiosk mode (same as the desktop icon).
+     Remove the block between the BEGIN/END markers to uninstall. -->
+<keybind key="C-A-K">
+  <action name="Execute" command="sh -c 'pkill -INT -f cts-kiosk-chromium || pkill -INT chromium'"/>
+</keybind>
+<keybind key="C-A-S">
+  <action name="Execute" command="sh -c 'chromium-browser --new-window http://localhost:5000/settings &amp;'"/>
+</keybind>
+<keybind key="C-A-R">
+  <action name="Execute" command="SCOREBOARD_REPO/pi/scripts/cts-kiosk.sh"/>
+</keybind>

@@ -1582,6 +1582,14 @@ def route_site_map():
     for rule in app.url_map.iter_rules():
         if "GET" in rule.methods and has_no_empty_params(rule):
             url = flask.url_for(rule.endpoint, **(rule.defaults or {}))
+            # Hide JSON/API endpoints that aren't meaningful site-map pages.
+            # Azure relay endpoints (/azure/status, /azure/config, ...) are
+            # AJAX targets used from the Settings page, not destinations.
+            if url.startswith('/azure/'):
+                continue
+            # Same for the Wi-Fi JSON endpoints and the qualifying-info API.
+            if url.startswith('/wifi/') or url.startswith('/api/'):
+                continue
             title = rule.endpoint.replace("_", " ")
             if title.startswith('route '):
                 title = title[6:]

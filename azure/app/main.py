@@ -51,7 +51,7 @@ def build_app(
         yield
 
     fastapi_app = FastAPI(
-        title="CTS Scoreboard Azure Relay",
+        title="Swimming Scoreboard Azure Relay",
         version=__version__,
         docs_url=None,
         redoc_url=None,
