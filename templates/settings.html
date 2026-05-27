@@ -303,7 +303,8 @@
                 <form action="/settings" method="POST">
                     <div class="form-group" style="margin-bottom:10px;">
                         <label for="num_lanes">Number of Lanes</label>
-                        <select id="num_lanes" name="num_lanes" class="form-control">
+                        <select id="num_lanes" name="num_lanes" class="form-control"
+                            style="width:auto;display:inline-block;">
                             {% for n in range(4, 11) %}
                             <option value="{{n}}" {% if n == num_lanes %}selected{% endif %}>{{n}}</option>
                             {% endfor %}
@@ -311,7 +312,8 @@
                     </div>
                     <div class="form-group" style="margin-bottom:10px;">
                         <label for="pool_course">Pool Course</label>
-                        <select id="pool_course" name="pool_course" class="form-control">
+                        <select id="pool_course" name="pool_course" class="form-control"
+                            style="width:auto;display:inline-block;">
                             {% for code, label in [('SCY', 'Short Course Yards (SCY)'), ('SCM', 'Short Course Meters (SCM)'), ('LCM', 'Long Course Meters (LCM)')] %}
                             <option value="{{code}}" {% if code == pool_course %}selected{% endif %}>{{label}}</option>
                             {% endfor %}
@@ -333,7 +335,8 @@
                     <input type="hidden" name="display_options_form" value="1">
                     <div class="form-group" style="margin-bottom:10px;">
                         <label for="seed_time_label">Seed Time Display</label>
-                        <select id="seed_time_label" name="seed_time_label" class="form-control">
+                        <select id="seed_time_label" name="seed_time_label" class="form-control"
+                            style="width:auto;display:inline-block;">
                             {% for code, label in [('Seed Time', 'Show as "Seed Time"'), ('Entry Time', 'Show as "Entry Time"'), ('None', 'Do not show seed times')] %}
                             {% if code == seed_time_label %}
                             <option value="{{code}}" selected>{{label}}</option>
@@ -1203,7 +1206,6 @@
         <div class="row">
             <div class="col-lg-8">
                 <style>
-                    .footer-msg-textarea { max-width: 560px; }
                     .footer-msg-list { max-width: 720px; }
                     .footer-selectors {
                         display: flex;
@@ -1412,9 +1414,9 @@
                 <table class="footer-msg-list">
                     <thead>
                         <tr>
-                            <th style="width:35%;">Filters</th>
+                            <th>Filters</th>
                             <th>Message</th>
-                            <th style="width:90px;"></th>
+                            <th style="width:60px;"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1426,17 +1428,80 @@
                             </td>
                             <td><div class="footer-msg-text-preview" style="text-align:{{ fm.align }};">{{ fm.text }}</div></td>
                             <td>
-                                <form action="/settings" method="POST" style="margin:0;">
+                                <form action="/settings" method="POST" style="margin:0;" class="footer-remove-form"
+                                    data-summary="{{ fm.summary }}" data-preview="{{ fm.text }}">
                                     <input type="hidden" name="footer_form" value="1">
-                                    <button class="btn btn-default" type="submit"
-                                        name="footer_remove_{{ fm.id }}" value="1"
-                                        onclick="return confirm('Remove this footer message?');">Remove</button>
+                                    <input type="hidden" name="footer_remove_{{ fm.id }}" value="1">
+                                    <button class="btn btn-danger btn-sm ad-icon-btn footer-remove-btn" type="submit"
+                                        title="Remove">
+                                        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2h6l1 1h3v2H1V3h3l1-1zm-2 4h10l-1 9H4L3 6z"/></svg>
+                                    </button>
                                 </form>
                             </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
+
+                <!-- Confirmation overlay used by the footer-message Remove buttons. -->
+                <style>
+                    .confirm-overlay {
+                        position: fixed;
+                        inset: 0;
+                        background: rgba(0,0,0,0.5);
+                        display: none;
+                        align-items: center;
+                        justify-content: center;
+                        z-index: 2000;
+                    }
+                    .confirm-overlay.open { display: flex; }
+                    .confirm-card {
+                        background: #fff;
+                        border-radius: 6px;
+                        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+                        padding: 20px 24px;
+                        min-width: 320px;
+                        max-width: 520px;
+                    }
+                    .confirm-card h4 { margin: 0 0 8px 0; }
+                    .confirm-card .confirm-summary {
+                        font-size: 0.9em;
+                        color: #555;
+                        margin-bottom: 6px;
+                    }
+                    .confirm-card .confirm-preview {
+                        background: #f6f6f6;
+                        border: 1px solid #e3e3e3;
+                        border-radius: 4px;
+                        padding: 6px 10px;
+                        font-family: 'Overpass Mono', monospace;
+                        font-size: 0.9em;
+                        white-space: pre-wrap;
+                        max-height: 4.5em;
+                        overflow: hidden;
+                        margin-bottom: 14px;
+                        color: #333;
+                    }
+                    .confirm-card .confirm-actions {
+                        display: flex;
+                        justify-content: flex-end;
+                        gap: 8px;
+                    }
+                </style>
+                <div class="confirm-overlay" id="footer_remove_confirm" role="dialog" aria-modal="true"
+                    aria-labelledby="footer_remove_confirm_title">
+                    <div class="confirm-card">
+                        <h4 id="footer_remove_confirm_title">Remove footer message?</h4>
+                        <div class="confirm-summary" id="footer_remove_confirm_summary"></div>
+                        <div class="confirm-preview" id="footer_remove_confirm_preview"></div>
+                        <div class="confirm-actions">
+                            <button type="button" class="btn btn-default"
+                                id="footer_remove_confirm_cancel">Cancel</button>
+                            <button type="button" class="btn btn-danger"
+                                id="footer_remove_confirm_ok">Remove</button>
+                        </div>
+                    </div>
+                </div>
                 {% else %}
                 <p style="color:#888;font-style:italic;margin-top:12px;">No footer messages configured.</p>
                 {% endif %}
@@ -1554,6 +1619,51 @@
                         // Apply the initial Default state after the dropdowns
                         // have been wired so labels reflect the disabled state.
                         applyDefaultState();
+
+                        // ── Custom confirmation overlay for removing a footer
+                        //    message (replaces the browser confirm() dialog) ──
+                        var overlay = document.getElementById('footer_remove_confirm');
+                        var pendingForm = null;
+                        function closeOverlay() {
+                            if (!overlay) return;
+                            overlay.classList.remove('open');
+                            pendingForm = null;
+                        }
+                        function openOverlay(form) {
+                            if (!overlay) return;
+                            pendingForm = form;
+                            var summaryEl = document.getElementById('footer_remove_confirm_summary');
+                            var previewEl = document.getElementById('footer_remove_confirm_preview');
+                            if (summaryEl) summaryEl.textContent = form.getAttribute('data-summary') || '';
+                            if (previewEl) previewEl.textContent = form.getAttribute('data-preview') || '';
+                            overlay.classList.add('open');
+                            var ok = document.getElementById('footer_remove_confirm_ok');
+                            if (ok) ok.focus();
+                        }
+                        document.querySelectorAll('.footer-remove-form').forEach(function (f) {
+                            f.addEventListener('submit', function (e) {
+                                if (f === pendingForm) return;
+                                e.preventDefault();
+                                openOverlay(f);
+                            });
+                        });
+                        if (overlay) {
+                            var ok = document.getElementById('footer_remove_confirm_ok');
+                            var cancel = document.getElementById('footer_remove_confirm_cancel');
+                            if (ok) ok.addEventListener('click', function () {
+                                var f = pendingForm;
+                                if (!f) { closeOverlay(); return; }
+                                closeOverlay();
+                                f.submit();
+                            });
+                            if (cancel) cancel.addEventListener('click', closeOverlay);
+                            overlay.addEventListener('click', function (e) {
+                                if (e.target === overlay) closeOverlay();
+                            });
+                            document.addEventListener('keydown', function (e) {
+                                if (e.key === 'Escape' && overlay.classList.contains('open')) closeOverlay();
+                            });
+                        }
                     })();
                 </script>
             </div>
@@ -1810,6 +1920,26 @@
             <div class="row" style="margin-top: 10px;">
                 <div class="col-lg-10">
                     <style>
+                        .ad-img-table {
+                            width: auto;
+                            border-collapse: collapse;
+                            margin-bottom: 0;
+                        }
+                        .ad-img-table th,
+                        .ad-img-table td {
+                            padding: 6px 10px;
+                            border-top: 1px solid #ddd;
+                            vertical-align: middle;
+                        }
+                        .ad-img-table thead th {
+                            border-top: none;
+                            border-bottom: 2px solid #ddd;
+                            font-weight: 600;
+                            text-align: left;
+                        }
+                        .ad-img-table td.ad-remove-cell {
+                            padding-left: 18px;
+                        }
                         .ad-icon-btn {
                             padding: 4px 8px;
                             line-height: 1;
@@ -1821,13 +1951,13 @@
                             fill: currentColor;
                         }
                     </style>
-                    <table class="table" style="margin-bottom: 0;">
+                    <table class="ad-img-table">
                         <thead>
                             <tr>
-                                <th style="width: 170px;">Preview</th>
-                                <th style="width: 90px;">Enabled</th>
-                                <th style="width: 110px;">Order</th>
-                                <th style="width: 60px;">&nbsp;</th>
+                                <th>Preview</th>
+                                <th>Enabled</th>
+                                <th>Order</th>
+                                <th>&nbsp;</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1835,13 +1965,13 @@
                             <tr>
                                 <td>
                                     <img src="{{ url_for('static', filename='ad/' + ad.filename) }}"
-                                        style="max-width:150px;max-height:150px;width:auto;height:auto;object-fit:contain;border-radius:4px;" />
+                                        style="max-width:150px;max-height:150px;width:auto;height:auto;object-fit:contain;border-radius:4px;display:block;" />
                                 </td>
-                                <td style="vertical-align: middle;">
+                                <td style="text-align:center;">
                                     <input type="checkbox" name="ad_enabled_{{ loop.index0 }}"
                                         {% if ad.enabled %}checked{% endif %}>
                                 </td>
-                                <td style="vertical-align: middle;">
+                                <td style="white-space:nowrap;">
                                     <button class="btn btn-default btn-sm ad-icon-btn" type="submit"
                                         name="ad_up_{{ loop.index0 }}" value="1"
                                         title="Move up"
@@ -1855,7 +1985,7 @@
                                         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13L2 6h12z"/></svg>
                                     </button>
                                 </td>
-                                <td style="vertical-align: middle;">
+                                <td class="ad-remove-cell">
                                     <button class="btn btn-danger btn-sm ad-icon-btn" type="submit"
                                         name="ad_remove_{{ loop.index0 }}" value="1"
                                         title="Remove">
