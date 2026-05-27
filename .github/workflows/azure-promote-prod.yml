@@ -78,16 +78,23 @@ jobs:
       - name: Activate new revision and route traffic
         run: |
           # The prod Container App runs in Multiple-revision mode (for
-          # `az containerapp revision activate` rollback). A new revision
-          # produced by `az containerapp update --image` is created in the
-          # inactive state and receives no replicas, so we must activate it
-          # and then point 100% of traffic at it. The previously-active
-          # revision is left in the inactive set so it can be re-activated
-          # as a rollback target.
+          # `az containerapp revision activate` rollback). Current
+          # `az containerapp update --image` auto-activates the new
+          # revision, but traffic weights are sticky and don't shift
+          # automatically, so we still need to route traffic explicitly.
+          # The activate call is idempotent: skip it if the revision is
+          # already active to avoid a hard failure.
           NEW_REV="${APP_PROD}--${{ steps.rev.outputs.suffix }}"
-          echo "Activating $NEW_REV"
-          az containerapp revision activate \
-            -g "$RG_PROD" -n "$APP_PROD" --revision "$NEW_REV"
+          ACTIVE=$(az containerapp revision show \
+            -g "$RG_PROD" -n "$APP_PROD" --revision "$NEW_REV" \
+            --query properties.active -o tsv)
+          if [[ "$ACTIVE" != "true" ]]; then
+            echo "Activating $NEW_REV"
+            az containerapp revision activate \
+              -g "$RG_PROD" -n "$APP_PROD" --revision "$NEW_REV"
+          else
+            echo "Revision $NEW_REV is already active; skipping activation."
+          fi
           az containerapp ingress traffic set \
             -g "$RG_PROD" -n "$APP_PROD" \
             --revision-weight "$NEW_REV=100"

@@ -80,14 +80,22 @@ jobs:
         run: |
           # The pre-prod Container App runs in Multiple-revision mode (Bicep
           # sets activeRevisionsMode='Multiple' so revision-level rollback
-          # works). A revision produced by `az containerapp update --image`
-          # is created in the inactive state and receives no replicas, so we
-          # must activate it and point 100% of traffic at it. The previously-
-          # active revision is left in the inactive set for rollback.
+          # works). Current `az containerapp update --image` auto-activates
+          # the new revision, but traffic weights are sticky and don't shift
+          # automatically, so we still need to route traffic explicitly.
+          # The activate call is idempotent: skip it if the revision is
+          # already active to avoid a hard failure on the second run.
           NEW_REV="${APP}--${{ steps.rev.outputs.suffix }}"
-          echo "Activating $NEW_REV"
-          az containerapp revision activate \
-            -g "$RG" -n "$APP" --revision "$NEW_REV"
+          ACTIVE=$(az containerapp revision show \
+            -g "$RG" -n "$APP" --revision "$NEW_REV" \
+            --query properties.active -o tsv)
+          if [[ "$ACTIVE" != "true" ]]; then
+            echo "Activating $NEW_REV"
+            az containerapp revision activate \
+              -g "$RG" -n "$APP" --revision "$NEW_REV"
+          else
+            echo "Revision $NEW_REV is already active; skipping activation."
+          fi
           az containerapp ingress traffic set \
             -g "$RG" -n "$APP" \
             --revision-weight "$NEW_REV=100"
