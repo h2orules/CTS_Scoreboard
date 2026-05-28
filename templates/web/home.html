@@ -33,11 +33,20 @@
     function initScoreboardAutoFit() {
         var MIN_SCALE = 0.6;
         var pending = null;
+        var landscapeMQ = window.matchMedia('(orientation: landscape) and (max-height: 600px)');
         function fit() {
             pending = null;
             var outer = document.querySelector('.content_outer');
             var group = document.querySelector('.scoreboard_group');
             if (!outer || !group) return;
+            // In landscape-short mode, the page scrolls instead of
+            // shrinking. Toggle the body hook and skip scaling.
+            if (landscapeMQ.matches) {
+                document.body.classList.add('landscape-scroll');
+                group.style.transform = '';
+                return;
+            }
+            document.body.classList.remove('landscape-scroll');
             // Reset prior transform so we measure natural size.
             group.style.transform = '';
             group.style.transformOrigin = 'top center';
@@ -63,6 +72,11 @@
             pending = window.requestAnimationFrame(fit);
         }
         window.addEventListener('resize', schedule);
+        if (landscapeMQ.addEventListener) {
+            landscapeMQ.addEventListener('change', schedule);
+        } else if (landscapeMQ.addListener) {
+            landscapeMQ.addListener(schedule);
+        }
         // Observe DOM mutations inside the scoreboard group so dynamic
         // updates (lane data, qualifying info, footer messages) re-fit.
         var group = document.querySelector('.scoreboard_group');

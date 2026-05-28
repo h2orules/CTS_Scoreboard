@@ -935,9 +935,10 @@ table.scoreboard_table td[id^="lane_place"] {
         font-size: min(24px, 3.5vw);
     }
 
-    /* Lane/Place data cells: minimal width */
-    table.scoreboard_table td:first-child,
-    table.scoreboard_table td:nth-child(2) {
+    /* Lane/Place data cells: minimal width. Exclude the footer row, whose
+       single colspan'd cell would otherwise match :first-child. */
+    table.scoreboard_table tr:not(.scoreboard_footer_row)>td:first-child,
+    table.scoreboard_table tr:not(.scoreboard_footer_row)>td:nth-child(2) {
         width: 1px;
         padding: 0 4px;
     }
@@ -1099,7 +1100,110 @@ table.scoreboard_table td[id^="lane_place"] {
        room around the edges on small screens. */
     .scoreboard_footer_cell {
         font-size: 3vw !important;
-        padding: 12px;
+        padding: 8px 10px;
+    }
+}
+
+/* Landscape phones (wide but short viewports): treat as a scrolling
+   mini-desktop. Restore the desktop side-by-side Standards/Records
+   layout, allow the page to scroll vertically instead of clipping or
+   auto-fitting, and let the scoreboard table use its natural desktop
+   width. The mobile font sizing from the max-width:1024px block above
+   is kept since text still needs to fit phone pixel densities. */
+@media (orientation: landscape) and (max-height: 600px) {
+
+    html,
+    body {
+        overflow: visible;
+        height: auto;
+    }
+
+    body {
+        display: block;
+    }
+
+    .content_outer {
+        flex: 0 0 auto;
+        height: auto;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: visible;
+        padding: 10px;
+        padding-bottom: 10px;
+    }
+
+    .scoreboard_group {
+        min-width: 0;
+        max-width: 100%;
+        width: 100%;
+    }
+
+    /* Shrink the meet header so it fits without horizontal overflow.
+       Uses the same min(px, vw) pattern as the rest of the mobile
+       block so it scales with viewport width. */
+    .content_meet_title {
+        font-size: min(30px, 4.5vw);
+    }
+
+    .content_meet_date {
+        font-size: min(26px, 4vw);
+    }
+
+    .score_team_name,
+    .score_value {
+        font-size: min(24px, 3.5vw);
+    }
+
+    /* Disable the auto-fit transform so content stays at natural size
+       and overflows below the fold for the user to scroll to. */
+    body.landscape-scroll .scoreboard_group {
+        transform: none !important;
+    }
+
+    /* Restore desktop side-by-side Standards/Records layout. */
+    .standards-records-container {
+        flex-direction: row;
+        gap: 0;
+    }
+
+    .standards-column,
+    .records-column {
+        flex: 1 1 0;
+    }
+
+    .standards-column {
+        padding-right: 12px;
+    }
+
+    .records-column {
+        border-left: 1px solid #bbb;
+        padding-left: 12px;
+        border-bottom: none;
+        padding-bottom: 0;
+        margin-bottom: 0;
+    }
+
+    /* Undo the portrait-mobile "set name on its own row" + "record-start
+       wraps to col 1" overrides so the records grid behaves like desktop. */
+    .records-grid .set-subheader {
+        grid-column: auto;
+    }
+
+    .records-grid .set-subheader-spacer {
+        display: block;
+    }
+
+    .records-grid .record-start {
+        grid-column: auto;
+    }
+
+    .records-grid .qual-subheader {
+        padding-left: 0;
+    }
+
+    /* Disclaimer flows after content in normal block layout. */
+    .scoreboard_disclaimer {
+        padding: 12px 0;
     }
 }
 
