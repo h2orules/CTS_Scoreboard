@@ -4,13 +4,19 @@ body {
     margin: 0;
 }
 
+body {
+    display: flex;
+    flex-direction: column;
+}
+
 .content_outer {
     display: flex;
     flex-direction: column;
     align-items: center;
     padding: 25px;
-    padding-bottom: 80px;
-    height: 100vh;
+    padding-bottom: 12px;
+    flex: 1 1 auto;
+    min-height: 0;
     box-sizing: border-box;
     overflow-x: auto;
     overflow-y: hidden;
@@ -454,10 +460,10 @@ body.hide-time-decorations .qt-highlight {
     font-style: italic;
     font-size: 20px;
     text-align: center;
-    position: fixed;
-    bottom: 12px;
-    left: 0;
-    right: 0;
+    flex: 0 0 auto;
+    width: 100%;
+    padding: 6px 12px 12px;
+    box-sizing: border-box;
     z-index: 100;
 }
 
@@ -850,10 +856,8 @@ table.scoreboard_table td[id^="lane_place"] {
 
     .content_outer {
         padding: 10px;
-        /* Reserve space for the fixed disclaimer footer so content is
-           clipped at the footer cutoff rather than overlapping it. */
-        padding-bottom: 80px;
-        height: 100vh;
+        padding-bottom: 10px;
+        flex: 1 1 auto;
         min-height: 0;
         width: 100%;
         overflow: hidden;
@@ -931,9 +935,10 @@ table.scoreboard_table td[id^="lane_place"] {
         font-size: min(24px, 3.5vw);
     }
 
-    /* Lane/Place data cells: minimal width */
-    table.scoreboard_table td:first-child,
-    table.scoreboard_table td:nth-child(2) {
+    /* Lane/Place data cells: minimal width. Exclude the footer row, whose
+       single colspan'd cell would otherwise match :first-child. */
+    table.scoreboard_table tr:not(.scoreboard_footer_row)>td:first-child,
+    table.scoreboard_table tr:not(.scoreboard_footer_row)>td:nth-child(2) {
         width: 1px;
         padding: 0 4px;
     }
@@ -1008,6 +1013,31 @@ table.scoreboard_table td[id^="lane_place"] {
         margin-bottom: 4px;
     }
 
+    /* On mobile, place the set name subheader on its own line so the
+       differentiator + record row has the full width to itself. The
+       column-1 placeholder for subsequent rows in the set is hidden so
+       items shift left and stay aligned. */
+    .records-grid .set-subheader {
+        grid-column: 1 / -1;
+    }
+
+    .records-grid .set-subheader-spacer {
+        display: none;
+    }
+
+    /* Force each record onto its own row by anchoring its first cell to
+       grid column 1; subsequent record cells flow into columns 2+, and
+       the next record wraps to a new row. */
+    .records-grid .record-start {
+        grid-column: 1;
+    }
+
+    /* Indent the differentiator subheader (e.g. "Girls"/"Boys") so it
+       reads as belonging to the set subheader above it. */
+    .records-grid .qual-subheader {
+        padding-left: 2ch;
+    }
+
     .content_meet_title {
         font-size: min(30px, 4.5vw);
     }
@@ -1028,11 +1058,10 @@ table.scoreboard_table td[id^="lane_place"] {
         overflow: hidden;
     }
 
-    /* Footer stays visible; content_outer clips anything behind it.
+    /* Footer stays in flow; content_outer clips anything behind it.
        Background is transparent so the water image shows through. */
     .scoreboard_disclaimer {
-        bottom: 0;
-        padding: 12px 0;
+        padding: 6px 0 8px;
     }
 
     /* Blank-state message overlay: match lane row font sizing on mobile.
@@ -1070,8 +1099,111 @@ table.scoreboard_table td[id^="lane_place"] {
     /* Footer message: shrink the type slightly and keep some breathing
        room around the edges on small screens. */
     .scoreboard_footer_cell {
-        font-size: 12px !important;
-        padding: 6px 10px;
+        font-size: 3vw !important;
+        padding: 8px 10px;
+    }
+}
+
+/* Landscape phones (wide but short viewports): treat as a scrolling
+   mini-desktop. Restore the desktop side-by-side Standards/Records
+   layout, allow the page to scroll vertically instead of clipping or
+   auto-fitting, and let the scoreboard table use its natural desktop
+   width. The mobile font sizing from the max-width:1024px block above
+   is kept since text still needs to fit phone pixel densities. */
+@media (orientation: landscape) and (max-height: 600px) {
+
+    html,
+    body {
+        overflow: visible;
+        height: auto;
+    }
+
+    body {
+        display: block;
+    }
+
+    .content_outer {
+        flex: 0 0 auto;
+        height: auto;
+        min-height: 0;
+        overflow-x: hidden;
+        overflow-y: visible;
+        padding: 10px;
+        padding-bottom: 10px;
+    }
+
+    .scoreboard_group {
+        min-width: 0;
+        max-width: 100%;
+        width: 100%;
+    }
+
+    /* Shrink the meet header so it fits without horizontal overflow.
+       Uses the same min(px, vw) pattern as the rest of the mobile
+       block so it scales with viewport width. */
+    .content_meet_title {
+        font-size: min(30px, 4.5vw);
+    }
+
+    .content_meet_date {
+        font-size: min(26px, 4vw);
+    }
+
+    .score_team_name,
+    .score_value {
+        font-size: min(24px, 3.5vw);
+    }
+
+    /* Disable the auto-fit transform so content stays at natural size
+       and overflows below the fold for the user to scroll to. */
+    body.landscape-scroll .scoreboard_group {
+        transform: none !important;
+    }
+
+    /* Restore desktop side-by-side Standards/Records layout. */
+    .standards-records-container {
+        flex-direction: row;
+        gap: 0;
+    }
+
+    .standards-column,
+    .records-column {
+        flex: 1 1 0;
+    }
+
+    .standards-column {
+        padding-right: 12px;
+    }
+
+    .records-column {
+        border-left: 1px solid #bbb;
+        padding-left: 12px;
+        border-bottom: none;
+        padding-bottom: 0;
+        margin-bottom: 0;
+    }
+
+    /* Undo the portrait-mobile "set name on its own row" + "record-start
+       wraps to col 1" overrides so the records grid behaves like desktop. */
+    .records-grid .set-subheader {
+        grid-column: auto;
+    }
+
+    .records-grid .set-subheader-spacer {
+        display: block;
+    }
+
+    .records-grid .record-start {
+        grid-column: auto;
+    }
+
+    .records-grid .qual-subheader {
+        padding-left: 0;
+    }
+
+    /* Disclaimer flows after content in normal block layout. */
+    .scoreboard_disclaimer {
+        padding: 12px 0;
     }
 }
 
@@ -1096,7 +1228,7 @@ table.scoreboard_table td[id^="lane_place"] {
     pointer-events: none;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
     .qr-overlay {
         width: 160px;
         height: 160px;
@@ -1112,6 +1244,8 @@ table.scoreboard_table td[id^="lane_place"] {
     display: block;
     width: 200px !important;
     height: 200px !important;
+    max-width: 100%;
+    max-height: 100%;
 }
 
 .qr-overlay-top-left {

@@ -23,6 +23,73 @@
     function init() {
         on_timer();
         window.setInterval(on_timer, 30000);
+        initScoreboardAutoFit();
+    }
+
+    // Auto-fit: if the scoreboard group would overflow the available
+    // vertical space (between header padding and the disclaimer footer),
+    // visually shrink it via CSS transform: scale() down to a minimum
+    // scale, instead of clipping. Re-runs on resize and content changes.
+    function initScoreboardAutoFit() {
+        var MIN_SCALE = 0.6;
+        var pending = null;
+        var landscapeMQ = window.matchMedia('(orientation: landscape) and (max-height: 600px)');
+        function fit() {
+            pending = null;
+            var outer = document.querySelector('.content_outer');
+            var group = document.querySelector('.scoreboard_group');
+            if (!outer || !group) return;
+            // In landscape-short mode, the page scrolls instead of
+            // shrinking. Toggle the body hook and skip scaling.
+            if (landscapeMQ.matches) {
+                document.body.classList.add('landscape-scroll');
+                group.style.transform = '';
+                return;
+            }
+            document.body.classList.remove('landscape-scroll');
+            // Reset prior transform so we measure natural size.
+            group.style.transform = '';
+            group.style.transformOrigin = 'top center';
+            var cs = window.getComputedStyle(outer);
+            var availH = outer.clientHeight
+                - parseFloat(cs.paddingTop || 0)
+                - parseFloat(cs.paddingBottom || 0);
+            var availW = outer.clientWidth
+                - parseFloat(cs.paddingLeft || 0)
+                - parseFloat(cs.paddingRight || 0);
+            var naturalH = group.scrollHeight;
+            var naturalW = group.scrollWidth;
+            if (naturalH <= 0 || naturalW <= 0) return;
+            var scaleH = naturalH > availH ? availH / naturalH : 1;
+            var scaleW = naturalW > availW ? availW / naturalW : 1;
+            var scale = Math.min(scaleH, scaleW);
+            if (scale >= 1) return;
+            if (scale < MIN_SCALE) scale = MIN_SCALE;
+            group.style.transform = 'scale(' + scale + ')';
+        }
+        function schedule() {
+            if (pending !== null) return;
+            pending = window.requestAnimationFrame(fit);
+        }
+        window.addEventListener('resize', schedule);
+        if (landscapeMQ.addEventListener) {
+            landscapeMQ.addEventListener('change', schedule);
+        } else if (landscapeMQ.addListener) {
+            landscapeMQ.addListener(schedule);
+        }
+        // Observe DOM mutations inside the scoreboard group so dynamic
+        // updates (lane data, qualifying info, footer messages) re-fit.
+        var group = document.querySelector('.scoreboard_group');
+        if (group && window.MutationObserver) {
+            var mo = new MutationObserver(schedule);
+            mo.observe(group, {
+                subtree: true, childList: true,
+                characterData: true, attributes: true
+            });
+        }
+        // Expose for callers that change layout imperatively.
+        window.scoreboardFit = schedule;
+        schedule();
     }
 </script>
 
