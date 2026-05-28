@@ -132,32 +132,34 @@ jobs:
       - name: Start westus execution
         if: steps.split.outputs.westus_replicas != '0'
         id: start_westus
+        env:
+          R: ${{ steps.split.outputs.westus_replicas }}
+          T: ${{ inputs.total_duration_seconds }}
         run: |
           REGION=westus
           RG="cts-scoreboard-stress-${REGION}"
           JOB="cts-sb-stress-${REGION}-job"
-          R=${{ steps.split.outputs.westus_replicas }}
-          # `az containerapp job start` only accepts --env-vars and resource
-          # identifiers; replica count / parallelism / timeout are job-level
-          # configuration that must be applied via `update` first. The CLI's
-          # `update` quirk requires --image (and --container-name matching
-          # the existing slot) even when only trigger config is changing,
-          # so read both back from the live job and pass them through.
-          read CNAME IMG < <(az containerapp job show -g "$RG" -n "$JOB" \
-            --query 'properties.template.containers[0].[name,image]' -o tsv \
-            | paste -sd ' ' -)
-          if [[ -z "$IMG" || -z "$CNAME" ]]; then
-            echo "::error::Could not read container name/image for $JOB in $RG"; exit 1
-          fi
-          az containerapp job update \
-            -g "$RG" \
-            -n "$JOB" \
-            --container-name "$CNAME" \
-            --image "$IMG" \
-            --replica-completion-count "$R" \
-            --parallelism "$R" \
-            --replica-timeout ${{ inputs.total_duration_seconds }} \
-            -o none
+          # `az containerapp job update` repeatedly fails template validation
+          # when only trigger config is changing (ContainerAppImageRequired,
+          # container-name mismatches, etc.). PATCH the ARM resource directly
+          # so merge semantics leave the template untouched and only the
+          # configuration fields we send are applied.
+          SUB_ID=$(az account show --query id -o tsv)
+          URI="https://management.azure.com/subscriptions/${SUB_ID}/resourceGroups/${RG}/providers/Microsoft.App/jobs/${JOB}?api-version=2024-03-01"
+          BODY=$(jq -nc \
+            --argjson R "$R" \
+            --argjson T "$T" '{
+              properties: {
+                configuration: {
+                  replicaTimeout: $T,
+                  manualTriggerConfig: {
+                    parallelism: $R,
+                    replicaCompletionCount: $R
+                  }
+                }
+              }
+            }')
+          az rest --method PATCH --uri "$URI" --body "$BODY" -o none
           OUT=$(az containerapp job start \
             -g "$RG" \
             -n "$JOB" \
@@ -178,26 +180,29 @@ jobs:
       - name: Start eastus2 execution
         if: steps.split.outputs.eastus2_replicas != '0'
         id: start_eastus2
+        env:
+          R: ${{ steps.split.outputs.eastus2_replicas }}
+          T: ${{ inputs.total_duration_seconds }}
         run: |
           REGION=eastus2
           RG="cts-scoreboard-stress-${REGION}"
           JOB="cts-sb-stress-${REGION}-job"
-          R=${{ steps.split.outputs.eastus2_replicas }}
-          read CNAME IMG < <(az containerapp job show -g "$RG" -n "$JOB" \
-            --query 'properties.template.containers[0].[name,image]' -o tsv \
-            | paste -sd ' ' -)
-          if [[ -z "$IMG" || -z "$CNAME" ]]; then
-            echo "::error::Could not read container name/image for $JOB in $RG"; exit 1
-          fi
-          az containerapp job update \
-            -g "$RG" \
-            -n "$JOB" \
-            --container-name "$CNAME" \
-            --image "$IMG" \
-            --replica-completion-count "$R" \
-            --parallelism "$R" \
-            --replica-timeout ${{ inputs.total_duration_seconds }} \
-            -o none
+          SUB_ID=$(az account show --query id -o tsv)
+          URI="https://management.azure.com/subscriptions/${SUB_ID}/resourceGroups/${RG}/providers/Microsoft.App/jobs/${JOB}?api-version=2024-03-01"
+          BODY=$(jq -nc \
+            --argjson R "$R" \
+            --argjson T "$T" '{
+              properties: {
+                configuration: {
+                  replicaTimeout: $T,
+                  manualTriggerConfig: {
+                    parallelism: $R,
+                    replicaCompletionCount: $R
+                  }
+                }
+              }
+            }')
+          az rest --method PATCH --uri "$URI" --body "$BODY" -o none
           OUT=$(az containerapp job start \
             -g "$RG" \
             -n "$JOB" \
