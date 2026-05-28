@@ -180,19 +180,43 @@ jobs:
               }
             }')
           az rest --method PATCH --uri "$URI" --body "$BODY" -o none
-          OUT=$(az containerapp job start \
-            -g "$RG" \
-            -n "$JOB" \
-            --env-vars \
-              TARGET_URL="${{ inputs.target_url }}" \
-              BROWSERS_PER_REPLICA="${{ inputs.browsers_per_replica }}" \
-              MIN_HOLD_SECONDS="${{ inputs.min_hold_seconds }}" \
-              MAX_HOLD_SECONDS="${{ inputs.max_hold_seconds }}" \
-              MIN_DELAY_SECONDS="${{ inputs.min_delay_seconds }}" \
-              MAX_DELAY_SECONDS="${{ inputs.max_delay_seconds }}" \
-              CACHE_MODE="${{ inputs.cache_mode }}" \
-              TOTAL_DURATION_SECONDS="${{ inputs.total_duration_seconds }}" \
-            -o json)
+          # `az containerapp job start --env-vars` has a CLI bug: when no
+          # --image / --container-name is passed, it builds the execution
+          # overrideTemplate with a phantom container slot NAMED AFTER THE
+          # JOB and with no image, which ARM rejects with
+          # ContainerAppImageRequired. Bypass the CLI: POST directly to the
+          # job's /start action with a proper executionTemplate that names
+          # the container `stress` and carries the current image.
+          IMG=$(echo "$CONTAINER" | jq -r '.image')
+          START_URI="https://management.azure.com/subscriptions/${SUB_ID}/resourceGroups/${RG}/providers/Microsoft.App/jobs/${JOB}/start?api-version=2024-03-01"
+          START_BODY=$(jq -nc \
+            --arg img "$IMG" \
+            --arg target_url "${{ inputs.target_url }}" \
+            --arg browsers_per_replica "${{ inputs.browsers_per_replica }}" \
+            --arg min_hold "${{ inputs.min_hold_seconds }}" \
+            --arg max_hold "${{ inputs.max_hold_seconds }}" \
+            --arg min_delay "${{ inputs.min_delay_seconds }}" \
+            --arg max_delay "${{ inputs.max_delay_seconds }}" \
+            --arg cache_mode "${{ inputs.cache_mode }}" \
+            --arg total_duration "${{ inputs.total_duration_seconds }}" '{
+              containers: [
+                {
+                  name: "stress",
+                  image: $img,
+                  env: [
+                    {name: "TARGET_URL",             value: $target_url},
+                    {name: "BROWSERS_PER_REPLICA",   value: $browsers_per_replica},
+                    {name: "MIN_HOLD_SECONDS",       value: $min_hold},
+                    {name: "MAX_HOLD_SECONDS",       value: $max_hold},
+                    {name: "MIN_DELAY_SECONDS",      value: $min_delay},
+                    {name: "MAX_DELAY_SECONDS",      value: $max_delay},
+                    {name: "CACHE_MODE",             value: $cache_mode},
+                    {name: "TOTAL_DURATION_SECONDS", value: $total_duration}
+                  ]
+                }
+              ]
+            }')
+          OUT=$(az rest --method POST --uri "$START_URI" --body "$START_BODY")
           EXEC=$(echo "$OUT" | jq -r '.name // .id | split("/") | last')
           echo "exec=$EXEC" >> $GITHUB_OUTPUT
           echo "::notice title=westus execution started::$EXEC ($R replicas)"
@@ -207,11 +231,14 @@ jobs:
           REGION=eastus2
           RG="cts-scoreboard-stress-${REGION}"
           JOB="cts-sb-stress-${REGION}-job"
-          # See westus step for rationale: heal broken template in the
-          # same PATCH that applies trigger config.
           SUB_ID=$(az account show --query id -o tsv)
           URI="https://management.azure.com/subscriptions/${SUB_ID}/resourceGroups/${RG}/providers/Microsoft.App/jobs/${JOB}?api-version=2024-03-01"
-          JOB_JSON=$(az rest --method GET --uri "$URI")
+          # If the eastus2 job hasn't been deployed yet, skip gracefully
+          # rather than failing the whole workflow.
+          if ! JOB_JSON=$(az rest --method GET --uri "$URI" 2>/dev/null); then
+            echo "::warning title=eastus2 job missing::$JOB not found in $RG; skipping eastus2 step"
+            exit 0
+          fi
           CONTAINER=$(echo "$JOB_JSON" | jq -c '
             .properties.template.containers
             | map(select(.image != null and .image != ""))
@@ -239,19 +266,36 @@ jobs:
               }
             }')
           az rest --method PATCH --uri "$URI" --body "$BODY" -o none
-          OUT=$(az containerapp job start \
-            -g "$RG" \
-            -n "$JOB" \
-            --env-vars \
-              TARGET_URL="${{ inputs.target_url }}" \
-              BROWSERS_PER_REPLICA="${{ inputs.browsers_per_replica }}" \
-              MIN_HOLD_SECONDS="${{ inputs.min_hold_seconds }}" \
-              MAX_HOLD_SECONDS="${{ inputs.max_hold_seconds }}" \
-              MIN_DELAY_SECONDS="${{ inputs.min_delay_seconds }}" \
-              MAX_DELAY_SECONDS="${{ inputs.max_delay_seconds }}" \
-              CACHE_MODE="${{ inputs.cache_mode }}" \
-              TOTAL_DURATION_SECONDS="${{ inputs.total_duration_seconds }}" \
-            -o json)
+          IMG=$(echo "$CONTAINER" | jq -r '.image')
+          START_URI="https://management.azure.com/subscriptions/${SUB_ID}/resourceGroups/${RG}/providers/Microsoft.App/jobs/${JOB}/start?api-version=2024-03-01"
+          START_BODY=$(jq -nc \
+            --arg img "$IMG" \
+            --arg target_url "${{ inputs.target_url }}" \
+            --arg browsers_per_replica "${{ inputs.browsers_per_replica }}" \
+            --arg min_hold "${{ inputs.min_hold_seconds }}" \
+            --arg max_hold "${{ inputs.max_hold_seconds }}" \
+            --arg min_delay "${{ inputs.min_delay_seconds }}" \
+            --arg max_delay "${{ inputs.max_delay_seconds }}" \
+            --arg cache_mode "${{ inputs.cache_mode }}" \
+            --arg total_duration "${{ inputs.total_duration_seconds }}" '{
+              containers: [
+                {
+                  name: "stress",
+                  image: $img,
+                  env: [
+                    {name: "TARGET_URL",             value: $target_url},
+                    {name: "BROWSERS_PER_REPLICA",   value: $browsers_per_replica},
+                    {name: "MIN_HOLD_SECONDS",       value: $min_hold},
+                    {name: "MAX_HOLD_SECONDS",       value: $max_hold},
+                    {name: "MIN_DELAY_SECONDS",      value: $min_delay},
+                    {name: "MAX_DELAY_SECONDS",      value: $max_delay},
+                    {name: "CACHE_MODE",             value: $cache_mode},
+                    {name: "TOTAL_DURATION_SECONDS", value: $total_duration}
+                  ]
+                }
+              ]
+            }')
+          OUT=$(az rest --method POST --uri "$START_URI" --body "$START_BODY")
           EXEC=$(echo "$OUT" | jq -r '.name // .id | split("/") | last')
           echo "exec=$EXEC" >> $GITHUB_OUTPUT
           echo "::notice title=eastus2 execution started::$EXEC ($R replicas)"
