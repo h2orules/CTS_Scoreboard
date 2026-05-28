@@ -1,0 +1,78 @@
+name: stress-stop
+
+# Immediately cancels every Running execution of the stress-test job in the
+# selected region(s). Replicas are SIGTERM'd and then SIGKILL'd by ACA
+# after a short grace period.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'single (westus only) or multi (westus + eastus2)'
+        required: true
+        type: choice
+        options: [single, multi]
+        default: single
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  stop:
+    runs-on: ubuntu-latest
+    environment: stress    # required-reviewer gate + OIDC federation subject
+    strategy:
+      fail-fast: false
+      matrix:
+        region: ${{ fromJSON(github.event.inputs.mode == 'multi' && '["westus","eastus2"]' || '["westus"]') }}
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - name: Azure login (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Cancel running executions
+        id: cancel
+        run: |
+          REGION="${{ matrix.region }}"
+          RG="cts-scoreboard-stress-${REGION}"
+          JOB="cts-sb-stress-${REGION}-job"
+
+          # If the job doesn't exist yet (never deployed), exit cleanly.
+          if ! az containerapp job show -g "$RG" -n "$JOB" -o none 2>/dev/null; then
+            echo "::notice title=$REGION::Job $JOB not found in $RG; nothing to stop."
+            echo "stopped=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          mapfile -t RUNNING < <(az containerapp job execution list \
+            -g "$RG" -n "$JOB" \
+            --query "[?properties.status=='Running'].name" -o tsv)
+
+          if (( ${#RUNNING[@]} == 0 )); then
+            echo "::notice title=$REGION::No running executions."
+            echo "stopped=0" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          for EX in "${RUNNING[@]}"; do
+            echo "Stopping $EX ..."
+            az containerapp job stop -g "$RG" -n "$JOB" --execution-name "$EX" -o none
+            echo "Stopped $EX"
+          done
+          echo "stopped=${#RUNNING[@]}" >> $GITHUB_OUTPUT
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Stress stop: ${{ matrix.region }}"
+            echo "- Stopped executions: **${{ steps.cancel.outputs.stopped }}**"
+          } >> $GITHUB_STEP_SUMMARY
