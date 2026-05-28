@@ -1,0 +1,17 @@
+{
+  "name": "cts-scoreboard-stress",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Headless-Chromium driver for the CTS Scoreboard stress test pool.",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "playwright": "1.49.0",
+    "pino": "9.5.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
