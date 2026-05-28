@@ -139,16 +139,33 @@ jobs:
           REGION=westus
           RG="cts-scoreboard-stress-${REGION}"
           JOB="cts-sb-stress-${REGION}-job"
-          # `az containerapp job update` repeatedly fails template validation
-          # when only trigger config is changing (ContainerAppImageRequired,
-          # container-name mismatches, etc.). PATCH the ARM resource directly
-          # so merge semantics leave the template untouched and only the
-          # configuration fields we send are applied.
+          # Prior failed `az containerapp job update` calls have left the
+          # live resource with a broken container slot (named after the job
+          # and with no Image set). Every subsequent write — including a
+          # minimal PATCH that does NOT touch properties.template — fails
+          # with ContainerAppImageRequired because ARM validates the whole
+          # resource on each write.
+          #
+          # Heal it in the same PATCH: read the current template, find the
+          # first container slot that still has a valid image, and rebuild
+          # properties.template.containers as a single clean container
+          # named `stress` (matching the Bicep) carrying that image.
           SUB_ID=$(az account show --query id -o tsv)
           URI="https://management.azure.com/subscriptions/${SUB_ID}/resourceGroups/${RG}/providers/Microsoft.App/jobs/${JOB}?api-version=2024-03-01"
+          JOB_JSON=$(az rest --method GET --uri "$URI")
+          CONTAINER=$(echo "$JOB_JSON" | jq -c '
+            .properties.template.containers
+            | map(select(.image != null and .image != ""))
+            | .[0]
+            | . + {name: "stress"}
+          ')
+          if [[ -z "$CONTAINER" || "$CONTAINER" == "null" ]]; then
+            echo "::error::No container with a valid image found on $JOB; cannot heal template"; exit 1
+          fi
           BODY=$(jq -nc \
             --argjson R "$R" \
-            --argjson T "$T" '{
+            --argjson T "$T" \
+            --argjson C "$CONTAINER" '{
               properties: {
                 configuration: {
                   replicaTimeout: $T,
@@ -156,6 +173,9 @@ jobs:
                     parallelism: $R,
                     replicaCompletionCount: $R
                   }
+                },
+                template: {
+                  containers: [ $C ]
                 }
               }
             }')
@@ -187,11 +207,24 @@ jobs:
           REGION=eastus2
           RG="cts-scoreboard-stress-${REGION}"
           JOB="cts-sb-stress-${REGION}-job"
+          # See westus step for rationale: heal broken template in the
+          # same PATCH that applies trigger config.
           SUB_ID=$(az account show --query id -o tsv)
           URI="https://management.azure.com/subscriptions/${SUB_ID}/resourceGroups/${RG}/providers/Microsoft.App/jobs/${JOB}?api-version=2024-03-01"
+          JOB_JSON=$(az rest --method GET --uri "$URI")
+          CONTAINER=$(echo "$JOB_JSON" | jq -c '
+            .properties.template.containers
+            | map(select(.image != null and .image != ""))
+            | .[0]
+            | . + {name: "stress"}
+          ')
+          if [[ -z "$CONTAINER" || "$CONTAINER" == "null" ]]; then
+            echo "::error::No container with a valid image found on $JOB; cannot heal template"; exit 1
+          fi
           BODY=$(jq -nc \
             --argjson R "$R" \
-            --argjson T "$T" '{
+            --argjson T "$T" \
+            --argjson C "$CONTAINER" '{
               properties: {
                 configuration: {
                   replicaTimeout: $T,
@@ -199,6 +232,9 @@ jobs:
                     parallelism: $R,
                     replicaCompletionCount: $R
                   }
+                },
+                template: {
+                  containers: [ $C ]
                 }
               }
             }')
