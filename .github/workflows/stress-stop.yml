@@ -21,6 +21,7 @@ permissions:
 jobs:
   stop:
     runs-on: ubuntu-latest
+    environment: stress    # required-reviewer gate + OIDC federation subject
     strategy:
       fail-fast: false
       matrix:

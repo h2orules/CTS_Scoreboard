@@ -70,6 +70,7 @@ permissions:
 jobs:
   start:
     runs-on: ubuntu-latest
+    environment: stress    # required-reviewer gate + OIDC federation subject
     env:
       AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}

@@ -77,18 +77,32 @@ RG(s).
    done
    ```
 
-3. **OIDC federated credential**. The existing `preprod` / `production`
-   federated subjects don't cover these workflows. Either:
+3. **GitHub `stress` environment + OIDC federated credential**. The
+   existing `preprod` / `production` federated subjects don't cover these
+   workflows. The repo's `stress` environment is already created (with
+   `h2orules` as required reviewer) and each stress workflow job pins
+   `environment: stress`. You just need to add the matching federated
+   credential to the Entra app registration:
 
-   - Add a new federated credential with subject
-     `repo:h2orules/CTS_Scoreboard:ref:refs/heads/master` (allows all
-     workflows on `master` to mint a token), **or**
-   - Add a GitHub `stress` environment to the repo, gate it with required
-     reviewers, set `environment: stress` on each stress workflow job, and
-     federate `repo:h2orules/CTS_Scoreboard:environment:stress`.
+   ```bash
+   AZURE_CLIENT_ID="<value of AZURE_CLIENT_ID secret>"
+   APP_OBJECT_ID=$(az ad app show --id "$AZURE_CLIENT_ID" --query id -o tsv)
+   az rest --method POST \
+     --uri "https://graph.microsoft.com/v1.0/applications/${APP_OBJECT_ID}/federatedIdentityCredentials" \
+     --body '{
+       "name": "github-stress",
+       "issuer": "https://token.actions.githubusercontent.com",
+       "subject": "repo:h2orules/CTS_Scoreboard:environment:stress",
+       "audiences": ["api://AzureADTokenExchange"]
+     }'
+   ```
 
    No new secrets are required — the workflows reuse `AZURE_CLIENT_ID`,
    `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`.
+
+   To manage the environment (e.g. change reviewers, switch to a team):
+   `gh api repos/h2orules/CTS_Scoreboard/environments/stress` or in the
+   GitHub UI under **Settings → Environments → stress**.
 
 4. **First deploy**. Run **stress-deploy** with `mode=single`,
    `apply_or_whatif=apply`. This creates the RG (if missing), the ACR,
