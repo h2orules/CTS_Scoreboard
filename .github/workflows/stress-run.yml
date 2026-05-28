@@ -142,11 +142,18 @@ jobs:
           # configuration that must be applied via `update` first. The CLI's
           # `update` quirk requires --image even when only trigger config is
           # changing, so we read the current image back and pass it through.
+          # `--container-name` must match the container name in the Bicep
+          # (`stress`); without it the CLI creates a new container slot
+          # named after the job and the image is silently lost.
           IMG=$(az containerapp job show -g "$RG" -n "$JOB" \
             --query 'properties.template.containers[0].image' -o tsv)
+          if [[ -z "$IMG" ]]; then
+            echo "::error::Could not read existing image for $JOB in $RG"; exit 1
+          fi
           az containerapp job update \
             -g "$RG" \
             -n "$JOB" \
+            --container-name stress \
             --image "$IMG" \
             --replica-completion-count "$R" \
             --parallelism "$R" \
@@ -179,9 +186,13 @@ jobs:
           R=${{ steps.split.outputs.eastus2_replicas }}
           IMG=$(az containerapp job show -g "$RG" -n "$JOB" \
             --query 'properties.template.containers[0].image' -o tsv)
+          if [[ -z "$IMG" ]]; then
+            echo "::error::Could not read existing image for $JOB in $RG"; exit 1
+          fi
           az containerapp job update \
             -g "$RG" \
             -n "$JOB" \
+            --container-name stress \
             --image "$IMG" \
             --replica-completion-count "$R" \
             --parallelism "$R" \
