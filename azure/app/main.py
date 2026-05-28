@@ -59,6 +59,23 @@ def build_app(
         lifespan=lifespan,
     )
 
+    # Explicitly instrument FastAPI for Application Insights. The
+    # azure-monitor-opentelemetry distro is supposed to pick this up
+    # automatically, but in practice the auto-discovery silently no-ops
+    # in some build/import orderings and `requests` ends up empty in AI
+    # even though the app is serving traffic. Calling
+    # `instrument_app` here is idempotent and guarantees the
+    # ASGI middleware is wired before `socketio.ASGIApp` wraps us.
+    if settings.applicationinsights_connection_string:
+        try:
+            from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+            FastAPIInstrumentor.instrument_app(fastapi_app)
+        except Exception:  # pragma: no cover - best-effort
+            import logging
+
+            logging.exception("FastAPI OTel instrumentation failed")
+
     # Cross-process / cross-replica fanout for Socket.IO.
     #
     # Each engine.io session lives in one worker process — so an emit() to

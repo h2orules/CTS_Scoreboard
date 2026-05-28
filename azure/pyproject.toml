@@ -21,6 +21,7 @@ dependencies = [
     "azure-monitor-opentelemetry>=1.6",
     "opentelemetry-api>=1.27",
     "opentelemetry-sdk>=1.27",
+    "opentelemetry-instrumentation-fastapi>=0.48b0",
     "structlog>=24.4",
     # Transitive dep of azure-monitor-opentelemetry that doesn't always survive
     # `pip install --prefix` layouts in the Docker build; pin it explicitly.
