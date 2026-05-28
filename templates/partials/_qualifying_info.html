@@ -114,19 +114,21 @@
       {%- set last_qual.val = this_qual -%}
       {%- if show_set_sub -%}
         {%- if loop.first and sub_label -%}
-<div class="grid-subheader">{{ sub_label }}</div>
+<div class="grid-subheader set-subheader">{{ sub_label }}</div>
         {%- else -%}
-<div></div>
+<div class="set-subheader-spacer"></div>
         {%- endif -%}
       {%- endif -%}
       {%- if nsg.col_qual -%}
         {%- if is_qual_first and this_qual -%}
-<div class="grid-subheader">{{ this_qual }}</div>
+<div class="grid-subheader qual-subheader record-start">{{ this_qual }}</div>
         {%- else -%}
-<div></div>
+<div class="record-start"></div>
         {%- endif -%}
-      {%- endif -%}
 <div class="rec_time {{ rec.color_class }}">{{ rec.time }}</div>
+      {%- else -%}
+<div class="rec_time {{ rec.color_class }} record-start">{{ rec.time }}</div>
+      {%- endif -%}
       {%- if nsg.col_year -%}
 <div class="rec_year {{ rec.color_class }}">{{ rec.record_year or '' }}</div>
       {%- endif -%}
