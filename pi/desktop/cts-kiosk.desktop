@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=CTS Scoreboard Kiosk
+GenericName=Scoreboard Kiosk
+Comment=Re-launch the CTS Scoreboard in fullscreen kiosk mode
+Exec=SCOREBOARD_REPO/pi/scripts/cts-kiosk.sh
+Icon=video-display
+Terminal=false
+Categories=Network;Utility;
+StartupNotify=false

@@ -2,6 +2,7 @@
 
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>{{ meet_title or 'Swimming Scoreboard' }}</title>
     <link href="https://fonts.googleapis.com/css?family=Overpass+Mono" rel="stylesheet">
     <link rel="stylesheet" type="text/css" href="{{url_for('static', filename='css/scoreboard_style_web.css')}}">
 </head>
@@ -22,6 +23,73 @@
     function init() {
         on_timer();
         window.setInterval(on_timer, 30000);
+        initScoreboardAutoFit();
+    }
+
+    // Auto-fit: if the scoreboard group would overflow the available
+    // vertical space (between header padding and the disclaimer footer),
+    // visually shrink it via CSS transform: scale() down to a minimum
+    // scale, instead of clipping. Re-runs on resize and content changes.
+    function initScoreboardAutoFit() {
+        var MIN_SCALE = 0.6;
+        var pending = null;
+        var landscapeMQ = window.matchMedia('(orientation: landscape) and (max-height: 600px)');
+        function fit() {
+            pending = null;
+            var outer = document.querySelector('.content_outer');
+            var group = document.querySelector('.scoreboard_group');
+            if (!outer || !group) return;
+            // In landscape-short mode, the page scrolls instead of
+            // shrinking. Toggle the body hook and skip scaling.
+            if (landscapeMQ.matches) {
+                document.body.classList.add('landscape-scroll');
+                group.style.transform = '';
+                return;
+            }
+            document.body.classList.remove('landscape-scroll');
+            // Reset prior transform so we measure natural size.
+            group.style.transform = '';
+            group.style.transformOrigin = 'top center';
+            var cs = window.getComputedStyle(outer);
+            var availH = outer.clientHeight
+                - parseFloat(cs.paddingTop || 0)
+                - parseFloat(cs.paddingBottom || 0);
+            var availW = outer.clientWidth
+                - parseFloat(cs.paddingLeft || 0)
+                - parseFloat(cs.paddingRight || 0);
+            var naturalH = group.scrollHeight;
+            var naturalW = group.scrollWidth;
+            if (naturalH <= 0 || naturalW <= 0) return;
+            var scaleH = naturalH > availH ? availH / naturalH : 1;
+            var scaleW = naturalW > availW ? availW / naturalW : 1;
+            var scale = Math.min(scaleH, scaleW);
+            if (scale >= 1) return;
+            if (scale < MIN_SCALE) scale = MIN_SCALE;
+            group.style.transform = 'scale(' + scale + ')';
+        }
+        function schedule() {
+            if (pending !== null) return;
+            pending = window.requestAnimationFrame(fit);
+        }
+        window.addEventListener('resize', schedule);
+        if (landscapeMQ.addEventListener) {
+            landscapeMQ.addEventListener('change', schedule);
+        } else if (landscapeMQ.addListener) {
+            landscapeMQ.addListener(schedule);
+        }
+        // Observe DOM mutations inside the scoreboard group so dynamic
+        // updates (lane data, qualifying info, footer messages) re-fit.
+        var group = document.querySelector('.scoreboard_group');
+        if (group && window.MutationObserver) {
+            var mo = new MutationObserver(schedule);
+            mo.observe(group, {
+                subtree: true, childList: true,
+                characterData: true, attributes: true
+            });
+        }
+        // Expose for callers that change layout imperatively.
+        window.scoreboardFit = schedule;
+        schedule();
     }
 </script>
 
@@ -80,6 +148,11 @@
                         <td align="right"><span id="lane_time{{ i }}"></span><span class="lane_qt_tag" id="lane_qt_tag{{ i }}"></span>&nbsp;</td>
                     </tr>
                     {% endfor %}
+                    <tbody id="scoreboard_footer_tbody"{% if not initial_footer_html %} style="display:none;"{% endif %}>
+                        <tr class="scoreboard_footer_row">
+                            <td colspan="4" id="scoreboard_footer_cell" class="scoreboard_footer_cell">{{ initial_footer_html | safe }}</td>
+                        </tr>
+                    </tbody>
                 </table>
                 </div>
                 <div id="blank_clock" class="blank-clock"></div>
@@ -90,9 +163,10 @@
         </div>
         </div>
         <div class="content_scoreboard_ad" id="content_scoreboard_ad">
-            {% if ad_url and (ad_url != '') %}
-            <img src="{{url_for('static', filename='ad/'+ad_url)}}" />
-            {% endif %}
+            {% set _initial_ad = ad_images[active_ad_index] if (ad_images and active_ad_index is defined and active_ad_index < ad_images|length) else None %}
+            <img id="ad_layer_a" class="ad-layer"
+                {% if _initial_ad and _initial_ad.enabled %}src="{{ url_for('static', filename='ad/' + _initial_ad.filename) }}" style="opacity:1;"{% else %}style="opacity:0;"{% endif %} />
+            <img id="ad_layer_b" class="ad-layer" style="opacity:0;" />
         </div>
         {% if test_background and is_dev_mode and serving_context == 'pi' %}
         <div class="controls">
@@ -114,8 +188,8 @@
         {% endif %}
     </div>
     <div class="scoreboard_disclaimer">Scoreboard is unofficial. See results for official times.</div>
-    {% if initial_qr_overlay_svg %}
-    <div class="qr-overlay qr-overlay-{{ initial_qr_overlay_corner|default('top-right') }}">
+    {% if serving_context == 'pi' %}
+    <div id="qr_overlay" class="qr-overlay qr-overlay-{{ initial_qr_overlay_corner|default('top-right') }}{% if not initial_qr_overlay_svg or initial_qr_overlay_visibility|default('off') == 'off' %} qr-hidden{% endif %}">
         {{ initial_qr_overlay_svg|safe }}
     </div>
     {% endif %}
@@ -160,11 +234,76 @@
     var confettiFired = {};  // Track which lanes have already shown confetti
     var maxQtTagLen = 0;    // Longest tag string for space reservation
     var raceState = {{ initial_race_state | tojson }};
+    var qrOverlayVisibility = {{ initial_qr_overlay_visibility | default('off') | tojson }};
+    var qrOverlayCorner = {{ initial_qr_overlay_corner | default('top-right') | tojson }};
+
+    function updateQrOverlay() {
+        var el = document.getElementById('qr_overlay');
+        if (!el) return;
+        // Apply corner class.
+        var corners = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+        for (var i = 0; i < corners.length; i++) {
+            el.classList.remove('qr-overlay-' + corners[i]);
+        }
+        el.classList.add('qr-overlay-' + (qrOverlayCorner || 'top-right'));
+        var hasContent = el.innerHTML.indexOf('<svg') !== -1;
+        var visible = false;
+        if (hasContent) {
+            if (qrOverlayVisibility === 'always') visible = true;
+            else if (qrOverlayVisibility === 'between_races') visible = (raceState !== 'Running');
+        }
+        if (visible) el.classList.remove('qr-hidden');
+        else el.classList.add('qr-hidden');
+    }
     var messageOverlayEnabled = {{ initial_settings.message_overlay_enabled | tojson }};
     var messagePages = {{ initial_message_pages | tojson }};
     var messageRotationInterval = {{ initial_settings.message_rotation_interval | tojson }};
     var activeMessagePage = {{ initial_active_message_page | tojson }};
+    var adImages = {{ ad_images | tojson }};
+    var activeAdIndex = {{ active_ad_index | tojson }};
+    var _adActiveLayer = 'a';   // which layer ('a' or 'b') is currently shown
+    var AD_STATIC_BASE = {{ url_for('static', filename='ad/') | tojson }};
+
+    function renderAdRotation() {
+        var layerA = document.getElementById('ad_layer_a');
+        var layerB = document.getElementById('ad_layer_b');
+        if (!layerA || !layerB) return;
+        var entry = null;
+        if (Array.isArray(adImages) && activeAdIndex >= 0 && activeAdIndex < adImages.length) {
+            entry = adImages[activeAdIndex];
+        }
+        if (!entry || !entry.enabled || !entry.filename) {
+            // Hide both layers.
+            layerA.style.opacity = '0';
+            layerB.style.opacity = '0';
+            return;
+        }
+        var newSrc = AD_STATIC_BASE + entry.filename;
+        var activeEl = (_adActiveLayer === 'a') ? layerA : layerB;
+        var nextEl   = (_adActiveLayer === 'a') ? layerB : layerA;
+        // If active layer already shows this image (e.g. first paint), nothing to do.
+        if (activeEl.getAttribute('src') === newSrc && activeEl.style.opacity !== '0') {
+            return;
+        }
+        // Preload onto inactive layer, then swap opacities for a cross-fade.
+        nextEl.onload = function () {
+            nextEl.style.opacity = '1';
+            activeEl.style.opacity = '0';
+            _adActiveLayer = (_adActiveLayer === 'a') ? 'b' : 'a';
+            nextEl.onload = null;
+        };
+        nextEl.setAttribute('src', newSrc);
+        // If the browser already has the image cached, onload may not fire
+        // again — handle that case synchronously.
+        if (nextEl.complete && nextEl.naturalWidth > 0) {
+            nextEl.style.opacity = '1';
+            activeEl.style.opacity = '0';
+            _adActiveLayer = (_adActiveLayer === 'a') ? 'b' : 'a';
+            nextEl.onload = null;
+        }
+    }
     var qualifyingTimesKey = {{ initial_qt_key | tojson }};
+    var footerMessageKey = {{ initial_footer_key | tojson }};
     var _fragmentCache = {};       // { url: { key, html } }
 
     // Fetch a server-rendered HTML fragment with ETag caching.
@@ -298,6 +437,24 @@
             if (tagEl) tagEl.textContent = result.tag;
             spawnConfetti(lane, timeEl.parentElement);
         }
+    }
+
+    // Render the footer message row via server-rendered HTML fragment.
+    // Hides the row when the fragment is empty.
+    function renderFooterMessage(newKey) {
+        var tbody = document.getElementById('scoreboard_footer_tbody');
+        var cell = document.getElementById('scoreboard_footer_cell');
+        if (!tbody || !cell) return;
+        if (!newKey) {
+            cell.innerHTML = '';
+            tbody.style.display = 'none';
+            return;
+        }
+        footerMessageKey = newKey;
+        fetchFragment('/api/footer-message', newKey, function(html) {
+            cell.innerHTML = html || '';
+            tbody.style.display = (html && html.trim()) ? '' : 'none';
+        });
     }
 
     // Render qualifying times and records via server-rendered HTML fragment
@@ -666,9 +823,34 @@
         next();
     }
 
+    // Server-pushed soft reload (e.g. after operator saves Settings on the
+    // Pi). Many display fields are baked into the rendered HTML, so the
+    // simplest correct refresh is to re-load the page.
+    socket.on('reload_clients', () => {
+        // Small jitter so 100s of viewers don't reconnect in the same tick.
+        var delay = 50 + Math.floor(Math.random() * 450);
+        setTimeout(function () { window.location.reload(); }, delay);
+    });
+
     socket.on('update_scoreboard', (new_s) => {
         for (k in new_s) {
             s[k] = new_s[k];
+        }
+
+        // QR overlay live updates (server pushes after URL/meet/env change).
+        var qrChanged = false;
+        if ('qr_overlay_svg' in new_s) {
+            var qrEl = document.getElementById('qr_overlay');
+            if (qrEl) qrEl.innerHTML = new_s['qr_overlay_svg'] || '';
+            qrChanged = true;
+        }
+        if ('qr_overlay_corner' in new_s) {
+            qrOverlayCorner = new_s['qr_overlay_corner'];
+            qrChanged = true;
+        }
+        if ('qr_overlay_visibility' in new_s) {
+            qrOverlayVisibility = new_s['qr_overlay_visibility'];
+            qrChanged = true;
         }
 
         // Track race state from server FSM and handle transitions
@@ -690,7 +872,10 @@
 
             // Update display mode for blank states
             updateBlankDisplay(raceState);
+            qrChanged = true;
         }
+
+        if (qrChanged) updateQrOverlay();
 
         // Track current event/heat for test controls
         if ("current_event" in s) currentEvent = parseInt(s["current_event"]) || currentEvent;
@@ -838,6 +1023,17 @@
             renderMessageOverlay();
         }
 
+        var adChanged = false;
+        if ("ad_images" in s) { adImages = s["ad_images"] || []; adChanged = true; }
+        if ("active_ad_index" in s) { activeAdIndex = s["active_ad_index"]; adChanged = true; }
+        if (adChanged) {
+            renderAdRotation();
+        }
+
+        if ("footer_message_key" in s) {
+            renderFooterMessage(s["footer_message_key"]);
+        }
+
         // Evaluate all lanes for time standard qualifications (skip if event/heat just changed with stale times)
         if (!eventHeatChanged) {
             for (var i = 1; i <= {{ num_lanes }}; i++) {
@@ -847,6 +1043,10 @@
 
         s = {};
     });
+
+    // Initialise QR overlay visibility on page load (race-state may already
+    // dictate hidden, e.g. mid-race reload).
+    updateQrOverlay();
 
 </script>
 

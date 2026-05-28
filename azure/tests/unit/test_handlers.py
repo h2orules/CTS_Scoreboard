@@ -273,3 +273,237 @@ async def test_meet_open_increments_meet_opened_metric():
     )
     assert metrics.meet_opened.total == starting_total + 1
     reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_update_scoreboard_records_event_handler_latency():
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    metrics = get_metrics()
+
+    sio, _, _, _ = _make_sio_with_spies()
+    register_handlers(sio, store=_store(), tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
+    )
+    await _handler(sio, "/pi", "update_scoreboard")("sidPi", {"clock": "00:30.50"})
+
+    handler_obs = [
+        e for e in metrics.event_handler_seconds.events
+        if e[1] and e[1].get("event") == "update_scoreboard"
+    ]
+    assert handler_obs, "expected an event_handler_seconds observation for update_scoreboard"
+    elapsed, attrs = handler_obs[-1]
+    assert elapsed >= 0
+    assert attrs == {"event": "update_scoreboard", "namespace": "/pi"}
+    reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_update_scoreboard_records_emit_fanout_latency():
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    metrics = get_metrics()
+
+    sio, _, _, _ = _make_sio_with_spies()
+    register_handlers(sio, store=_store(), tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
+    )
+    await _handler(sio, "/pi", "update_scoreboard")("sidPi", {"clock": "00:30.50"})
+
+    fanout_obs = [
+        e for e in metrics.emit_fanout_seconds.events
+        if e[1] and e[1].get("event") == "update_scoreboard"
+    ]
+    assert fanout_obs, "expected an emit_fanout_seconds observation for update_scoreboard"
+    reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_pi_connect_increments_active_sockets_and_pi_connections():
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    metrics = get_metrics()
+
+    sio, *_ = _make_sio_with_spies()
+    register_handlers(sio, store=_store(), tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
+    )
+    pi_obs = [e for e in metrics.active_sockets.events
+              if e[1] and e[1].get("namespace") == "/pi"]
+    assert pi_obs and pi_obs[-1][0] == 1
+    assert metrics.pi_connections.total == 1
+    reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_pi_disconnect_decrements_active_sockets_and_pi_connections():
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    metrics = get_metrics()
+
+    sio, *_ = _make_sio_with_spies()
+    register_handlers(sio, store=_store(), tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
+    )
+    await _handler(sio, "/pi", "disconnect")("sidPi")
+    # connect added 1, disconnect added -1 → net 0
+    pi_ns_total = sum(
+        delta for delta, attrs in metrics.active_sockets.events
+        if attrs and attrs.get("namespace") == "/pi"
+    )
+    assert pi_ns_total == 0
+    assert metrics.pi_connections.total == 0
+    reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_browser_connect_increments_active_sockets_scoreboard():
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    metrics = get_metrics()
+
+    sio, *_ = _make_sio_with_spies()
+    store = _store()
+    store.open_meet(MEET, host_team_name="X", protocol_version=1, pi_account_id="oid")
+    register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/scoreboard", "connect")("sidB", {}, {"meet_id": MEET})
+    sb_obs = [e for e in metrics.active_sockets.events
+              if e[1] and e[1].get("namespace") == "/scoreboard"]
+    assert sb_obs and sb_obs[-1][0] == 1
+    reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_browser_disconnect_decrements_active_sockets_scoreboard():
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    metrics = get_metrics()
+
+    sio, *_ = _make_sio_with_spies()
+    store = _store()
+    store.open_meet(MEET, host_team_name="X", protocol_version=1, pi_account_id="oid")
+    register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/scoreboard", "connect")("sidB", {}, {"meet_id": MEET})
+    await _handler(sio, "/scoreboard", "disconnect")("sidB")
+    sb_total = sum(
+        delta for delta, attrs in metrics.active_sockets.events
+        if attrs and attrs.get("namespace") == "/scoreboard"
+    )
+    assert sb_total == 0
+    reset_for_tests()
+
+
+@pytest.mark.asyncio
+async def test_meet_open_rejected_when_id_owned_by_other_pi():
+    sio, _, _, _ = _make_sio_with_spies()
+    store = _store()
+    # Pre-claim by a different Pi.
+    store.open_meet(MEET, host_team_name="Other", protocol_version=1, pi_account_id="oid-other")
+    register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
+    )
+    res = await _handler(sio, "/pi", "meet_open")(
+        "sidPi", {"meet_id": MEET, "host_team_name": "Foo", "protocol_version": 1}
+    )
+    assert res == {"ok": False, "error": "meet_id_taken"}
+    # Owner unchanged.
+    assert store.get_metadata(MEET)["host_team_name"] == "Other"
+
+
+@pytest.mark.asyncio
+async def test_meet_open_marks_previous_id_expired_when_changed():
+    sio, _, _, _ = _make_sio_with_spies()
+    store = _store()
+    OLD = "oldMeetID12345"
+    NEW = "newFriendly-26"
+    # Pre-bind under the validator's account_id ("oid-pi").
+    store.open_meet(OLD, host_team_name="Foo", protocol_version=1, pi_account_id="oid-pi")
+    register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": NEW, "protocol_version": 1}
+    )
+    res = await _handler(sio, "/pi", "meet_open")(
+        "sidPi", {"meet_id": NEW, "host_team_name": "Foo", "protocol_version": 1}
+    )
+    assert res == {"ok": True}
+    # Old id marked expired_id_rotated.
+    assert store.get_metadata(OLD)["status"] == "expired_id_rotated"
+    # New id is live.
+    assert store.get_metadata(NEW)["status"] == "live"
+
+
+@pytest.mark.asyncio
+async def test_pi_connect_rejects_invalid_meet_id():
+    sio, _, _, _ = _make_sio_with_spies()
+    store = _store()
+    register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    import socketio as _sio
+    with pytest.raises(_sio.exceptions.ConnectionRefusedError):
+        await _handler(sio, "/pi", "connect")(
+            "sidBad", {}, {"access_token": "ok", "meet_id": "bad name!", "protocol_version": 1}
+        )
+
+
+@pytest.mark.asyncio
+async def test_meet_open_allows_original_owner_to_reclaim_rotated_id():
+    # The original Pi may reclaim a previously-rotated name until the
+    # metadata TTL elapses.
+    sio, _, _, _ = _make_sio_with_spies()
+    store = _store()
+    MID = "Midlakes-2026a"
+    # _ok_validator returns account_id="oid-pi".
+    store.open_meet(MID, host_team_name="Foo", protocol_version=1, pi_account_id="oid-pi")
+    store.mark_status(MID, "expired_id_rotated")
+    register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MID, "protocol_version": 1}
+    )
+    res = await _handler(sio, "/pi", "meet_open")(
+        "sidPi", {"meet_id": MID, "host_team_name": "Foo", "protocol_version": 1}
+    )
+    assert res == {"ok": True}
+    meta = store.get_metadata(MID)
+    assert meta["status"] == "live"
+    assert meta["pi_account_id"] == "oid-pi"
+
+
+@pytest.mark.asyncio
+async def test_meet_open_rejects_other_pi_reclaiming_rotated_id():
+    # A *different* Pi must not be able to grab a name the original owner
+    # has rotated away from.
+    sio, _, _, _ = _make_sio_with_spies()
+    store = _store()
+    MID = "Midlakes-2026b"
+    # Original owner is "oid-original"; the connecting Pi's validator
+    # returns "oid-pi" (different identity).
+    store.open_meet(MID, host_team_name="Orig", protocol_version=1, pi_account_id="oid-original")
+    store.mark_status(MID, "expired_id_rotated")
+    register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MID, "protocol_version": 1}
+    )
+    res = await _handler(sio, "/pi", "meet_open")(
+        "sidPi", {"meet_id": MID, "host_team_name": "Intruder", "protocol_version": 1}
+    )
+    assert res == {"ok": False, "error": "meet_id_taken"}
+    # Original metadata unchanged: still owned by oid-original, still rotated.
+    meta = store.get_metadata(MID)
+    assert meta["pi_account_id"] == "oid-original"
+    assert meta["status"] == "expired_id_rotated"
+    assert meta["host_team_name"] == "Orig"

@@ -1,0 +1,45 @@
+/plan I want to add an Azure-based front end to the raspberry Pi based hardward device.  
+
+Azure will serve 100s+ of live parents & swimmers who want to see the scoreboard.  The Pi will host the local UI for both
+on-site displays and scorekeeper/operator, and relay the live data to Azure.
+
+The Pi system will run guincorn->flask with an auto-start script that runs a local browser in kiosk+full-screen mode.
+
+The addition of the Azure front end should meet the following requirements:
+
+- Pi remains the source of truth for scoreboard data, as it has the hardware to read the data from the CTS scoreboard port.
+- Pi hosts the local, in-venue UI and settings/operator pages.
+- Pi relays live data to Azure for scaled distribution.  Communication of live scoreboard data should be in realtime.  Azure should cache pre-rendered fragments and refresh them when the live data warrants a refresh.
+- Azure should fetch the UI template form the raspberry pi.  It will cache for the lifetime of the session, but should not have fixed UI assets itself, to allow each Pi that connects to provide a customized UI layout + assets.
+- The Pi should have a setting of which template is sent to Azure.  By default this is @templates/web/home.html and associated partials.  However, in the future, we may allow a separate template for the Azure-served client and the in-venue UI.  We should assume that this will be visual differences, but the data stream sent from the Pi to the UI is consistent across all templates.  But, Azure should be agnostic to the data stream itself, since this may change over time and whenver possible we do not want to create depencencies between Azure and the Pi.
+- The Pi should securely login to the Azure front end.  When connected, it creates a new session/meet.  Each Pi that connects gets an uniquely generated alphanumeric ID up of 15 characters, which will be used to generate a QR code to connect to the live scoreboard - this ID is persistent unles manually refreshed or the Pi is logged out of the Azure service.  There should be a Settings button in Danger Zone to retrieve a new ID, with a note that the old ID cannot be re-used, and that existing clients will be presented with an error in that case.
+- A new meet session is not started when the Pi re-connects if the connection is dropped mid-meet.  Azure should cache the latest data to show connected and new clients, until the Pi reconnects.  
+- The login to Azure should be a setting in the Settings page on the Pi, which is automaticly saved after it is aestablished once (via a key exchange at signin), to minimize operator setup for each meet.  The keys should be stored in a file other than .settings, and that file should be added to .gitignore to insure it's not committed to the repo.
+- If the Pi loses connection from Azure, it should reconnect consistently, but with exponential backoff up to a reasonable limit.  If connection is lost, this should be displayed live on the settings page, along with info on whent he next reconnect will occur.  There should be a button to force the reconnect flow to start over.
+- There should be a heartbeat from the Pi to Azure so Azure can know it's conneciton is live.  If the connection is lost for >1 min, Azure should display a friendly error to the user letting them know the connection was lost, and the last time the meet was connected.  If it has been >8hrs since the connection was live, the meet should be closed out on the Azure side.  Then, attempts to navigate to that ID will result in a message saying there is no live meet for that hosting team.  The hosting team name should be the first name used for Scores in Settings (and an asterisk footnote should be added to Settings to explain that to the user.). If the ID was rotated from the Pi, or the Pi was logged out, then Azure should present an error saying that host ID is not valid or has expired.
+- Azure should be able to host multiple meets at the same time, with multiple pi's connected.  Each meet will have its own ID and associated QR code.
+- The Azure front end should use appropriate web server systems for production workloads and handle caching + automatic invalidation of pages in the same way the current local UX does.  Make invalidation an explicit contract so it scales across multiple versions.
+- The Azure+Pi connection should be versioned so if one is updated significantly, it can either fallback to prior behavior or tell the other that an update is required (if that happens, a helpful user message should be shown.)
+- The Test buttons should not be available from the Azure front end - that should be available only for local connections.  In addition, the test button overlays should be disabled even locally when running in production mode through gunicorn, and available only when running in test mode, such as from the cli to flask directly or launched via vscode.
+- However, create a new page wich only has test buttons, similar to Settings.  This page requires local login to the Pi.
+- Azure should track how many connections from clients are live, and the Settings UI should be able to show this.
+- Include a telemetry+logging system on Azure that tracks client connections as a timeseries - include new connections, active connections, and errors.  Also include state of the connected Pi(s), reconnections, etc.
+- Include an alerting solution to message me if error rates spike or the Pi has to keep reconnecting (signalling a flaky connection and likely poor user experience.)
+- I'd suggest using Signal R to relay the live data via websockets, but please recommend a different option if appropriate.
+- The Pi should have a setting option to display the QR code that directs the user to the azure front end to receive the live meet data, which is encoded to redirect to the Azure's main URI with the 15 character ID as the host team route.  That QR code should be able to appear in:
+   - The rotation of message board overlays, as using a special markdown indicator to insert the generated QR code.  This should be automatically added as its own page at the end of the existing sequence once the Pi is signed in, but that page starts as disabled.  In the auto-added page, above the QR code should be the text: "# View the scoreboard live/nScan with your mobile device".  Update the markdown buttons to add a QR code button, as well as add the appropriate syntax to the legend.
+   - A toggle switch should enable showing the QR code in the upper right of the scoreboard on the local UI - it should be large neough to scan, but not so large that it covers up the time column.  Don't size this dynamically, pick a size that will work up front and then keep it at that size.  Another toggle controls whether it appears only when a race isn't running or all the time.  Note - this should not be shown on the Azure-hosted UI, it should show only when connected directly to the Pi. 
+   - There should be a button in settings to render any message board page from the Settings UI that contains the QR code to a PDF that could be printed by the client.  That should appear as a full page with the text sized to fill the width of the page minus a .5" margin on all dimensions, and the QR code should be as large as possible to fill remaining space while remaining proportional.
+- The Azure front-end should support 100s of clients at a time, with appropriate load-balancing and caching where possible.  Recommend any technologies it should use to make this possible.
+- As part of the implementation, include a .md file that describes in detail how to create the necessary azure resources using the `az` cli tools. I will run that with my logins.
+- Include a workflow/GH action that can publish the front end to Azure from GH automatically.  This should first publish to a pre-prod environment that is spun up on demand (so we don't pay for pre-prod when not needed), and then there should be a way to promote that to Prod, replacing the existing prod service.  This is basically CI/CD, with manual approval to go to Prod.
+- Include unit tests and integration tests for the Azure front end system.
+- All azure front-end code should be rooted in a subfolder of the project, with appropriate child folders below that as needed.  VS Code will be used for editing, so be sure to support that.  Prefer to implement the azure side code in Python where possible.
+
+Ask me any questions needed to refine the plan or clarify areas that are unclear.  
+
+When we move to implementation, use /fleet mode with sub-agents that are dedicated to each part of implementation.  Provide them with explicit instructions.  Subagents should use Sonnet 4.6 when the work is well-scoped, and Opus 4.7 as needed for more complex work.  Plan with Opus 4.7.
+
+If you get stuck, or repeat a line of thinking more than twice, go back to plan mode.  If you or a subagent are still stuck, ask me for additional information. 
+
+Use a worktree for implementation.

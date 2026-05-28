@@ -62,6 +62,8 @@ def register(flask_app, app_module):
         schedule_error = None
         standards_error = None
         records_error = None
+        ad_error = None
+        ad_needs_update = False
         settings = _app.settings
 
         if flask.request.method == 'POST':
@@ -147,6 +149,100 @@ def register(flask_app, app_module):
                         except:
                             pass
 
+            # --- Ad images: multi-file upload, reorder, toggle, remove -------
+            ad_form_submitted = ('ad_form' in flask.request.form)
+            ad_changed = False
+            AD_ALLOWED_EXTS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+            AD_DIR = os.path.join(os.path.dirname(os.path.abspath(_app.__file__)), 'static', 'ad')
+
+            if 'ad_images' in flask.request.files:
+                import uuid
+                ad_list = list(settings.get('ad_images') or [])
+                uploaded = flask.request.files.getlist('ad_images')
+                ad_errors = []
+                for upload in uploaded:
+                    if not upload or not upload.filename:
+                        continue
+                    _, ext = os.path.splitext(upload.filename)
+                    ext = ext.lower()
+                    if ext not in AD_ALLOWED_EXTS:
+                        ad_errors.append('Rejected %s (unsupported type)' % upload.filename)
+                        continue
+                    try:
+                        os.makedirs(AD_DIR, exist_ok=True)
+                    except Exception:
+                        pass
+                    # Use a UUID-based filename so uploads never collide with
+                    # existing files (regardless of the user's original name).
+                    final_name = 'ad_%s%s' % (uuid.uuid4().hex, ext)
+                    try:
+                        upload.save(os.path.join(AD_DIR, final_name))
+                    except Exception as e:
+                        ad_errors.append('Failed to save %s: %s' % (upload.filename, e))
+                        continue
+                    ad_list.append({'filename': final_name, 'enabled': True})
+                    ad_changed = True
+                if ad_changed:
+                    settings['ad_images'] = ad_list
+                    modified = True
+                if ad_errors:
+                    ad_error = '; '.join(ad_errors)
+
+            if ad_form_submitted:
+                ad_list = list(settings.get('ad_images') or [])
+                # Remove (process first so subsequent indices line up with the
+                # form we just rendered the user; remove takes priority).
+                removed_idx = None
+                for idx in range(len(ad_list)):
+                    if ('ad_remove_%d' % idx) in flask.request.form:
+                        removed_idx = idx
+                        break
+                if removed_idx is not None:
+                    entry = ad_list.pop(removed_idx)
+                    try:
+                        fname = entry.get('filename') if isinstance(entry, dict) else None
+                        if fname:
+                            os.unlink(os.path.join(AD_DIR, fname))
+                    except Exception:
+                        pass
+                    ad_changed = True
+                else:
+                    # Reorder: at most one swap per submit.
+                    swap = None
+                    for idx in range(len(ad_list)):
+                        if ('ad_up_%d' % idx) in flask.request.form and idx > 0:
+                            swap = (idx, idx - 1)
+                            break
+                        if ('ad_down_%d' % idx) in flask.request.form and idx < len(ad_list) - 1:
+                            swap = (idx, idx + 1)
+                            break
+                    if swap is not None:
+                        a, b = swap
+                        ad_list[a], ad_list[b] = ad_list[b], ad_list[a]
+                        ad_changed = True
+                    # Per-row enabled checkbox state (checkbox absent == False).
+                    for idx, entry in enumerate(ad_list):
+                        new_enabled = ('ad_enabled_%d' % idx) in flask.request.form
+                        if bool(entry.get('enabled')) != new_enabled:
+                            entry['enabled'] = new_enabled
+                            ad_changed = True
+                # Rotation interval dropdown.
+                try:
+                    new_interval = int(flask.request.form.get('ad_rotation_interval', '30'))
+                except (TypeError, ValueError):
+                    new_interval = 30
+                if new_interval < 5 or new_interval > 60 or new_interval % 5 != 0:
+                    new_interval = 30
+                if settings.get('ad_rotation_interval', 30) != new_interval:
+                    settings['ad_rotation_interval'] = new_interval
+                    ad_changed = True
+
+                if ad_changed:
+                    settings['ad_images'] = ad_list
+                    modified = True
+
+            ad_needs_update = ad_changed
+
             # --- Record set team tag dropdowns -------------------------------
 
             for rec_set in _app.swim_record_sets:
@@ -199,6 +295,8 @@ def register(flask_app, app_module):
                             modified = True
                     elif k.endswith('_tag'):
                         pass  # Already handled above
+                    elif k in ('ad_images', 'ad_rotation_interval'):
+                        pass  # Handled by the ad form block above
                     else:
                         val = flask.request.form.get(k)
                         if k.startswith('team_') and not k.endswith('_tag'):
@@ -292,15 +390,125 @@ def register(flask_app, app_module):
             else:
                 overlay_needs_broadcast = False
 
+            # --- Footer messages --------------------------------------------
+            # The form posts ``footer_form=1`` for any action (add / remove).
+            # Add submits a single new message with selector lists + text;
+            # Remove submits ``footer_remove_<id>``.
+
+            footer_changed = False
+            if 'footer_form' in flask.request.form:
+                import uuid
+                import time as _time
+
+                fm_list = list(settings.get('footer_messages') or [])
+
+                # Remove first (takes priority over Add on a same-submit).
+                remove_id = None
+                for k in flask.request.form.keys():
+                    if k.startswith('footer_remove_'):
+                        remove_id = k[len('footer_remove_'):]
+                        break
+                if remove_id:
+                    new_list = [m for m in fm_list if m.get('id') != remove_id]
+                    if len(new_list) != len(fm_list):
+                        fm_list = new_list
+                        footer_changed = True
+
+                elif 'footer_add' in flask.request.form:
+                    # Vocab — must match CTS_Scoreboard module constants.
+                    allowed_genders = set(_app.FOOTER_GENDER_LABELS)
+                    allowed_strokes = set(_app.FOOTER_STROKE_LABELS)
+                    allowed_distances = set(int(v) for v in _app.FOOTER_DISTANCE_VALUES)
+                    allowed_age_groups = set(_app.FOOTER_AGE_GROUP_LABELS)
+
+                    raw_text = flask.request.form.get('footer_text', '') or ''
+                    raw_text = raw_text.replace('\r\n', '\n').replace('\r', '\n')
+                    # Defensively strip the QR token even though the UI hides
+                    # the QR button — footer never renders a QR code.
+                    raw_text = raw_text.replace('[[QR]]', '')
+
+                    # Cap at 3 lines x 60 visible chars (mirrors the editor).
+                    def _vlen(line):
+                        s = re.sub(r'^\s*#{1,4}\s+', '', line)
+                        s = re.sub(r'^\s*(\d+\.|[-*])\s+', '', s)
+                        s = re.sub(r'`([^`\n]+)`', r'\1', s)
+                        s = re.sub(r'\*\*([^*\n]+)\*\*', r'\1', s)
+                        s = re.sub(r'~~([^~\n]+)~~', r'\1', s)
+                        s = re.sub(r'(^|[^*])\*([^*\n]+)\*(?!\*)', r'\1\2', s)
+                        s = re.sub(r'(^|[^_])_([^_\n]+)_(?!_)', r'\1\2', s)
+                        return len(s)
+                    lines = raw_text.split('\n')[:3]
+                    trimmed = []
+                    for ln in lines:
+                        while _vlen(ln) > 60:
+                            ln = ln[:-1]
+                        trimmed.append(ln)
+                    text = '\n'.join(trimmed).strip('\n')
+
+                    if text.strip():
+                        align = flask.request.form.get('footer_align', 'left')
+                        if align not in ('left', 'center', 'right'):
+                            align = 'left'
+                        is_default = ('footer_is_default' in flask.request.form)
+                        genders = [v for v in flask.request.form.getlist('footer_genders')
+                                   if v in allowed_genders]
+                        strokes = [v for v in flask.request.form.getlist('footer_strokes')
+                                   if v in allowed_strokes]
+                        age_groups = [v for v in flask.request.form.getlist('footer_age_groups')
+                                      if v in allowed_age_groups]
+                        distances = []
+                        for v in flask.request.form.getlist('footer_distances'):
+                            try:
+                                iv = int(v)
+                            except (TypeError, ValueError):
+                                continue
+                            if iv in allowed_distances:
+                                distances.append(iv)
+                        new_entry = {
+                            'id': uuid.uuid4().hex[:12],
+                            'text': text,
+                            'align': align,
+                            'is_default': bool(is_default),
+                            'genders': genders,
+                            'distances': distances,
+                            'strokes': strokes,
+                            'age_groups': age_groups,
+                            'created_at': _time.time(),
+                        }
+                        fm_list.append(new_entry)
+                        footer_changed = True
+
+                if footer_changed:
+                    settings['footer_messages'] = fm_list
+                    modified = True
+
             # --- Persist & broadcast -----------------------------------------
 
             if modified:
-                with open(_app.settings_file, "wt") as f:
-                    json.dump(settings, f, sort_keys=True, indent=4)
+                _app.save_settings()
+                # Most settings (meet title, team names, num_lanes, ad image,
+                # display flags, etc.) are baked into the server-rendered
+                # HTML, so connected scoreboards need to reload to pick them
+                # up. broadcast_settings_changed handles both the local
+                # /scoreboard namespace and Azure (which gets a fresh
+                # meet_context + a reload nudge for live viewers).
+                try:
+                    _app.broadcast_settings_changed()
+                except Exception:
+                    pass
 
             if overlay_needs_broadcast:
                 _app.send_message_overlay_state()
                 _app._update_message_rotation()
+
+            if ad_needs_update:
+                _app._update_ad_rotation()
+
+            if footer_changed:
+                try:
+                    _app.broadcast_footer_message_refresh()
+                except Exception:
+                    pass
 
         # --- GET: build template context -------------------------------------
 
@@ -308,9 +516,20 @@ def register(flask_app, app_module):
         if settings['serial_port'] not in [port for port, desc in comm_port_list]:
             comm_port_list.insert(0, (settings['serial_port'], settings['serial_port']))
 
-        ad_url_list = []
-        for dirpath, dir, file in os.walk(os.path.join("static", "ad")):
-            ad_url_list.extend(file)
+        # Build the list of ad image rows for the settings template. We render
+        # only entries that still have a backing file on disk so a stale
+        # settings.json doesn't show broken previews.
+        ad_images = []
+        for entry in (settings.get('ad_images') or []):
+            if not isinstance(entry, dict):
+                continue
+            fname = entry.get('filename', '')
+            if not fname:
+                continue
+            ad_images.append({
+                'filename': fname,
+                'enabled': bool(entry.get('enabled', True)),
+            })
 
         schedule_loaded = bool(_app.event_info.event_names)
         standards_loaded = _app.time_standards is not None
@@ -331,13 +550,51 @@ def register(flask_app, app_module):
             if tag:
                 team_tag_options.append((tag, '%s (%s)' % (tag, name) if name else tag))
 
+        # --- Footer message list summaries -------------------------------
+        # Each saved entry gets a human-readable summary used by the UI.
+        def _footer_summary(m):
+            if m.get('is_default'):
+                return 'Default (any event)'
+            parts = []
+            if m.get('genders'):
+                parts.append('Gender: ' + ', '.join(m['genders']))
+            if m.get('distances'):
+                parts.append('Distance: ' + ', '.join(str(d) for d in m['distances']))
+            if m.get('strokes'):
+                parts.append('Stroke: ' + ', '.join(m['strokes']))
+            if m.get('age_groups'):
+                parts.append('Age: ' + ', '.join(m['age_groups']))
+            if not parts:
+                return 'Any event'
+            return ' | '.join(parts)
+
+        footer_messages_view = []
+        for m in (settings.get('footer_messages') or []):
+            footer_messages_view.append({
+                'id': m.get('id', ''),
+                'text': m.get('text', ''),
+                'align': m.get('align', 'left'),
+                'is_default': bool(m.get('is_default')),
+                'summary': _footer_summary(m),
+            })
+
+        # Section anchor to scroll to after a settings update. Forms inject
+        # `_section` automatically via JS, and the clear/remove redirect
+        # routes pass `?section=` so we can return the user to where they
+        # were working.
+        if flask.request.method == 'POST':
+            scroll_to_section = flask.request.form.get('_section') or None
+        else:
+            scroll_to_section = flask.request.args.get('section') or None
+
         return flask.render_template('settings.html',
                     meet_title=settings['meet_title'],
                     serial_port=settings['serial_port'],
                     serial_port_list=comm_port_list,
                     user_name=settings['username'],
-                    ad_url_list=ad_url_list,
-                    ad_url=settings['ad_url'],
+                    ad_images=ad_images,
+                    ad_rotation_interval=settings.get('ad_rotation_interval', 30),
+                    ad_error=ad_error,
                     num_lanes=settings['num_lanes'],
                     pool_course=settings.get('pool_course', 'SCY'),
                     seed_time_label=settings.get('seed_time_label', 'Seed Time'),
@@ -366,7 +623,15 @@ def register(flask_app, app_module):
                     team_guest3=settings.get('team_guest3', ''),
                     team_guest3_tag=settings.get('team_guest3_tag', ''),
                     shutdown_nonce=_new_shutdown_nonce(),
-                    wifi_available=wifi_manager.is_available())
+                    wifi_available=wifi_manager.is_available(),
+                    qr_overlay_visibility=settings.get('qr_overlay_visibility', 'off'),
+                    qr_overlay_corner=settings.get('qr_overlay_corner', 'top-right'),
+                    footer_messages=footer_messages_view,
+                    footer_gender_options=_app.FOOTER_GENDER_LABELS,
+                    footer_distance_options=_app.FOOTER_DISTANCE_VALUES,
+                    footer_stroke_options=_app.FOOTER_STROKE_LABELS,
+                    footer_age_group_options=_app.FOOTER_AGE_GROUP_LABELS,
+                    scroll_to_section=scroll_to_section)
 
     # -- WiFi management API -------------------------------------------------
 
@@ -424,9 +689,8 @@ def register(flask_app, app_module):
         _app.event_info.clear()
         _app.settings['event_info'] = _app.event_info.to_object()
         _app.settings.pop('schedule_filename', None)
-        with open(_app.settings_file, "wt") as f:
-            json.dump(_app.settings, f, sort_keys=True, indent=4)
-        return flask.redirect('/settings')
+        _app.save_settings()
+        return flask.redirect('/settings?section=section-meet-manager')
 
     @flask_app.route('/standards_clear')
     @flask_login.login_required
@@ -435,9 +699,8 @@ def register(flask_app, app_module):
         _app.settings.pop('time_standards', None)
         _app.settings.pop('standards_filename', None)
         _app.settings.pop('std_desc_overrides', None)
-        with open(_app.settings_file, "wt") as f:
-            json.dump(_app.settings, f, sort_keys=True, indent=4)
-        return flask.redirect('/settings')
+        _app.save_settings()
+        return flask.redirect('/settings?section=section-meet-manager')
 
     @flask_app.route('/records_remove/<int:set_id>')
     @flask_login.login_required
@@ -448,9 +711,8 @@ def register(flask_app, app_module):
             _app.settings['swim_record_sets'] = base64.b64encode(pickle.dumps(_app.swim_record_sets)).decode('ascii')
         else:
             _app.settings.pop('swim_record_sets', None)
-        with open(_app.settings_file, "wt") as f:
-            json.dump(_app.settings, f, sort_keys=True, indent=4)
-        return flask.redirect('/settings')
+        _app.save_settings()
+        return flask.redirect('/settings?section=section-meet-manager')
 
     # -- Shutdown ------------------------------------------------------------
 
@@ -495,8 +757,7 @@ def register(flask_app, app_module):
                     combined[(int(k[1]), int(k[2]))] = (int(v[0]), int(v[1]))
             _app.event_info.combine_events(combined)
             _app.settings['event_info'] = _app.event_info.to_object()
-            with open(_app.settings_file, "wt") as f:
-                json.dump(_app.settings, f, sort_keys=True, indent=4)
+            _app.save_settings()
         event_heat = list(_app.event_info.events.keys())
         event_heat.sort()
         return flask.render_template('schedule_preview.html',
@@ -581,6 +842,14 @@ def register(flask_app, app_module):
         # Live-swap the relay URL if the active environment's URL changed.
         active_relay, _public = _app._active_azure_urls()
         _app.azure_relay_client.update_relay_url(active_relay)
+
+        # Any change to the active env's URLs (or the env itself) shifts the
+        # public meet URL; rebroadcast so connected scoreboards refresh their
+        # QR overlay and any cached message pages with [[QR]] tokens.
+        try:
+            _app.broadcast_qr_overlay_refresh()
+        except Exception:
+            pass
 
         return flask.jsonify({'ok': True, 'status': _azure_status_payload()})
 
@@ -677,7 +946,123 @@ def register(flask_app, app_module):
         new_id = _app.azure_relay_client.rotate_meet_id()
         if new_id is None:
             return flask.jsonify({'error': 'not signed in to Azure'}), 400
+        try:
+            _app.broadcast_qr_overlay_refresh()
+        except Exception:
+            pass
         return flask.jsonify({'ok': True, 'meet_id': new_id, 'status': _azure_status_payload()})
+
+    @flask_app.route('/azure/check_meet_id', methods=['POST'])
+    @flask_login.login_required
+    def route_azure_check_meet_id():
+        from azure_relay import validate_meet_id
+        data = flask.request.get_json(silent=True) or {}
+        name = (data.get('name') or '').strip()
+        ok, err = validate_meet_id(name)
+        if not ok:
+            return flask.jsonify({'ok': False, 'available': False, 'owner': None,
+                                  'error': err}), 200
+        result = _app.azure_relay_client.check_meet_id_available(name)
+        return flask.jsonify(result)
+
+    @flask_app.route('/azure/set_meet_id', methods=['POST'])
+    @flask_login.login_required
+    def route_azure_set_meet_id():
+        from azure_relay import validate_meet_id
+        data = flask.request.get_json(silent=True) or {}
+        name = (data.get('name') or '').strip()
+        ok, err = validate_meet_id(name)
+        if not ok:
+            return flask.jsonify({'ok': False, 'error': err}), 400
+        ok, result = _app.azure_relay_client.set_meet_id(name)
+        if not ok:
+            return flask.jsonify({'ok': False, 'error': result}), 400
+        try:
+            _app.broadcast_qr_overlay_refresh()
+        except Exception:
+            pass
+        return flask.jsonify({'ok': True, 'meet_id': result,
+                              'status': _azure_status_payload()})
+
+    @flask_app.route('/azure/qr.png', methods=['GET'])
+    @flask_login.login_required
+    def route_azure_qr_png():
+        """Serve the meet-URL QR code as a 4\" × 4\" @ 250 dpi PNG."""
+        from qr_utils import build_meet_url, render_qr_png
+        relay, public = _app._active_azure_urls()
+        meet_id = getattr(_app.azure_relay_client, 'meet_id', '') or ''
+        target = build_meet_url(public_base=public or relay, meet_id=meet_id)
+        if not target:
+            return flask.jsonify({
+                'error': 'Sign in to Azure and pick a meet ID first.'
+            }), 409
+        png = render_qr_png(target, target_px=1000)
+        resp = flask.make_response(png)
+        resp.headers['Content-Type'] = 'image/png'
+        resp.headers['Content-Disposition'] = (
+            'attachment; filename="scoreboard-qr.png"'
+        )
+        resp.headers['Cache-Control'] = 'no-store'
+        return resp
+
+    @flask_app.route('/azure/qr_settings', methods=['POST'])
+    @flask_login.login_required
+    def route_azure_qr_settings():
+        """Update the QR overlay visibility/corner and broadcast a refresh."""
+        data = flask.request.get_json(silent=True) or {}
+        modified = False
+        if 'visibility' in data:
+            v = (data.get('visibility') or '').strip()
+            if v not in ('off', 'between_races', 'always'):
+                return flask.jsonify({
+                    'ok': False,
+                    'error': "visibility must be 'off', 'between_races', or 'always'",
+                }), 400
+            if _app.settings.get('qr_overlay_visibility') != v:
+                _app.settings['qr_overlay_visibility'] = v
+                modified = True
+        if 'corner' in data:
+            c = (data.get('corner') or '').strip()
+            valid = ('top-left', 'top-right', 'bottom-left', 'bottom-right')
+            if c not in valid:
+                return flask.jsonify({
+                    'ok': False,
+                    'error': 'corner must be one of ' + ', '.join(valid),
+                }), 400
+            if _app.settings.get('qr_overlay_corner') != c:
+                _app.settings['qr_overlay_corner'] = c
+                modified = True
+        if modified:
+            try:
+                _app.save_settings()
+            except Exception:
+                pass
+            try:
+                _app.broadcast_qr_overlay_refresh()
+            except Exception:
+                pass
+        return flask.jsonify({
+            'ok': True,
+            'visibility': _app.settings.get('qr_overlay_visibility', 'off'),
+            'corner': _app.settings.get('qr_overlay_corner', 'top-right'),
+        })
+
+    @flask_app.route('/azure/insert_qr_page', methods=['POST'])
+    @flask_login.login_required
+    def route_azure_insert_qr_page():
+        """Append the auto QR message page (idempotent), bypassing sign-in."""
+        injected = _app._inject_qr_message_page()
+        if injected:
+            try:
+                _app.send_message_overlay_state()
+                _app._update_message_rotation()
+            except Exception:
+                pass
+        return flask.jsonify({
+            'ok': True,
+            'injected': injected,
+            'page_count': len(_app.settings.get('message_pages', [])),
+        })
 
     # -- Login / logout ------------------------------------------------------
 

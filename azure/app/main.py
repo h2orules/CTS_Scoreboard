@@ -8,14 +8,17 @@ import redis as redis_sync
 import socketio
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.staticfiles import StaticFiles
 
 from app import (
     PROTOCOL_VERSION_CURRENT,
     PROTOCOL_VERSION_MIN_SUPPORTED,
     __version__,
 )
+from app.auth import validate_pi_token
 from app.config import get_settings
 from app.handlers import register_handlers
+from app.marketing import STATIC_DIR, build_marketing_router
 from app.routes import build_router
 from app.state import MeetStateStore
 from app.telemetry import configure_telemetry
@@ -48,7 +51,7 @@ def build_app(
         yield
 
     fastapi_app = FastAPI(
-        title="CTS Scoreboard Azure Relay",
+        title="Swimming Scoreboard Azure Relay",
         version=__version__,
         docs_url=None,
         redoc_url=None,
@@ -104,7 +107,35 @@ def build_app(
                 await watchdog.stop()
 
     fastapi_app.router.lifespan_context = lifespan_with_watchdog
-    fastapi_app.include_router(build_router(store=store))
+    fastapi_app.include_router(
+        build_router(
+            store=store,
+            token_validator=(
+                token_validator
+                or (
+                    lambda t: validate_pi_token(
+                        t,
+                        tenant_id=settings.entra_tenant_id,
+                        audience=settings.entra_audience,
+                    )
+                )
+            ),
+        )
+    )
+
+    # Public landing pages (/, /terms, /privacy) live under their own
+    # router to keep marketing concerns separate from the per-meet API.
+    fastapi_app.include_router(build_marketing_router())
+
+    # Static assets backing the marketing pages (CSS + the QR demo SVG).
+    # NOTE: this is distinct from the per-meet /m/{meet_id}/static/... route,
+    # which serves Pi-bundled template assets out of Redis. The two surfaces
+    # don't overlap by path.
+    fastapi_app.mount(
+        "/static",
+        StaticFiles(directory=str(STATIC_DIR)),
+        name="static",
+    )
 
     @fastapi_app.get("/healthz", response_class=PlainTextResponse, include_in_schema=False)
     async def healthz() -> str:
