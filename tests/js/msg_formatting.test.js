@@ -716,3 +716,24 @@ describe('edge cases', () => {
         expect(ta.value).toBe('  - item');
     });
 });
+
+// ---------------------------------------------------------------------------
+// insertQr
+// ---------------------------------------------------------------------------
+describe('insertQr', () => {
+    it('inserts the QR token at the cursor', () => {
+        const ta = mockTA('Hello world', 5, 5);
+        fmt.insertQr(ta);
+        expect(ta.value).toBe('Hello[[QR]] world');
+        // Cursor should be positioned just after the inserted token.
+        expect(ta.selectionStart).toBe(11);
+        expect(ta.selectionEnd).toBe(11);
+    });
+
+    it('replaces selected text with the QR token', () => {
+        const ta = mockTA('Hello world', 6, 11);
+        fmt.insertQr(ta);
+        expect(ta.value).toBe('Hello [[QR]]');
+        expect(ta.selectionStart).toBe(12);
+    });
+});

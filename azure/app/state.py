@@ -16,10 +16,14 @@ Key scheme:
 """
 from __future__ import annotations
 
+import functools
 import json
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol
+from typing import Any, Literal, Protocol, TypeVar
+
+F = TypeVar("F", bound=Callable[..., Any])
 
 MeetStatus = Literal["live", "degraded", "closed", "expired_id_rotated"]
 
@@ -77,6 +81,32 @@ def _maybe_str(v: Any) -> str | None:
     return v  # type: ignore[return-value]
 
 
+def _timed(op: str) -> Callable[[F], F]:
+    """Record the wrapped MeetStateStore method's latency in seconds.
+
+    Imports ``get_metrics`` lazily to avoid a circular import at module load
+    and to keep the path inert when telemetry hasn't been configured yet.
+    """
+
+    def deco(fn: F) -> F:
+        @functools.wraps(fn)
+        def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+            from app.telemetry import get_metrics
+
+            metrics = get_metrics()
+            t0 = time.perf_counter()
+            try:
+                return fn(self, *args, **kwargs)
+            finally:
+                metrics.redis_op_seconds.record(
+                    time.perf_counter() - t0, {"op": op}
+                )
+
+        return wrapper  # type: ignore[return-value]
+
+    return deco
+
+
 class MeetStateStore:
     """High-level Redis-backed store for one relay deployment."""
 
@@ -86,6 +116,7 @@ class MeetStateStore:
 
     # ---------- meet lifecycle ----------
 
+    @_timed("open_meet")
     def open_meet(
         self,
         meet_id: str,
@@ -111,6 +142,7 @@ class MeetStateStore:
         self._r.set(k.metadata, json.dumps(meta), ex=METADATA_TTL)
         self._r.set(f"pi:{pi_account_id}:meet_id", meet_id, ex=METADATA_TTL)
 
+    @_timed("heartbeat")
     def heartbeat(self, meet_id: str) -> None:
         meta = self.get_metadata(meet_id)
         if not meta:
@@ -120,6 +152,7 @@ class MeetStateStore:
             meta["status"] = "live"
         self._r.set(MeetKeys(meet_id).metadata, json.dumps(meta), ex=METADATA_TTL)
 
+    @_timed("mark_status")
     def mark_status(self, meet_id: str, status: MeetStatus) -> None:
         meta = self.get_metadata(meet_id)
         if not meta:
@@ -129,6 +162,7 @@ class MeetStateStore:
             meta["closed_at"] = self._clock()
         self._r.set(MeetKeys(meet_id).metadata, json.dumps(meta), ex=METADATA_TTL)
 
+    @_timed("get_metadata")
     def get_metadata(self, meet_id: str) -> dict[str, Any] | None:
         raw = _maybe_str(self._r.get(MeetKeys(meet_id).metadata))
         if not raw:
@@ -138,8 +172,50 @@ class MeetStateStore:
         except json.JSONDecodeError:
             return None
 
+    # ---------- pi <-> meet binding (used by friendly-name picker) ----------
+
+    @_timed("get_pi_meet_id")
+    def get_pi_meet_id(self, pi_account_id: str) -> str | None:
+        """Return the meet ID currently bound to this Pi identity, if any."""
+        if not pi_account_id:
+            return None
+        return _maybe_str(self._r.get(f"pi:{pi_account_id}:meet_id"))
+
+    @_timed("is_meet_id_taken")
+    def is_meet_id_taken(
+        self, meet_id: str, *, by_account_id: str
+    ) -> Literal["no", "self", "other"]:
+        """Check whether ``meet_id`` is already claimed.
+
+        - ``"no"``: no metadata exists for this id (truly free, e.g. TTL
+          elapsed), or a rotated/closed record exists but has no owner
+          recorded (orphan — back-compat for records written before the
+          ``pi_account_id`` field existed).
+        - ``"self"``: the current Pi (``by_account_id``) owns the record.
+          This includes records marked ``expired_id_rotated`` or
+          ``closed`` — the original owner may reclaim their own name
+          until the metadata TTL elapses.
+        - ``"other"``: a different Pi owns the record (live, closed, or
+          rotated), OR live/closed metadata exists but is orphaned (no
+          recorded ``pi_account_id``); treated as taken so we fail safely.
+        """
+        meta = self.get_metadata(meet_id)
+        if not meta:
+            return "no"
+        owner = meta.get("pi_account_id") or ""
+        # Orphaned rotated/closed records (no owner recorded) are free for
+        # anyone to claim — there is nobody to gate reclaim against. Live
+        # orphaned records still fall through below and are treated as
+        # taken, since handing a live id to someone new would be unsafe.
+        if not owner and meta.get("status") == "expired_id_rotated":
+            return "no"
+        if owner and by_account_id and owner == by_account_id:
+            return "self"
+        return "other"
+
     # ---------- live state (latest update_scoreboard payload) ----------
 
+    @_timed("put_state")
     def put_state(self, meet_id: str, payload: dict[str, Any]) -> None:
         # Merge into existing state so partial updates accumulate, mirroring
         # how the home.html client builds up s[k] = v.
@@ -147,6 +223,7 @@ class MeetStateStore:
         existing.update(payload)
         self._r.set(MeetKeys(meet_id).state, json.dumps(existing), ex=STATE_TTL)
 
+    @_timed("get_state")
     def get_state(self, meet_id: str) -> dict[str, Any] | None:
         raw = _maybe_str(self._r.get(MeetKeys(meet_id).state))
         if not raw:
@@ -158,6 +235,7 @@ class MeetStateStore:
 
     # ---------- fragments (HTML chunks with ETag-style keys) ----------
 
+    @_timed("put_fragment")
     def put_fragment(self, meet_id: str, name: str, key: str, html: str) -> None:
         self._r.set(
             MeetKeys(meet_id).fragment(name),
@@ -165,6 +243,7 @@ class MeetStateStore:
             ex=FRAGMENT_TTL,
         )
 
+    @_timed("get_fragment")
     def get_fragment(self, meet_id: str, name: str) -> tuple[str, str] | None:
         raw = _maybe_str(self._r.get(MeetKeys(meet_id).fragment(name)))
         if not raw:
@@ -175,6 +254,7 @@ class MeetStateStore:
         except (json.JSONDecodeError, KeyError):
             return None
 
+    @_timed("invalidate_fragments")
     def invalidate_fragments(self, meet_id: str, names: list[str]) -> int:
         """Delete the named fragments. Returns number of keys removed."""
         if not names:
@@ -184,6 +264,7 @@ class MeetStateStore:
 
     # ---------- templates ----------
 
+    @_timed("put_template")
     def put_template(self, meet_id: str, bundle: dict[str, Any]) -> str:
         """Store a bundle (idempotent on bundle_id) and mark it as current.
 
@@ -195,6 +276,7 @@ class MeetStateStore:
         self._r.set(MeetKeys(meet_id).current_template, bundle_id, ex=TEMPLATE_TTL)
         return bundle_id
 
+    @_timed("get_current_template")
     def get_current_template(self, meet_id: str) -> dict[str, Any] | None:
         bundle_id = _maybe_str(self._r.get(MeetKeys(meet_id).current_template))
         if not bundle_id:
@@ -209,6 +291,7 @@ class MeetStateStore:
 
     # ---------- close ----------
 
+    @_timed("close_meet")
     def close_meet(self, meet_id: str) -> None:
         """Close the meet: keep metadata (for 'no live meet' pages), drop hot
         state and fragments."""
@@ -217,6 +300,7 @@ class MeetStateStore:
         self._r.delete(k.state, k.current_template)
 
     # ---------- render context (Phase 4) ----------
+    @_timed("put_context")
     def put_context(self, meet_id: str, context: dict[str, Any]) -> None:
         """Store the initial render context. Replaces the previous snapshot."""
         self._r.set(
@@ -225,6 +309,7 @@ class MeetStateStore:
             ex=METADATA_TTL,
         )
 
+    @_timed("get_context")
     def get_context(self, meet_id: str) -> dict[str, Any] | None:
         raw = _maybe_str(self._r.get(MeetKeys(meet_id).context))
         if not raw:

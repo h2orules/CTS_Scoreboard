@@ -29,7 +29,7 @@ You should be repo-owner of `STU940652/CTS_Scoreboard` on GitHub (or use a
 fork) so you can configure secrets and Environments.
 
 ---
-
+ 
 ## 1. Pick names and a region
 
 These names are referenced throughout. Override to taste; everything else
@@ -445,3 +445,116 @@ more than the current Container Apps + Redis design — while delivering no
 latency or reliability win for our shape. Revisit only if a single meet
 sustains >5K viewers or the relay sustains >1M outbound msg/s for long
 periods.
+
+---
+
+## Performance metrics and dashboards
+
+The relay emits OpenTelemetry counters, histograms, and up-down counters
+that flow to Application Insights as `customMetrics`. Counters/up-down
+counters show up under `name` directly; histograms show up with
+`valueSum`, `valueCount`, `valueMin`, and `valueMax`. The
+`customDimensions` JSON column carries the per-event tags.
+
+Metric inventory (in `app/telemetry.py`):
+
+| Metric | Type | Tags | What it measures |
+|---|---|---|---|
+| `meets_opened` / `meets_closed` / `meets_degraded` | counter | `meet_id` | meet lifecycle |
+| `browsers_connected` / `browsers_disconnected` | counter | `meet_id` | viewer arrival rate |
+| `relay_events_processed` | counter | `event` | Pi-event processing rate |
+| `event_handler_seconds` | histogram | `event`, `namespace` | end-to-end handler latency |
+| `redis_op_seconds` | histogram | `op` | per-logical-Redis-op latency |
+| `emit_fanout_seconds` | histogram | `event`, `namespace` | `await sio.emit(...)` duration (Redis pub/sub fan-out) |
+| `active_sockets` | up-down counter | `namespace` | current open WebSocket count |
+| `pi_connections` | up-down counter | — | current Pi sources connected |
+
+### Verify metrics are arriving
+
+In Application Insights → **Logs**:
+
+```kql
+customMetrics
+| where timestamp > ago(15m)
+| where name in ("event_handler_seconds", "redis_op_seconds",
+                 "emit_fanout_seconds", "active_sockets",
+                 "pi_connections")
+| summarize count() by name
+```
+
+If `count()` is non-zero for each metric, the pipeline is healthy.
+
+### Useful KQL queries
+
+Per-event handler p50/p95/p99 (last hour):
+
+```kql
+customMetrics
+| where timestamp > ago(1h)
+| where name == "event_handler_seconds"
+| extend event = tostring(customDimensions.event)
+| summarize p50=percentile(value, 50),
+            p95=percentile(value, 95),
+            p99=percentile(value, 99)
+          by event, bin(timestamp, 1m)
+| render timechart
+```
+
+Redis op p95 latency by op:
+
+```kql
+customMetrics
+| where timestamp > ago(1h)
+| where name == "redis_op_seconds"
+| extend op = tostring(customDimensions.op)
+| summarize p95=percentile(value, 95) by op, bin(timestamp, 1m)
+| render timechart
+```
+
+Active sockets per namespace (rolling sum of up-down deltas):
+
+```kql
+customMetrics
+| where timestamp > ago(1h)
+| where name == "active_sockets"
+| extend ns = tostring(customDimensions.namespace)
+| summarize sockets = sum(valueSum) by ns, bin(timestamp, 1m)
+| render timechart
+```
+
+Fan-out latency vs. concurrent viewer count (correlation):
+
+```kql
+let fanout = customMetrics
+  | where name == "emit_fanout_seconds" and timestamp > ago(1h)
+  | summarize p95=percentile(value, 95) by bin(timestamp, 1m);
+let sockets = customMetrics
+  | where name == "active_sockets"
+        and tostring(customDimensions.namespace) == "/scoreboard"
+        and timestamp > ago(1h)
+  | summarize sockets = sum(valueSum) by bin(timestamp, 1m);
+fanout
+| join sockets on timestamp
+| project timestamp, p95, sockets
+| render timechart
+```
+
+### Suggested alerts
+
+In Application Insights → **Alerts** → **Create alert rule** (signal type
+"Custom log search"):
+
+1. **High event handler p95** — `event_handler_seconds` p95 > 0.150 s
+   for 5 min; severity 3.
+2. **Redis op tail latency** — `redis_op_seconds` p99 > 0.050 s for 5 min;
+   severity 2 (likely Redis tier saturation).
+3. **Fan-out backpressure** — `emit_fanout_seconds` p95 > 0.250 s for
+   5 min; severity 2.
+4. **Pi gone with viewers present** — `pi_connections` sum < 1 AND
+   `active_sockets` (`/scoreboard`) > 50 for 2 min; severity 1.
+
+### Workbook (recommended)
+
+Application Insights → **Workbooks** → **New** → paste each KQL query
+above into a separate timechart tile. Save as "Relay Performance" so
+on-call has one dashboard.

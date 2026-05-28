@@ -8,15 +8,20 @@ module renders that snapshot for any anonymous viewer who knows the meet ID.
 from __future__ import annotations
 
 import base64
+import logging
 import re
+from collections.abc import Callable
 from html import escape
 from typing import Any
 
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi import APIRouter, Header, Request
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from jinja2 import BaseLoader, Environment
 
+from app.auth import InvalidPiTokenError, PiIdentity
 from app.state import MeetStateStore
+
+log = logging.getLogger(__name__)
 
 # --- Static asset MIME map (kept tiny on purpose; falls back to octet-stream).
 _MIME = {
@@ -38,6 +43,14 @@ _MIME = {
 # Hard limits (defense in depth).
 _MAX_PATH_LEN = 256
 _VALID_PATH_RE = re.compile(r"^[A-Za-z0-9._/+-]+$")
+
+# Shared friendly-name rule. Mirrors azure_relay.MEET_ID_REGEX and the
+# JS helper in static/js/meet_id.js: 10-20 chars, [A-Za-z0-9_-] only.
+MEET_ID_RE = re.compile(r"^[A-Za-z0-9_-]{10,20}$")
+
+
+def _is_valid_meet_id(meet_id: str) -> bool:
+    return bool(MEET_ID_RE.match(meet_id))
 
 
 def _content_type_for(path: str) -> str:
@@ -150,69 +163,181 @@ class _DictLoader(BaseLoader):
 
 # --- "no live meet" / "closed" / "unknown" small pages ---------------
 
-def _state_page(*, title: str, body: str, status_code: int = 200) -> HTMLResponse:
+# Reusable styling for the small status pages. Mirrors the visual language of
+# the Pi's settings.html (system fonts, soft-grey background, rounded card,
+# Bootstrap-3 alert-style colors) so the cloud-side pages don't look like a
+# bare 404 next to the live scoreboard.
+_STATE_CSS = """
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+        "Helvetica Neue", Arial, sans-serif;
+    color: #333;
+    background: #f5f7fa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    min-height: 100vh;
+}
+.state-card {
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    max-width: 32rem;
+    width: 100%;
+    padding: 28px 32px 24px;
+    text-align: center;
+}
+.state-icon {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 14px;
+    font-size: 28px;
+    line-height: 1;
+}
+.state-icon.info    { background: #d9edf7; color: #31708f; }
+.state-icon.warning { background: #fcf8e3; color: #8a6d3b; }
+.state-icon.danger  { background: #f2dede; color: #a94442; }
+.state-icon.success { background: #dff0d8; color: #3c763d; }
+.state-card h1 {
+    font-size: 20px;
+    font-weight: 600;
+    margin: 0 0 10px;
+    color: #333;
+}
+.state-card p {
+    font-size: 14px;
+    color: #555;
+    margin: 0 0 12px;
+    line-height: 1.5;
+}
+.state-card p:last-child { margin-bottom: 0; }
+.state-card .muted {
+    font-size: 12px;
+    color: #999;
+    margin-top: 18px;
+}
+.state-card strong { color: #333; }
+"""
+
+# kind -> (css class, glyph). Kept ASCII / unicode-safe for simple SVG-free render.
+_STATE_KINDS = {
+    "info":    ("info",    "&#x24D8;"),   # circled i
+    "warning": ("warning", "&#x26A0;"),   # warning sign
+    "danger":  ("danger",  "&#x2715;"),   # ballot x
+    "success": ("success", "&#x2713;"),   # check
+}
+
+
+def _state_page(
+    *,
+    title: str,
+    body: str,
+    status_code: int = 200,
+    kind: str = "info",
+    footer: str = "",
+) -> HTMLResponse:
+    icon_class, glyph = _STATE_KINDS.get(kind, _STATE_KINDS["info"])
+    footer_html = f'<p class="muted">{footer}</p>' if footer else ""
     html = (
         "<!doctype html><html><head>"
         "<meta charset=\"utf-8\">"
         f"<title>{escape(title)}</title>"
         "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-        "<style>body{font-family:system-ui,sans-serif;max-width:40rem;"
-        "margin:4rem auto;padding:0 1rem;color:#111}"
-        "h1{font-size:1.5rem}</style>"
-        f"</head><body><h1>{escape(title)}</h1>"
-        f"<p>{body}</p></body></html>"
+        f"<style>{_STATE_CSS}</style>"
+        "</head><body>"
+        "<div class=\"state-card\">"
+        f"<div class=\"state-icon {icon_class}\" aria-hidden=\"true\">{glyph}</div>"
+        f"<h1>{escape(title)}</h1>"
+        f"<p>{body}</p>"
+        f"{footer_html}"
+        "</div></body></html>"
     )
     return HTMLResponse(html, status_code=status_code)
 
 
 # ---------------------------------------------------------------------------
 
-def build_router(*, store: MeetStateStore) -> APIRouter:
-    """Construct the browser-facing router bound to a state store."""
+def build_router(
+    *,
+    store: MeetStateStore,
+    token_validator: Callable[[str], PiIdentity] | None = None,
+) -> APIRouter:
+    """Construct the browser-facing router bound to a state store.
+
+    ``token_validator`` is optional; if omitted, the
+    ``/internal/meet_id/{name}/availability`` endpoint always returns
+    503 (used by the Pi-side friendly-name picker, off in unit tests
+    that don't exercise it).
+    """
     router = APIRouter()
 
     @router.get("/m/{meet_id}", response_class=HTMLResponse)
     async def meet_page(meet_id: str, request: Request) -> HTMLResponse:
-        # Defensive validation: meet_ids are short and alphanumeric.
-        if not meet_id.isalnum() or len(meet_id) > 64:
+        # Defensive validation: meet_ids match the shared friendly-name rule.
+        if not _is_valid_meet_id(meet_id):
             return _state_page(
                 title="Invalid meet ID",
                 body="The link you followed is malformed.",
                 status_code=400,
+                kind="danger",
+                footer="Double-check the URL and try again.",
             )
 
         meta = store.get_metadata(meet_id)
         if not meta:
             return _state_page(
                 title="No meet found",
-                body="That meet ID is unknown or has expired. Ask the host for "
-                     "an up-to-date link.",
+                body="That meet ID is unknown or has expired. If you scanned a "
+                     "printed QR code, the host may not have set up the "
+                     "scoreboard yet &mdash; try again closer to meet time, or "
+                     "ask the host for an up-to-date link.",
                 status_code=404,
+                kind="warning",
             )
         status = meta.get("status")
         if status == "expired_id_rotated":
             return _state_page(
                 title="Link expired",
-                body="The host rotated the meet's sharing link. Ask them for "
-                     "the new one.",
+                body="The host updated this meet&rsquo;s sharing link, so the "
+                     "old URL no longer works. Ask the host for the new link "
+                     "or QR code.",
                 status_code=410,
+                kind="warning",
             )
         if status == "closed":
+            host = escape(meta.get("host_team_name", "")) or "the host"
             return _state_page(
-                title="Meet closed",
-                body=f"<strong>{escape(meta.get('host_team_name', ''))}</strong>'s "
-                     "meet has finished. Final results may be available from the host.",
+                title="No meet in session",
+                body=f"There&rsquo;s no live meet right now from "
+                     f"<strong>{host}</strong>. The next meet will appear here "
+                     "automatically &mdash; this link is good all season, so "
+                     "feel free to bookmark it or save the QR code.",
                 status_code=200,
+                kind="info",
+                footer="Check back at the next scheduled meet.",
             )
 
         bundle = store.get_current_template(meet_id)
         context = store.get_context(meet_id)
         if not bundle or not context:
+            host = escape(meta.get("host_team_name", "")) or "the host"
             return _state_page(
-                title="Meet starting up",
-                body="The host's scoreboard hasn't finished publishing yet. "
-                     "Refresh in a moment.",
+                title="Connecting to the scoreboard",
+                body=f"<strong>{host}</strong> is online but hasn&rsquo;t "
+                     "published the first event yet. Results will appear here "
+                     "automatically as soon as the meet starts &mdash; no need "
+                     "to refresh.",
                 status_code=503,
+                kind="info",
             )
 
         try:
@@ -222,6 +347,7 @@ def build_router(*, store: MeetStateStore) -> APIRouter:
                 title="Render error",
                 body=f"Could not render the meet template: {escape(str(exc))}",
                 status_code=500,
+                kind="danger",
             )
         # If the meet is degraded, leave it to the in-page Socket.IO client to
         # surface the banner via the "feed_status" event we already emit.
@@ -236,7 +362,7 @@ def build_router(*, store: MeetStateStore) -> APIRouter:
             or not _VALID_PATH_RE.match(path)
         ):
             return Response(status_code=400)
-        if not meet_id.isalnum() or not bundle_id.isalnum():
+        if not _is_valid_meet_id(meet_id) or not bundle_id.isalnum():
             return Response(status_code=400)
 
         # Look up the cached bundle. Note: we honor the bundle_id from the URL
@@ -269,7 +395,7 @@ def build_router(*, store: MeetStateStore) -> APIRouter:
         )
 
     def _serve_fragment(meet_id: str, name: str, request: Request) -> Response:
-        if not meet_id.isalnum() or len(meet_id) > 64:
+        if not _is_valid_meet_id(meet_id):
             return Response(status_code=400)
         got = store.get_fragment(meet_id, name)
         if not got:
@@ -293,5 +419,49 @@ def build_router(*, store: MeetStateStore) -> APIRouter:
     @router.get("/m/{meet_id}/api/message-page/{index}")
     async def meet_message_page(meet_id: str, index: int, request: Request) -> Response:
         return _serve_fragment(meet_id, f"message_page_{index}", request)
+
+    @router.get("/m/{meet_id}/api/footer-message")
+    async def meet_footer_message(meet_id: str, request: Request) -> Response:
+        return _serve_fragment(meet_id, "footer_message", request)
+
+    @router.get("/internal/meet_id/{name}/availability")
+    async def meet_id_availability(
+        name: str,
+        authorization: str | None = Header(default=None),
+    ) -> JSONResponse:
+        """Pi-only check for whether a friendly meet ID is available.
+
+        Authenticated with the same Entra access token the Pi uses on the
+        ``/pi`` Socket.IO namespace. Returns
+        ``{available, owner: 'self'|'other'|None, error?}``.
+        """
+        if token_validator is None:
+            return JSONResponse(
+                {"error": "availability check not configured"}, status_code=503
+            )
+        if not authorization or not authorization.lower().startswith("bearer "):
+            return JSONResponse({"error": "missing bearer token"}, status_code=401)
+        token = authorization.split(" ", 1)[1].strip()
+        try:
+            identity = token_validator(token)
+        except InvalidPiTokenError as exc:
+            log.info("availability check: token rejected: %s", exc)
+            return JSONResponse({"error": "invalid token"}, status_code=401)
+        if not _is_valid_meet_id(name):
+            return JSONResponse(
+                {
+                    "available": False,
+                    "owner": None,
+                    "error": "name does not match the meet ID rules",
+                },
+                status_code=400,
+            )
+        taken = store.is_meet_id_taken(name, by_account_id=identity.account_id)
+        return JSONResponse(
+            {
+                "available": taken != "other",
+                "owner": None if taken == "no" else taken,
+            }
+        )
 
     return router

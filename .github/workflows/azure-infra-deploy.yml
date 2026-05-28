@@ -93,6 +93,30 @@ jobs:
           echo "image=$IMG" >> $GITHUB_OUTPUT
           echo "::notice title=Pinned image::$IMG"
 
+      # - name: Deactivate stale revisions
+      #   if: github.event.inputs.mode == 'apply'
+      #   run: |
+      #     # Deactivate ALL revisions before deploying. ARM's PUT fails with
+      #     # ContainerAppSecretInUse if any revision — including the live one —
+      #     # still has a secretRef pointing to a secret being removed from the
+      #     # Bicep template (e.g. webpubsub-conn). There is no way to avoid a
+      #     # brief outage without keeping the old secret indefinitely, so we
+      #     # accept ~30-60 s of downtime while the new revision starts.
+      #     RG="${{ steps.target.outputs.rg }}"
+      #     APP="${{ steps.target.outputs.app }}"
+      #     REVISIONS=$(az containerapp revision list -g "$RG" -n "$APP" \
+      #       --query "[].name" -o tsv 2>/dev/null || echo "")
+      #     if [[ -z "$REVISIONS" ]]; then
+      #       echo "No existing Container App / revisions found; skipping."
+      #       exit 0
+      #     fi
+      #     while read -r rev; do
+      #       [[ -z "$rev" ]] && continue
+      #       echo "Deactivating $rev"
+      #       az containerapp revision deactivate -g "$RG" -n "$APP" \
+      #         --revision "$rev" 2>/dev/null || true
+      #     done <<< "$REVISIONS"
+
       - name: Bicep what-if
         if: github.event.inputs.mode == 'what-if'
         run: |
@@ -129,6 +153,84 @@ jobs:
                   -n "${{ steps.target.outputs.app }}" \
                   --query properties.configuration.ingress.fqdn -o tsv)
           echo "url=https://$FQDN" >> $GITHUB_OUTPUT
+
+      - name: Bind managed certificate for custom domain
+        if: github.event.inputs.mode == 'apply'
+        run: |
+          # Registers a managed TLS certificate for the custom domain and sets
+          # bindingType to SniEnabled. This step is idempotent: it creates the
+          # cert on first run and reattaches it on subsequent infra deploys
+          # (Bicep registers the hostname with bindingType=Disabled, and this
+          # step upgrades it). The cert is free and auto-renewed by Azure.
+          #
+          # PREREQUISITE: DNS CNAME and TXT (asuid.*) records must be in place
+          # in GoDaddy before this step will succeed — see CUSTOM_DOMAIN_SETUP.md.
+          ENV=${{ github.event.inputs.environment }}
+          if [[ "$ENV" == "prod" ]]; then
+            CUSTOM_DOMAIN="scoreboard.aquagnomeapps.com"
+          else
+            CUSTOM_DOMAIN="scoreboard-pre.aquagnomeapps.com"
+          fi
+          RG="${{ steps.target.outputs.rg }}"
+          APP="${{ steps.target.outputs.app }}"
+          CAE="cts-sb-${ENV}-cae"
+
+          # 1. Reuse an existing Succeeded managed cert for this hostname if one
+          #    is already present in the environment — avoids creating a new
+          #    cert every infra deploy (which would otherwise pile up Failed/
+          #    Pending certs and trip the bind step's wait).
+          EXISTING_CERT_ID=$(az containerapp env certificate list \
+            -g "$RG" --name "$CAE" \
+            --query "[?properties.subjectName=='$CUSTOM_DOMAIN' && properties.provisioningState=='Succeeded'].id | [0]" \
+            -o tsv)
+
+          if [[ -n "$EXISTING_CERT_ID" ]]; then
+            echo "Reusing existing managed cert: $EXISTING_CERT_ID"
+            az containerapp hostname bind \
+              -g "$RG" -n "$APP" \
+              --hostname "$CUSTOM_DOMAIN" \
+              --environment "$CAE" \
+              --certificate "$EXISTING_CERT_ID"
+            exit 0
+          fi
+
+          # 2. No usable cert yet — create one and poll until Succeeded before
+          #    binding. Managed cert issuance is async (2-10 min typical) and
+          #    `hostname bind --validation-method CNAME` does NOT wait, so a
+          #    naive call here races and fails the workflow.
+          echo "Creating new managed cert for $CUSTOM_DOMAIN ..."
+          NEW_CERT_ID=$(az containerapp env certificate create \
+            -g "$RG" --name "$CAE" \
+            --hostname "$CUSTOM_DOMAIN" \
+            --validation-method CNAME \
+            --query id -o tsv)
+          echo "Cert id: $NEW_CERT_ID"
+
+          # Poll for up to 15 minutes.
+          for i in $(seq 1 30); do
+            STATE=$(az containerapp env certificate show --ids "$NEW_CERT_ID" \
+              --query properties.provisioningState -o tsv)
+            echo "  attempt $i: $STATE"
+            if [[ "$STATE" == "Succeeded" ]]; then
+              break
+            fi
+            if [[ "$STATE" == "Failed" || "$STATE" == "Canceled" ]]; then
+              echo "::error::Managed cert provisioning ended in state $STATE"
+              az containerapp env certificate show --ids "$NEW_CERT_ID" -o json
+              exit 1
+            fi
+            sleep 30
+          done
+          if [[ "$STATE" != "Succeeded" ]]; then
+            echo "::error::Managed cert did not reach Succeeded within 15 minutes (last state: $STATE)"
+            exit 1
+          fi
+
+          az containerapp hostname bind \
+            -g "$RG" -n "$APP" \
+            --hostname "$CUSTOM_DOMAIN" \
+            --environment "$CAE" \
+            --certificate "$NEW_CERT_ID"
 
       - name: Smoke test
         if: github.event.inputs.mode == 'apply'

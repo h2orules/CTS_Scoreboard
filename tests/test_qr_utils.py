@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import re
+import struct
 
 from qr_utils import (
     QR_TOKEN,
     build_meet_url,
     render_overlay_svg,
+    render_qr_png,
     render_qr_svg,
     substitute_qr_tokens,
 )
@@ -87,3 +89,33 @@ def test_substituted_svg_round_trips_through_safe_filter():
     assert "<script" not in out.lower()
     # No on* handlers like onload=, onclick=, etc.
     assert not re.search(r'\son[a-z]+=', out, re.IGNORECASE)
+
+
+# ----- PNG rendering (downloadable QR code) ---------------------------------
+
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+
+
+def test_render_qr_png_returns_png_bytes():
+    data = render_qr_png("https://example.com/m/abc")
+    assert isinstance(data, bytes)
+    assert data.startswith(PNG_SIGNATURE)
+
+
+def test_render_qr_png_empty_returns_empty_bytes():
+    assert render_qr_png("") == b""
+    assert render_qr_png(None) == b""  # type: ignore[arg-type]
+
+
+def test_render_qr_png_size_close_to_target_px():
+    target = 1000
+    data = render_qr_png("https://example.com/m/abc", target_px=target)
+    # PNG IHDR chunk: 8-byte signature, 4-byte length, 4-byte 'IHDR',
+    # then 4-byte width and 4-byte height (big-endian uint32).
+    assert data.startswith(PNG_SIGNATURE)
+    assert data[12:16] == b"IHDR"
+    width = struct.unpack(">I", data[16:20])[0]
+    height = struct.unpack(">I", data[20:24])[0]
+    assert width == height
+    # Allow ±25% (we round-down a per-module scale, plus a quiet-zone border).
+    assert int(target * 0.75) <= width <= int(target * 1.25)

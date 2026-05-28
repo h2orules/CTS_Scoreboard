@@ -27,7 +27,7 @@ import wifi_manager
 import settings_routes
 from azure_relay import AzureRelayClient
 from template_bundle import build_bundle
-from qr_utils import build_meet_url, render_overlay_svg, substitute_qr_tokens
+from qr_utils import build_meet_url, render_overlay_svg, substitute_qr_tokens, QR_TOKEN
 
 DEBUG = False
 #DEBUG = True
@@ -67,7 +67,10 @@ settings = {
     'serial_port': 'COM1',
     'username': 'admin',
     'password': 'password',
-    'ad_url': '',
+    # Ad rotation: list of dicts {'filename': str, 'enabled': bool}.
+    # Files live in static/ad/. Order in the list is rotation order.
+    'ad_images': [],
+    'ad_rotation_interval': 30,
     'num_lanes': 6,
     'pool_course': 'SCY',
     'show_pr_tags': True,
@@ -77,6 +80,14 @@ settings = {
     'message_pages': [{'text': '', 'align': 'left', 'enabled': False}],
     'message_overlay_enabled': False,
     'message_rotation_interval': 30,
+    # Footer messages: list of dicts shown as a row at the bottom of the
+    # scoreboard table. Each entry is gated by optional selectors (Gender,
+    # Distance, Stroke, Age Group); see _select_footer_message() for the
+    # matching rule. Schema per entry:
+    #   {id: str, text: str, align: 'left'|'center'|'right', is_default: bool,
+    #    genders: [str], distances: [int], strokes: [str], age_groups: [str],
+    #    created_at: float}
+    'footer_messages': [],
     'team_home': '',
     'team_home_tag': '',
     'team_guest1': '',
@@ -101,8 +112,15 @@ settings = {
     'azure_public_url': '',
     'azure_template_path': 'web/home',
     # QR (Phase 5)
-    'qr_overlay_enabled': False,
+    # qr_overlay_visibility: 'off' | 'between_races' | 'always'
+    'qr_overlay_visibility': 'off',
     'qr_overlay_corner': 'top-right',
+    # Legacy boolean migrated into qr_overlay_visibility on load.
+    'qr_overlay_enabled': False,
+    # Tracks whether the auto QR message page has already been injected for
+    # the current sign-in (cleared on sign-out so the next sign-in re-injects
+    # if the operator removed it).
+    'qr_message_page_injected': False,
     }
 in_file = None
 out_file = None
@@ -118,6 +136,11 @@ time_standards = None
 # Swim Records (list of dicts: {rec_file, filename, team_tag, set_id})
 swim_record_sets = []
 _next_rec_set_id = 0
+
+# Ad rotation state. Index into settings['ad_images']; clamped to a currently
+# enabled entry by _update_ad_rotation().
+_ad_rotation_index = 0
+_ad_rotation_running = False
 
 app = flask.Flask(__name__)
 # config
@@ -198,8 +221,7 @@ def load_settings():
             _next_rec_set_id = 1
             settings['swim_record_sets'] = base64.b64encode(pickle.dumps(swim_record_sets)).decode('ascii')
             settings.pop('swim_records', None)
-            with open(settings_file, "wt") as f:
-                json.dump(settings, f, sort_keys=True, indent=4)
+            save_settings()
         # Migrate old flat blank_message keys → message_pages array
         if 'blank_message' in settings and 'message_pages' not in settings:
             settings['message_pages'] = [{
@@ -209,8 +231,28 @@ def load_settings():
             }]
             settings['message_overlay_enabled'] = settings['message_pages'][0]['enabled']
             settings.setdefault('message_rotation_interval', 30)
-            with open(settings_file, "wt") as f:
-                json.dump(settings, f, sort_keys=True, indent=4)
+            save_settings()
+        # Drop the legacy single-image ``ad_url`` key. Ad images are now a list
+        # of {filename, enabled} dicts in settings['ad_images']; the old value
+        # is intentionally not migrated (operators re-select images via upload).
+        if 'ad_url' in settings:
+            settings.pop('ad_url', None)
+            save_settings()
+        # Normalise ad_images entries (older saves or hand-edits may produce
+        # plain filename strings instead of the {'filename', 'enabled'} dict).
+        raw_ads = settings.get('ad_images') or []
+        norm_ads = []
+        for entry in raw_ads:
+            if isinstance(entry, str):
+                norm_ads.append({'filename': entry, 'enabled': True})
+            elif isinstance(entry, dict) and entry.get('filename'):
+                norm_ads.append({
+                    'filename': entry['filename'],
+                    'enabled': bool(entry.get('enabled', True)),
+                })
+        if norm_ads != raw_ads:
+            settings['ad_images'] = norm_ads
+            save_settings()
         # Migrate legacy single-environment Azure URLs into the preprod slot.
         if settings.get('azure_relay_url') and not settings.get('azure_relay_url_preprod'):
             settings['azure_relay_url_preprod'] = settings['azure_relay_url']
@@ -220,8 +262,16 @@ def load_settings():
         if settings.get('azure_relay_url') or settings.get('azure_public_url'):
             settings['azure_relay_url'] = ''
             settings['azure_public_url'] = ''
-            with open(settings_file, "wt") as f:
-                json.dump(settings, f, sort_keys=True, indent=4)
+            save_settings()
+        # Migrate legacy boolean qr_overlay_enabled → qr_overlay_visibility.
+        # Only migrate when the on-disk file actually carried the boolean
+        # (i.e. an upgrade path); fresh installs use the default 'off'.
+        if 'qr_overlay_enabled' in _raw_settings_on_disk and \
+                'qr_overlay_visibility' not in _raw_settings_on_disk:
+            settings['qr_overlay_visibility'] = (
+                'always' if _raw_settings_on_disk.get('qr_overlay_enabled')
+                else 'off'
+            )
     except: pass
     # Azure settings live in their own (git-ignored) file. Load it on top of
     # whatever defaults / migrated values are already in `settings`.
@@ -260,6 +310,19 @@ def save_azure_settings():
     payload = {k: settings.get(k, '') for k in AZURE_SETTINGS_KEYS}
     with open(azure_settings_file, "wt") as f:
         json.dump(payload, f, sort_keys=True, indent=4)
+
+
+def save_settings():
+    """Persist the in-memory settings dict to ``settings_file``.
+
+    Strips the ``AZURE_SETTINGS_KEYS`` subset before writing so the Azure
+    relay credentials/URLs (which are sensitive and live in their own
+    git-ignored ``azure_settings.json``) never leak back into the
+    repo-tracked ``settings.json`` on a normal save.
+    """
+    public = {k: v for k, v in settings.items() if k not in AZURE_SETTINGS_KEYS}
+    with open(settings_file, "wt") as f:
+        json.dump(public, f, sort_keys=True, indent=4)
 
 ## Stuff to move the cursor
 def print_at(r, c, s):
@@ -853,6 +916,181 @@ def _render_blank_message_html(text):
     return ''.join(out)
 
 
+# ---- Footer messages -------------------------------------------------------
+# Footer-message selector vocab. Stored values match these labels exactly.
+FOOTER_GENDER_LABELS = ['Female', 'Male', 'Mixed']
+FOOTER_STROKE_LABELS = ['Freestyle', 'Backstroke', 'Breaststroke', 'Butterfly', 'Medley']
+FOOTER_DISTANCE_VALUES = [25, 50, 100, 200, 400, 500, 800, 1000, 1500, 1650]
+FOOTER_AGE_GROUP_LABELS = ['8-Under', '9-10', '11-12', '13-14', '15-18', 'Open']
+# (min, max) inclusive; None means unbounded on that side.
+FOOTER_AGE_GROUP_RANGES = {
+    '8-Under': (None, 8),
+    '9-10': (9, 10),
+    '11-12': (11, 12),
+    '13-14': (13, 14),
+    '15-18': (15, 18),
+    'Open': (None, None),
+}
+# st2 stroke_code -> label (matches FOOTER_STROKE_LABELS).
+_FOOTER_STROKE_CODE_TO_LABEL = {
+    1: 'Freestyle', 2: 'Backstroke', 3: 'Breaststroke',
+    4: 'Butterfly', 5: 'Medley',
+}
+
+
+def _footer_event_gender_label(meta):
+    """Map event_meta.sex_codes to a footer-vocab gender label, or None."""
+    codes = meta.get('sex_codes') or []
+    if len(codes) > 1:
+        return 'Mixed'
+    if codes == [1]:
+        return 'Male'
+    if codes == [2]:
+        return 'Female'
+    return None
+
+
+def _footer_age_groups_overlap(group_label, event_age_min, event_age_max):
+    """True if the selector's age range overlaps the event's age range."""
+    grange = FOOTER_AGE_GROUP_RANGES.get(group_label)
+    if grange is None:
+        return False
+    gmin, gmax = grange
+    NEG = -10 ** 9
+    POS = 10 ** 9
+    emin = event_age_min if event_age_min is not None else NEG
+    emax = event_age_max if event_age_max is not None else POS
+    smin = gmin if gmin is not None else NEG
+    smax = gmax if gmax is not None else POS
+    return not (emax < smin or emin > smax)
+
+
+def _event_matches_footer(msg, meta):
+    """True if this footer message's non-empty selectors all match *meta*.
+
+    A category with no selected values contributes True (matches anything).
+    Within a category, OR across selected values. Across categories, AND.
+    Default messages (``is_default``) are handled separately by the
+    selector — this function only evaluates the explicit selector match.
+    """
+    if meta is None:
+        return False
+    sel = msg.get('genders') or []
+    if sel:
+        if _footer_event_gender_label(meta) not in sel:
+            return False
+    sel = msg.get('distances') or []
+    if sel:
+        d = meta.get('distance')
+        try:
+            d_int = int(d)
+        except (TypeError, ValueError):
+            return False
+        if d_int not in [int(x) for x in sel if x is not None]:
+            return False
+    sel = msg.get('strokes') or []
+    if sel:
+        label = _FOOTER_STROKE_CODE_TO_LABEL.get(meta.get('stroke_code'))
+        if label not in sel:
+            return False
+    sel = msg.get('age_groups') or []
+    if sel:
+        emin = meta.get('age_min')
+        emax = meta.get('age_max')
+        if not any(_footer_age_groups_overlap(g, emin, emax) for g in sel):
+            return False
+    return True
+
+
+def _footer_specificity(msg):
+    """Number of selector categories that have at least one value set."""
+    n = 0
+    for k in ('genders', 'distances', 'strokes', 'age_groups'):
+        if msg.get(k):
+            n += 1
+    return n
+
+
+def _select_footer_message(meta):
+    """Pick the best matching footer message for the given event_meta.
+
+    Rules:
+      * Non-default messages are matched first. Highest specificity wins;
+        ties broken by most recent ``created_at``.
+      * If no non-default message matches, the most recently added default
+        is used.
+      * Returns None when there are no eligible messages.
+    """
+    msgs = settings.get('footer_messages') or []
+    if not msgs:
+        return None
+    matches = []
+    defaults = []
+    for m in msgs:
+        if m.get('is_default'):
+            defaults.append(m)
+        elif _event_matches_footer(m, meta):
+            matches.append(m)
+    if matches:
+        matches.sort(
+            key=lambda m: (_footer_specificity(m), m.get('created_at') or 0),
+            reverse=True,
+        )
+        return matches[0]
+    if defaults:
+        defaults.sort(key=lambda m: m.get('created_at') or 0, reverse=True)
+        return defaults[0]
+    return None
+
+
+def _render_footer_message_html(msg):
+    """Render a footer message dict to HTML. Strips [[QR]] tokens."""
+    if not msg:
+        return ''
+    text = (msg.get('text') or '').replace(QR_TOKEN, '')
+    if not text.strip():
+        return ''
+    inner = _render_blank_message_html(text)
+    align = msg.get('align', 'left')
+    if align not in ('left', 'center', 'right'):
+        align = 'left'
+    return ('<div class="scoreboard-footer-message align-%s">%s</div>'
+            % (align, inner))
+
+
+def _current_event_meta():
+    """Return the event_meta dict for the currently-selected event, or None."""
+    try:
+        ev = last_event_sent[0]
+    except Exception:
+        return None
+    try:
+        return event_info.event_meta.get(ev)
+    except Exception:
+        return None
+
+
+def _render_and_cache_footer_message():
+    """Render the active footer message and cache under 'footer_message'.
+
+    Returns the content cache key. Empty cache (no matching message) still
+    gets a stable key so clients can detect the no-message state.
+    """
+    msg = _select_footer_message(_current_event_meta())
+    html = _render_footer_message_html(msg) if msg else ''
+    return _cache_put('footer_message', html)
+
+
+def broadcast_footer_message_refresh():
+    """Re-render the active footer message and broadcast the new key.
+
+    Called whenever the saved footer-messages list changes (add/remove) or
+    when the live event/heat changes (so the selector logic re-evaluates).
+    """
+    key = _render_and_cache_footer_message()
+    broadcast_scoreboard({'footer_message_key': key})
+
+
 def _render_qualifying_html(qt_groups, rec_set_list):
     """Render qualifying times + records into an HTML fragment and cache it.
 
@@ -892,6 +1130,134 @@ _message_rotation_running = False
 def _enabled_page_indices():
     """Return list of indices of enabled message pages."""
     return [i for i, p in enumerate(settings.get('message_pages', [])) if p.get('enabled')]
+
+
+_QR_AUTO_PAGE_TEXT = (
+    "# View the scoreboard live\n"
+    "Scan with your mobile device\n"
+    "[[QR]]"
+)
+
+
+def _inject_qr_message_page() -> bool:
+    """Append the auto QR message page once per fresh sign-in.
+
+    The new page is disabled, center-aligned, and placed at the end of the
+    rotation. Returns True if a page was actually appended (caller can then
+    decide to broadcast/persist). Skipped when:
+      * there are already 5 pages (the per-form maximum), or
+      * any existing page already contains the ``[[QR]]`` token.
+    """
+    pages = list(settings.get('message_pages', []) or [])
+    if len(pages) >= 5:
+        return False
+    for p in pages:
+        if QR_TOKEN in (p.get('text') or ''):
+            return False
+    pages.append({
+        'text': _QR_AUTO_PAGE_TEXT,
+        'align': 'center',
+        'enabled': False,
+    })
+    settings['message_pages'] = pages
+    try:
+        save_settings()
+    except Exception:
+        traceback.print_exc()
+    return True
+
+
+def broadcast_qr_overlay_refresh():
+    """Re-render the overlay SVG + cached message pages, then broadcast.
+
+    Called after any change that affects the QR target URL (Azure URL save,
+    meet-id rotate/set, environment switch) or the overlay visibility/corner
+    settings. Pushes a single ``update_scoreboard`` payload that connected
+    browsers will use to swap the overlay content and re-evaluate gating.
+    """
+    relay_url, public_url = _active_azure_urls()
+    qr_target = build_meet_url(
+        public_base=public_url or relay_url,
+        meet_id=getattr(azure_relay_client, 'meet_id', '') if 'azure_relay_client' in globals() else '',
+    )
+    qr_visibility = settings.get('qr_overlay_visibility', 'off')
+    qr_corner = settings.get('qr_overlay_corner', 'top-right')
+    overlay_svg = render_overlay_svg(qr_target) if qr_visibility != 'off' and qr_target else ''
+    # Invalidate cached message-page HTML so [[QR]] tokens pick up the new URL.
+    page_keys = _render_and_cache_message_pages()
+    pages = settings.get('message_pages', [])
+    broadcast_scoreboard({
+        'qr_overlay_svg': overlay_svg,
+        'qr_overlay_corner': qr_corner,
+        'qr_overlay_visibility': qr_visibility,
+        'message_pages': [
+            {'text': p.get('text', ''), 'align': p.get('align', 'left'),
+             'enabled': p.get('enabled', False),
+             'key': page_keys[i] if i < len(page_keys) else None}
+            for i, p in enumerate(pages)
+        ],
+    })
+
+
+def broadcast_settings_changed():
+    """Notify all connected scoreboard browsers that settings changed.
+
+    Many settings (meet title, team names, num_lanes, ad image, display
+    options, etc.) are baked into the rendered HTML at request time rather
+    than driven by the live update_scoreboard stream, so the cleanest way
+    to reflect them is a soft client reload.
+
+    Locally: emit ``reload_clients`` on the /scoreboard namespace.
+    Azure: re-push the latest meet_context (so the re-rendered page picks
+    up the new values) and forward the same ``reload_clients`` event so
+    Azure can fan it out to its connected viewers.
+    """
+    socketio.emit('reload_clients', {}, namespace='/scoreboard')
+    client = globals().get('azure_relay_client')
+    if client is not None:
+        try:
+            bundle = _azure_bundle_provider()
+            if bundle is not None:
+                client.forward_event('template_push', bundle)
+        except Exception:
+            traceback.print_exc()
+        try:
+            ctx = _azure_context_provider()
+            if ctx is not None:
+                client.forward_event('meet_context', ctx)
+        except Exception:
+            traceback.print_exc()
+        client.forward_event('reload_clients', {})
+
+
+def _on_azure_status(snap):
+    """Status-subscriber callback: react to Azure connection-state changes.
+
+    On the first transition into the connected state (per fresh sign-in),
+    inject the auto QR message page and broadcast a refresh. Sign-out
+    resets the latch so the next sign-in re-injects (only if absent).
+    """
+    state = snap.get('state')
+    if state == 'connected':
+        if not settings.get('qr_message_page_injected'):
+            injected = _inject_qr_message_page()
+            settings['qr_message_page_injected'] = True
+            try:
+                save_settings()
+            except Exception:
+                traceback.print_exc()
+            if injected:
+                _update_message_rotation()
+        broadcast_qr_overlay_refresh()
+    elif state == 'needs_auth':
+        # Operator signed out — clear the latch so the next sign-in can
+        # re-inject the auto QR page if it's no longer present.
+        if settings.get('qr_message_page_injected'):
+            settings['qr_message_page_injected'] = False
+            try:
+                save_settings()
+            except Exception:
+                traceback.print_exc()
 
 
 def _start_message_rotation():
@@ -955,6 +1321,80 @@ def _update_message_rotation():
         _stop_message_rotation()
 
 
+# --- Ad image rotation timer ---
+
+def _enabled_ad_indices():
+    """Return list of indices into settings['ad_images'] where enabled is True."""
+    return [i for i, a in enumerate(settings.get('ad_images', []) or [])
+            if a.get('enabled')]
+
+
+def _start_ad_rotation():
+    """Start the background ad rotation task if 2+ enabled images exist."""
+    global _ad_rotation_running
+    if _ad_rotation_running:
+        return
+    if len(_enabled_ad_indices()) < 2:
+        return
+    _ad_rotation_running = True
+    socketio.start_background_task(_ad_rotation_tick)
+
+
+def _stop_ad_rotation():
+    """Signal the ad rotation timer to stop."""
+    global _ad_rotation_running
+    _ad_rotation_running = False
+
+
+def _ad_rotation_tick():
+    """Background task: rotate through enabled ads and broadcast changes."""
+    global _ad_rotation_index, _ad_rotation_running
+    while _ad_rotation_running:
+        interval = settings.get('ad_rotation_interval', 30)
+        try:
+            interval = int(interval)
+        except (TypeError, ValueError):
+            interval = 30
+        if interval < 5 or interval > 60 or interval % 5 != 0:
+            interval = 30
+        socketio.sleep(interval)
+        if not _ad_rotation_running:
+            break
+        enabled = _enabled_ad_indices()
+        if len(enabled) < 2:
+            _ad_rotation_running = False
+            break
+        try:
+            cur_pos = enabled.index(_ad_rotation_index)
+            next_pos = (cur_pos + 1) % len(enabled)
+        except ValueError:
+            next_pos = 0
+        _ad_rotation_index = enabled[next_pos]
+        broadcast_scoreboard({
+            'active_ad_index': _ad_rotation_index,
+            'ad_images': list(settings.get('ad_images', []) or []),
+        })
+
+
+def _update_ad_rotation():
+    """Re-evaluate whether the ad rotation timer should be running.
+
+    Call after any change to ad_images (add/remove/reorder/toggle) or to
+    ad_rotation_interval. Clamps the active index to a currently-enabled
+    entry and starts/stops the timer based on the enabled count.
+    """
+    global _ad_rotation_index
+    enabled = _enabled_ad_indices()
+    if not enabled:
+        _ad_rotation_index = 0
+    elif _ad_rotation_index not in enabled:
+        _ad_rotation_index = enabled[0]
+    if len(enabled) >= 2:
+        _start_ad_rotation()
+    else:
+        _stop_ad_rotation()
+
+
 def send_event_info():            
     update={}
     update["current_event"] = str(last_event_sent[0])
@@ -989,6 +1429,7 @@ def send_event_info():
     ]
     update["message_rotation_interval"] = settings.get('message_rotation_interval', 30)
     update["active_message_page"] = _message_rotation_index
+    update["footer_message_key"] = _render_and_cache_footer_message()
     update["race_state"] = race_fsm.state_name
 
     broadcast_scoreboard(update)
@@ -1072,7 +1513,9 @@ def _build_render_context():
     show_age_codes = qt_show_age or rec_show_age
     qt_key = _render_qualifying_html(qt_results, rec_set_results)
     page_keys = _render_and_cache_message_pages()
+    footer_key = _render_and_cache_footer_message()
     _, qt_html = _cache_get('qualifying_info')
+    _, footer_html = _cache_get('footer_message')
     num_lanes = settings['num_lanes']
 
     initial_lanes = {}
@@ -1096,16 +1539,21 @@ def _build_render_context():
         public_base=public_url or relay_url,
         meet_id=getattr(azure_relay_client, 'meet_id', '') if 'azure_relay_client' in globals() else '',
     )
+    qr_visibility = settings.get('qr_overlay_visibility', 'off')
     qr_overlay_svg = (
         render_overlay_svg(qr_target)
-        if settings.get('qr_overlay_enabled') and qr_target
+        if qr_visibility != 'off' and qr_target
         else ''
     )
+
+    ad_images = list(settings.get('ad_images', []) or [])
 
     return dict(
         meet_title=settings['meet_title'],
         num_lanes=num_lanes,
-        ad_url=settings['ad_url'],
+        ad_images=ad_images,
+        active_ad_index=_ad_rotation_index,
+        ad_rotation_interval=settings.get('ad_rotation_interval', 30),
         schedule_has_names=event_info.has_names,
         team_names=[
             ('score_home', settings.get('team_home', '')),
@@ -1120,6 +1568,8 @@ def _build_render_context():
         initial_rec_sets=rec_set_results,
         initial_qt_key=qt_key,
         initial_qt_html=qt_html or '',
+        initial_footer_key=footer_key,
+        initial_footer_html=footer_html or '',
         initial_lanes=initial_lanes,
         initial_scores=team_scores,
         initial_race_state=race_fsm.state_name,
@@ -1127,6 +1577,7 @@ def _build_render_context():
         initial_active_message_page=_message_rotation_index,
         initial_qr_overlay_svg=qr_overlay_svg,
         initial_qr_overlay_corner=settings.get('qr_overlay_corner', 'top-right'),
+        initial_qr_overlay_visibility=qr_visibility,
         initial_settings={
             'show_pr_tags': settings.get('show_pr_tags', True),
             'show_confetti': settings.get('show_confetti', True),
@@ -1165,10 +1616,25 @@ def _azure_bundle_provider():
         if not rel.endswith('.html'):
             rel = rel + '.html'
         repo_root = os.path.dirname(os.path.abspath(__file__))
+        # The template references the ad image via a runtime expression
+        # (url_for('static', filename='ad/' + ad_url)), which the bundler
+        # can't auto-discover. Pass the currently selected ad image as an
+        # explicit extra so it lands in the cache served by Azure.
+        # The template references ad images via runtime expressions
+        # (url_for('static', filename='ad/' + name)), which the bundler can't
+        # auto-discover. Pass every uploaded ad filename (enabled or not) as
+        # an explicit extra so toggling an image on at runtime doesn't
+        # require a fresh bundle push.
+        extra_static = []
+        for ad in (settings.get('ad_images') or []):
+            name = (ad.get('filename') or '').strip() if isinstance(ad, dict) else ''
+            if name:
+                extra_static.append('ad/' + name)
         bundle = build_bundle(
             template_root=os.path.join(repo_root, 'templates'),
             static_root=os.path.join(repo_root, 'static'),
             template_relpath=rel,
+            extra_static=extra_static,
         )
         return bundle.to_dict()
     except Exception:
@@ -1195,6 +1661,10 @@ def _azure_context_provider():
         ctx['test_background'] = False
         ctx['test_event'] = None
         ctx['test_heat'] = None
+        # The Pi-only QR overlay is intentionally suppressed when serving via
+        # Azure: the public viewer should never see the local overlay.
+        ctx['initial_qr_overlay_svg'] = ''
+        ctx['initial_qr_overlay_visibility'] = 'off'
         return ctx
     except Exception:
         traceback.print_exc()
@@ -1261,6 +1731,19 @@ def api_message_page(index):
     resp.headers['Cache-Control'] = 'public, max-age=60'
     return resp
 
+@app.route('/api/footer-message')
+def api_footer_message():
+    key, html = _cache_get('footer_message')
+    if key is None:
+        return flask.Response('', status=200, content_type='text/html; charset=utf-8')
+    etag = '"' + key + '"'
+    if flask.request.headers.get('If-None-Match') == etag:
+        return flask.Response('', status=304)
+    resp = flask.Response(html, status=200, content_type='text/html; charset=utf-8')
+    resp.headers['ETag'] = etag
+    resp.headers['Cache-Control'] = 'public, max-age=60'
+    return resp
+
         
 @app.route("/test")
 @flask_login.login_required
@@ -1300,6 +1783,14 @@ def route_site_map():
     for rule in app.url_map.iter_rules():
         if "GET" in rule.methods and has_no_empty_params(rule):
             url = flask.url_for(rule.endpoint, **(rule.defaults or {}))
+            # Hide JSON/API endpoints that aren't meaningful site-map pages.
+            # Azure relay endpoints (/azure/status, /azure/config, ...) are
+            # AJAX targets used from the Settings page, not destinations.
+            if url.startswith('/azure/'):
+                continue
+            # Same for the Wi-Fi JSON endpoints and the qualifying-info API.
+            if url.startswith('/wifi/') or url.startswith('/api/'):
+                continue
             title = rule.endpoint.replace("_", " ")
             if title.startswith('route '):
                 title = title[6:]
@@ -1351,7 +1842,11 @@ def route_site_map():
 
 @app.context_processor
 def inject_ad():
-    return dict(ad_url=settings['ad_url'])
+    return dict(
+        ad_images=list(settings.get('ad_images', []) or []),
+        active_ad_index=_ad_rotation_index,
+        ad_rotation_interval=settings.get('ad_rotation_interval', 30),
+    )
     
 # callback to reload the user object        
 @login_manager.user_loader
@@ -1384,6 +1879,8 @@ logging.getLogger('geventwebsocket.handler').setLevel(logging.INFO)
 # azure_relay was constructed above settings load, so its relay_url
 # was empty. Push the now-loaded URL into it.
 azure_relay_client.update_relay_url(_active_azure_urls()[0])
+# React to relay state transitions for QR-page injection + overlay refresh.
+azure_relay_client.subscribe_status(_on_azure_status)
 # Start the worker thread whenever we have credentials. The worker just sits
 # in needs_auth/disconnected if there's nothing to do, but having it alive
 # means the Reconnect button and post-sign-in flow can work without a server
@@ -1392,6 +1889,7 @@ azure_relay_client.update_relay_url(_active_azure_urls()[0])
 if azure_relay_client.meet_id:
     azure_relay_client.start()
 _update_message_rotation()
+_update_ad_rotation()
 
 
 def main():

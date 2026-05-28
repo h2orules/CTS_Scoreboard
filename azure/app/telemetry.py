@@ -15,6 +15,9 @@ from __future__ import annotations
 
 import logging
 import os
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
@@ -27,7 +30,7 @@ _metrics: Metrics | None = None
 
 @dataclass
 class Metrics:
-    """Thin wrapper around OpenTelemetry counters/gauges.
+    """Thin wrapper around OpenTelemetry counters/histograms/gauges.
 
     Falls back to in-memory accumulators when OpenTelemetry isn't available
     (e.g. local dev without an App Insights connection string).
@@ -39,6 +42,11 @@ class Metrics:
     browser_connected: Any
     browser_disconnected: Any
     relay_event_processed: Any
+    event_handler_seconds: Any
+    redis_op_seconds: Any
+    emit_fanout_seconds: Any
+    active_sockets: Any
+    pi_connections: Any
 
     @classmethod
     def stub(cls) -> Metrics:
@@ -49,6 +57,11 @@ class Metrics:
             browser_connected=_StubCounter(),
             browser_disconnected=_StubCounter(),
             relay_event_processed=_StubCounter(),
+            event_handler_seconds=_StubHistogram(),
+            redis_op_seconds=_StubHistogram(),
+            emit_fanout_seconds=_StubHistogram(),
+            active_sockets=_StubUpDownCounter(),
+            pi_connections=_StubUpDownCounter(),
         )
 
 
@@ -66,6 +79,54 @@ class _StubCounter:
     def add(self, value: float, attributes: dict[str, Any] | None = None) -> None:
         self.total += value
         self.events.append((value, dict(attributes) if attributes else None))
+
+
+class _StubHistogram:
+    """Drop-in for opentelemetry Histogram when telemetry is disabled.
+
+    Mimics the OTel Histogram API shape (``record(value, attributes={...})``).
+    Stores observations so tests can assert on them.
+    """
+
+    def __init__(self) -> None:
+        self.events: list[tuple[float, dict[str, Any] | None]] = []
+
+    def record(self, value: float, attributes: dict[str, Any] | None = None) -> None:
+        self.events.append((value, dict(attributes) if attributes else None))
+
+
+class _StubUpDownCounter:
+    """Drop-in for opentelemetry UpDownCounter when telemetry is disabled.
+
+    Tracks running total (which can go negative) so tests can assert on the
+    current value as well as individual deltas.
+    """
+
+    def __init__(self) -> None:
+        self.total: float = 0.0
+        self.events: list[tuple[float, dict[str, Any] | None]] = []
+
+    def add(self, value: float, attributes: dict[str, Any] | None = None) -> None:
+        self.total += value
+        self.events.append((value, dict(attributes) if attributes else None))
+
+
+@contextmanager
+def record_latency(
+    histogram: Any, attributes: dict[str, Any] | None = None
+) -> Iterator[None]:
+    """Time the wrapped block and record the elapsed seconds on ``histogram``.
+
+    Works with both the real OTel ``Histogram`` and the local stub. The
+    timing spans wall-clock from ``__enter__`` to ``__exit__``, including
+    any ``await`` points inside an ``async with`` would, but this is a sync
+    context manager so the event loop is not suspended on its behalf.
+    """
+    t0 = time.perf_counter()
+    try:
+        yield
+    finally:
+        histogram.record(time.perf_counter() - t0, attributes or {})
 
 
 def configure_telemetry(
@@ -126,6 +187,17 @@ def configure_telemetry(
                 browser_connected=meter.create_counter("browsers_connected"),
                 browser_disconnected=meter.create_counter("browsers_disconnected"),
                 relay_event_processed=meter.create_counter("relay_events_processed"),
+                event_handler_seconds=meter.create_histogram(
+                    "event_handler_seconds", unit="s"
+                ),
+                redis_op_seconds=meter.create_histogram(
+                    "redis_op_seconds", unit="s"
+                ),
+                emit_fanout_seconds=meter.create_histogram(
+                    "emit_fanout_seconds", unit="s"
+                ),
+                active_sockets=meter.create_up_down_counter("active_sockets"),
+                pi_connections=meter.create_up_down_counter("pi_connections"),
             )
         except Exception:  # pragma: no cover - log + fall back to stub
             logging.exception("azure-monitor init failed; using stub metrics")

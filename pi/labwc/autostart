@@ -1,0 +1,4 @@
+# CTS Scoreboard kiosk autostart (managed by pi/scripts/install-kiosk.sh)
+# This line launches Chromium in kiosk mode after labwc starts. It is safe
+# to remove by hand; the installer detects this marker before re-adding it.
+SCOREBOARD_REPO/pi/scripts/cts-kiosk.sh &

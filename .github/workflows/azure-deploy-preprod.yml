@@ -44,9 +44,15 @@ jobs:
       - name: Compute revision suffix
         id: rev
         run: |
+          # Container Apps reserves revision names permanently (even after
+          # deactivation), so a suffix can never be reused. Include the
+          # workflow run number and attempt so re-runs of the same commit
+          # always produce a fresh, unique suffix while keeping the SHA
+          # prefix for traceability.
           SUFFIX="${{ github.event.inputs.revision_suffix }}"
           if [[ -z "$SUFFIX" ]]; then
-            SUFFIX="r$(echo ${{ github.sha }} | cut -c1-8)"
+            SHA8=$(echo ${{ github.sha }} | cut -c1-8)
+            SUFFIX="r${SHA8}-${{ github.run_number }}-${{ github.run_attempt }}"
           fi
           echo "suffix=$SUFFIX" >> $GITHUB_OUTPUT
 
@@ -69,6 +75,30 @@ jobs:
             -g $RG -n $APP \
             --image "${{ steps.build.outputs.digest }}" \
             --revision-suffix "${{ steps.rev.outputs.suffix }}"
+
+      - name: Activate new revision and route traffic
+        run: |
+          # The pre-prod Container App runs in Multiple-revision mode (Bicep
+          # sets activeRevisionsMode='Multiple' so revision-level rollback
+          # works). Current `az containerapp update --image` auto-activates
+          # the new revision, but traffic weights are sticky and don't shift
+          # automatically, so we still need to route traffic explicitly.
+          # The activate call is idempotent: skip it if the revision is
+          # already active to avoid a hard failure on the second run.
+          NEW_REV="${APP}--${{ steps.rev.outputs.suffix }}"
+          ACTIVE=$(az containerapp revision show \
+            -g "$RG" -n "$APP" --revision "$NEW_REV" \
+            --query properties.active -o tsv)
+          if [[ "$ACTIVE" != "true" ]]; then
+            echo "Activating $NEW_REV"
+            az containerapp revision activate \
+              -g "$RG" -n "$APP" --revision "$NEW_REV"
+          else
+            echo "Revision $NEW_REV is already active; skipping activation."
+          fi
+          az containerapp ingress traffic set \
+            -g "$RG" -n "$APP" \
+            --revision-weight "$NEW_REV=100"
 
       - name: Get app FQDN
         id: fqdn

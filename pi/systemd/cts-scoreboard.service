@@ -1,0 +1,21 @@
+[Unit]
+Description=CTS Scoreboard (Flask + gunicorn) - user service
+Documentation=https://github.com/h2orules/CTS_Scoreboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/scoreboard
+# Bind on all interfaces by default so phones/laptops on the same LAN can
+# reach /settings. Change to 127.0.0.1:5000 if you want kiosk-only access.
+Environment=BIND=0.0.0.0:5000
+ExecStart=%h/scoreboard/start.sh
+Restart=on-failure
+RestartSec=3
+# Reasonable shutdown window so gevent workers can drain WebSockets
+TimeoutStopSec=10
+KillMode=mixed
+
+[Install]
+WantedBy=default.target

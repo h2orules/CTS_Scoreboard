@@ -9,7 +9,7 @@
     <meta name="author" content="">
     <!--<link rel="icon" href="../../favicon.ico">-->
 
-    <title>CTS Scoreboard: Settings</title>
+    <title>Swimming Scoreboard: Settings</title>
 
     <!-- Bootstrap core CSS -->
     <!-- Latest compiled and minified CSS -->
@@ -268,13 +268,13 @@
     <div class="container">
         <div class="page-header-bar">
             <div class="page-titles">
-                <h1>CTS Scoreboard</h1>
+                <h1>Swimming Scoreboard</h1>
                 <h2>Settings</h2>
             </div>
             <a href="/" class="btn btn-default btn-sm">Back to Site Map</a>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-meet-settings">
         <h3>Meet Settings</h3>
         <div class="row">
             <div class="col-lg-6">
@@ -296,14 +296,15 @@
         </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-pool-settings">
         <h3>Pool Settings</h3>
         <div class="row">
             <div class="col-lg-6">
                 <form action="/settings" method="POST">
                     <div class="form-group" style="margin-bottom:10px;">
                         <label for="num_lanes">Number of Lanes</label>
-                        <select id="num_lanes" name="num_lanes" class="form-control">
+                        <select id="num_lanes" name="num_lanes" class="form-control"
+                            style="width:auto;display:inline-block;">
                             {% for n in range(4, 11) %}
                             <option value="{{n}}" {% if n == num_lanes %}selected{% endif %}>{{n}}</option>
                             {% endfor %}
@@ -311,7 +312,8 @@
                     </div>
                     <div class="form-group" style="margin-bottom:10px;">
                         <label for="pool_course">Pool Course</label>
-                        <select id="pool_course" name="pool_course" class="form-control">
+                        <select id="pool_course" name="pool_course" class="form-control"
+                            style="width:auto;display:inline-block;">
                             {% for code, label in [('SCY', 'Short Course Yards (SCY)'), ('SCM', 'Short Course Meters (SCM)'), ('LCM', 'Long Course Meters (LCM)')] %}
                             <option value="{{code}}" {% if code == pool_course %}selected{% endif %}>{{label}}</option>
                             {% endfor %}
@@ -325,7 +327,7 @@
         </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-display-options">
         <h3>Display Options</h3>
         <div class="row">
             <div class="col-lg-6">
@@ -333,7 +335,8 @@
                     <input type="hidden" name="display_options_form" value="1">
                     <div class="form-group" style="margin-bottom:10px;">
                         <label for="seed_time_label">Seed Time Display</label>
-                        <select id="seed_time_label" name="seed_time_label" class="form-control">
+                        <select id="seed_time_label" name="seed_time_label" class="form-control"
+                            style="width:auto;display:inline-block;">
                             {% for code, label in [('Seed Time', 'Show as "Seed Time"'), ('Entry Time', 'Show as "Entry Time"'), ('None', 'Do not show seed times')] %}
                             {% if code == seed_time_label %}
                             <option value="{{code}}" selected>{{label}}</option>
@@ -372,7 +375,7 @@
         </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-message-board">
         <h3>Message Board</h3>
         <div class="row">
             <div class="col-lg-8">
@@ -750,6 +753,10 @@
                             {% endfor %}
                             <button type="button" class="msg-tab-add" id="msg_add_page" onclick="msgAddPage()" {% if
                                 message_pages | length>= 5 %}disabled{% endif %}>+ Add</button>
+                            <button type="button" class="msg-tab-add" id="msg_insert_qr_page"
+                                onclick="azureInsertQrPage()"
+                                title="Append a centred 'View the scoreboard live' page with a QR code"
+                                {% if message_pages | length>= 5 %}disabled{% endif %}>+ QR page</button>
                         </div>
                         <div id="msg_panels_container">
                             {% for page in message_pages %}
@@ -777,6 +784,7 @@
                                                             <tr><td>#### Heading</td><td>Heading 4</td></tr>
                                                             <tr><td>- item</td><td>Bulleted list</td></tr>
                                                             <tr><td>1. item</td><td>Numbered list</td></tr>
+                                                            <tr><td>[[QR]]</td><td>Live-scoreboard QR code</td></tr>
                                                         </table>
                                                     </div>
                                                 </span>
@@ -826,6 +834,8 @@
                                                         onclick="fmtToggle({{ loop.index0 }},'ol')">
                                                         <svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><text x="0" y="5.5" font-size="5" font-family="sans-serif">1.</text><rect x="5" y="3" width="10" height="2"/><text x="0" y="9.5" font-size="5" font-family="sans-serif">2.</text><rect x="5" y="7" width="10" height="2"/><text x="0" y="13.5" font-size="5" font-family="sans-serif">3.</text><rect x="5" y="11" width="10" height="2"/></svg>
                                                     </button>
+                                                    <button type="button" class="fmt-btn" data-fmt="qr" title="Insert live QR code"
+                                                        onclick="fmtInsertQr({{ loop.index0 }})">QR</button>
                                                 </div>
                                                 <div class="justify-btn-group" data-idx="{{ loop.index0 }}">
                                                     <button type="button"
@@ -883,6 +893,7 @@
                         </div>
                     </form>
                 <script src="/static/js/msg_formatting.js"></script>
+                <script src="/static/js/meet_id.js"></script>
                 <script>
                     (function () {
                         var pageCount = {{ message_pages | length
@@ -935,6 +946,15 @@
                         if (!ta) return;
                         ta.focus();
                         MsgFmt.fmtToggle(ta, fmt);
+                        enforce(ta);
+                        fmtUpdateToolbar(idx);
+                    };
+
+                    window.fmtInsertQr = function(idx) {
+                        var ta = _getTA(idx);
+                        if (!ta) return;
+                        ta.focus();
+                        MsgFmt.insertQr(ta);
                         enforce(ta);
                         fmtUpdateToolbar(idx);
                     };
@@ -1077,6 +1097,7 @@
                             '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><circle cx="2" cy="4" r="1.5"/><rect x="5" y="3" width="10" height="2"/><circle cx="2" cy="8" r="1.5"/><rect x="5" y="7" width="10" height="2"/><circle cx="2" cy="12" r="1.5"/><rect x="5" y="11" width="10" height="2"/></svg></button>' +
                             '<button type="button" class="fmt-btn" data-fmt="ol" title="Numbered list" onclick="fmtToggle(' + idx + ',\'ol\')">' +
                             '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor"><text x="0" y="5.5" font-size="5" font-family="sans-serif">1.</text><rect x="5" y="3" width="10" height="2"/><text x="0" y="9.5" font-size="5" font-family="sans-serif">2.</text><rect x="5" y="7" width="10" height="2"/><text x="0" y="13.5" font-size="5" font-family="sans-serif">3.</text><rect x="5" y="11" width="10" height="2"/></svg></button>' +
+                            '<button type="button" class="fmt-btn" data-fmt="qr" title="Insert live QR code" onclick="fmtInsertQr(' + idx + ')">QR</button>' +
                             '</div>' +
                             '<div class="justify-btn-group" data-idx="' + idx + '">' +
                             '<button type="button" class="justify-btn active" data-align="left" title="Align left" onclick="msgSetAlign(' + idx + ',\'left\',this);">' +
@@ -1177,7 +1198,479 @@
         </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-footer-messages">
+        <h3>Footer Messages</h3>
+        <div class="section-hint">Show a message at the bottom of the scoreboard table for matching events.
+            <br/>When more than one message matches, the most specific wins.
+            Mark a message as <em>Default</em> to use it when nothing else matches.</div>
+        <div class="row">
+            <div class="col-lg-8">
+                <style>
+                    .footer-msg-list { max-width: 720px; }
+                    .footer-selectors {
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 8px;
+                        margin-bottom: 10px;
+                    }
+                    .ms-dd { position: relative; display: inline-block; }
+                    .ms-dd-btn {
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 6px;
+                        padding: 4px 10px;
+                        min-height: 30px;
+                        background: #fff;
+                        border: 1px solid #bbb;
+                        border-radius: 4px;
+                        cursor: pointer;
+                        font-size: 0.9em;
+                        color: #333;
+                        max-width: 280px;
+                    }
+                    .ms-dd-btn:hover { border-color: #888; }
+                    .ms-dd-btn .ms-dd-cat { color: #555; font-weight: 600; }
+                    .ms-dd-btn .ms-dd-val {
+                        color: #333;
+                        overflow: hidden;
+                        text-overflow: ellipsis;
+                        white-space: nowrap;
+                        max-width: 200px;
+                    }
+                    .ms-dd-btn .ms-dd-val.empty { color: #999; font-style: italic; }
+                    .ms-dd-btn .caret {
+                        width: 0; height: 0;
+                        border-left: 4px solid transparent;
+                        border-right: 4px solid transparent;
+                        border-top: 4px solid #666;
+                        margin-left: auto;
+                    }
+                    .ms-dd-menu {
+                        position: absolute;
+                        top: 100%;
+                        left: 0;
+                        margin-top: 2px;
+                        background: #fff;
+                        border: 1px solid #bbb;
+                        border-radius: 4px;
+                        box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+                        padding: 6px 4px;
+                        z-index: 100;
+                        min-width: 100%;
+                        max-height: 260px;
+                        overflow-y: auto;
+                        white-space: nowrap;
+                    }
+                    .ms-dd-menu[hidden] { display: none; }
+                    .ms-dd-menu label {
+                        display: block;
+                        padding: 3px 10px;
+                        margin: 0;
+                        font-weight: normal;
+                        font-size: 0.9em;
+                        cursor: pointer;
+                        border-radius: 3px;
+                    }
+                    .ms-dd-menu label:hover { background: #f0f4f8; }
+                    .ms-dd-menu input[type="checkbox"] { margin-right: 6px; }
+                    .ms-dd[data-disabled="1"] .ms-dd-btn {
+                        background: #f5f5f5;
+                        color: #999;
+                        cursor: not-allowed;
+                    }
+                    .footer-msg-list { width: 100%; border-collapse: collapse; margin-top: 12px; }
+                    .footer-msg-list th, .footer-msg-list td { padding: 6px 8px; border-bottom: 1px solid #eee; vertical-align: top; text-align: left; }
+                    .footer-msg-list th { background: #f5f5f5; font-size: 0.85em; }
+                    .footer-msg-text-preview { font-family: 'Overpass Mono', monospace; white-space: pre-wrap; max-width: 500px; }
+                    .footer-msg-default-tag { display: inline-block; background: #ffd24d; color: #553; padding: 1px 6px; border-radius: 3px; font-size: 0.75em; margin-right: 4px; }
+                </style>
+                <form id="footer_form" action="/settings" method="POST">
+                    <input type="hidden" name="footer_form" value="1">
+
+                    <div class="footer-selectors">
+                        <div class="ms-dd" data-name="footer_genders" data-label="Gender">
+                            <button type="button" class="ms-dd-btn">
+                                <span class="ms-dd-cat">Gender:</span>
+                                <span class="ms-dd-val empty">any</span>
+                                <span class="caret"></span>
+                            </button>
+                            <div class="ms-dd-menu" hidden>
+                                {% for g in footer_gender_options %}
+                                <label><input type="checkbox" name="footer_genders" value="{{ g }}"> {{ g }}</label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="ms-dd" data-name="footer_distances" data-label="Distance">
+                            <button type="button" class="ms-dd-btn">
+                                <span class="ms-dd-cat">Distance:</span>
+                                <span class="ms-dd-val empty">any</span>
+                                <span class="caret"></span>
+                            </button>
+                            <div class="ms-dd-menu" hidden>
+                                {% for d in footer_distance_options %}
+                                <label><input type="checkbox" name="footer_distances" value="{{ d }}"> {{ d }}</label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="ms-dd" data-name="footer_strokes" data-label="Stroke">
+                            <button type="button" class="ms-dd-btn">
+                                <span class="ms-dd-cat">Stroke:</span>
+                                <span class="ms-dd-val empty">any</span>
+                                <span class="caret"></span>
+                            </button>
+                            <div class="ms-dd-menu" hidden>
+                                {% for s in footer_stroke_options %}
+                                <label><input type="checkbox" name="footer_strokes" value="{{ s }}"> {{ s }}</label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="ms-dd" data-name="footer_age_groups" data-label="Age Group">
+                            <button type="button" class="ms-dd-btn">
+                                <span class="ms-dd-cat">Age Group:</span>
+                                <span class="ms-dd-val empty">any</span>
+                                <span class="caret"></span>
+                            </button>
+                            <div class="ms-dd-menu" hidden>
+                                {% for a in footer_age_group_options %}
+                                <label><input type="checkbox" name="footer_age_groups" value="{{ a }}"> {{ a }}</label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom:8px;display:flex;align-items:center;gap:8px;">
+                        <label class="toggle-switch" title="Use this as the default message when no specific match">
+                            <input type="checkbox" name="footer_is_default" id="footer_is_default">
+                            <span class="toggle-slider"></span>
+                        </label>
+                        <span style="font-weight:500;">Default (used when no specific message matches)</span>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="msg-toolbar">
+                            <div class="msg-toolbar-top">
+                                <div style="display:flex;align-items:center;gap:8px;">
+                                    <label style="margin:0;font-size:0.85em;color:#666;">Message (max 3 lines &times; 60 visible chars)</label>
+                                    <span class="md-legend-wrap">
+                                        <span class="md-legend-trigger">Markdown&nbsp;Legend</span>
+                                        <div class="md-legend-popup">
+                                            <div class="legend-title">Supported Markdown</div>
+                                            <table>
+                                                <tr><td>**text**</td><td><strong>Bold</strong></td></tr>
+                                                <tr><td>*text*</td><td><em>Italic</em></td></tr>
+                                                <tr><td>_text_</td><td><u>Underline</u></td></tr>
+                                                <tr><td>~~text~~</td><td><s>Strikethrough</s></td></tr>
+                                                <tr><td>`text`</td><td><code>Code</code></td></tr>
+                                            </table>
+                                        </div>
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="msg-toolbar-bottom" onmousedown="event.preventDefault()">
+                                <div class="msg-toolbar-left">
+                                    <div class="fmt-btn-group">
+                                        <button type="button" class="fmt-btn" data-fmt="bold" title="Bold"
+                                            onclick="footerFmtToggle('bold')"><strong>B</strong></button>
+                                        <button type="button" class="fmt-btn" data-fmt="italic" title="Italic"
+                                            onclick="footerFmtToggle('italic')"><em>I</em></button>
+                                        <button type="button" class="fmt-btn" data-fmt="underline" title="Underline"
+                                            onclick="footerFmtToggle('underline')"><u>U</u></button>
+                                        <button type="button" class="fmt-btn" data-fmt="strike" title="Strikethrough"
+                                            onclick="footerFmtToggle('strike')"><s>S</s></button>
+                                        <button type="button" class="fmt-btn" data-fmt="code" title="Code"
+                                            onclick="footerFmtToggle('code')" style="font-family:monospace;">&lt;/&gt;</button>
+                                    </div>
+                                    <div class="justify-btn-group" id="footer_align_group">
+                                        <button type="button" class="justify-btn active" data-align="left" title="Align left"
+                                            onclick="footerSetAlign('left',this);">
+                                            <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="1" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="1" y="14" width="8" height="2"/></svg>
+                                        </button>
+                                        <button type="button" class="justify-btn" data-align="center" title="Center"
+                                            onclick="footerSetAlign('center',this);">
+                                            <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="3" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="4" y="14" width="8" height="2"/></svg>
+                                        </button>
+                                        <button type="button" class="justify-btn" data-align="right" title="Align right"
+                                            onclick="footerSetAlign('right',this);">
+                                            <svg viewBox="0 0 16 16"><rect x="1" y="2" width="14" height="2"/><rect x="5" y="6" width="10" height="2"/><rect x="1" y="10" width="14" height="2"/><rect x="7" y="14" width="8" height="2"/></svg>
+                                        </button>
+                                    </div>
+                                    <input type="hidden" name="footer_align" id="footer_align" value="left">
+                                </div>
+                            </div>
+                        </div>
+                        <textarea name="footer_text" id="footer_text" rows="3" cols="60" maxlength="500"
+                            class="form-control footer-msg-textarea"
+                            style="font-family:'Overpass Mono',monospace;white-space:pre;overflow:auto;text-align:left;"
+                            placeholder="e.g. Race times are not available for 25yrd events. See Meet Mobile a few minutes after the race for results."
+                            oninput="footerOnInput(this);"></textarea>
+                    </div>
+
+                    <div class="form-group" style="margin-top:8px;">
+                        <button class="btn btn-default" type="submit" name="footer_add" value="1">Add Message</button>
+                    </div>
+                </form>
+
+                {% if footer_messages %}
+                <table class="footer-msg-list">
+                    <thead>
+                        <tr>
+                            <th>Filters</th>
+                            <th>Message</th>
+                            <th style="width:60px;"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for fm in footer_messages %}
+                        <tr>
+                            <td>
+                                {% if fm.is_default %}<span class="footer-msg-default-tag">DEFAULT</span>{% endif %}
+                                {{ fm.summary }}
+                            </td>
+                            <td><div class="footer-msg-text-preview" style="text-align:{{ fm.align }};">{{ fm.text }}</div></td>
+                            <td>
+                                <form action="/settings" method="POST" style="margin:0;" class="footer-remove-form"
+                                    data-summary="{{ fm.summary }}" data-preview="{{ fm.text }}">
+                                    <input type="hidden" name="footer_form" value="1">
+                                    <input type="hidden" name="footer_remove_{{ fm.id }}" value="1">
+                                    <button class="btn btn-danger btn-sm ad-icon-btn footer-remove-btn" type="submit"
+                                        title="Remove">
+                                        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2h6l1 1h3v2H1V3h3l1-1zm-2 4h10l-1 9H4L3 6z"/></svg>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <!-- Confirmation overlay used by the footer-message Remove buttons. -->
+                <style>
+                    .confirm-overlay {
+                        position: fixed;
+                        inset: 0;
+                        background: rgba(0,0,0,0.5);
+                        display: none;
+                        align-items: center;
+                        justify-content: center;
+                        z-index: 2000;
+                    }
+                    .confirm-overlay.open { display: flex; }
+                    .confirm-card {
+                        background: #fff;
+                        border-radius: 6px;
+                        box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+                        padding: 20px 24px;
+                        min-width: 320px;
+                        max-width: 520px;
+                    }
+                    .confirm-card h4 { margin: 0 0 8px 0; }
+                    .confirm-card .confirm-summary {
+                        font-size: 0.9em;
+                        color: #555;
+                        margin-bottom: 6px;
+                    }
+                    .confirm-card .confirm-preview {
+                        background: #f6f6f6;
+                        border: 1px solid #e3e3e3;
+                        border-radius: 4px;
+                        padding: 6px 10px;
+                        font-family: 'Overpass Mono', monospace;
+                        font-size: 0.9em;
+                        white-space: pre-wrap;
+                        max-height: 4.5em;
+                        overflow: hidden;
+                        margin-bottom: 14px;
+                        color: #333;
+                    }
+                    .confirm-card .confirm-actions {
+                        display: flex;
+                        justify-content: flex-end;
+                        gap: 8px;
+                    }
+                </style>
+                <div class="confirm-overlay" id="footer_remove_confirm" role="dialog" aria-modal="true"
+                    aria-labelledby="footer_remove_confirm_title">
+                    <div class="confirm-card">
+                        <h4 id="footer_remove_confirm_title">Remove footer message?</h4>
+                        <div class="confirm-summary" id="footer_remove_confirm_summary"></div>
+                        <div class="confirm-preview" id="footer_remove_confirm_preview"></div>
+                        <div class="confirm-actions">
+                            <button type="button" class="btn btn-default"
+                                id="footer_remove_confirm_cancel">Cancel</button>
+                            <button type="button" class="btn btn-danger"
+                                id="footer_remove_confirm_ok">Remove</button>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <p style="color:#888;font-style:italic;margin-top:12px;">No footer messages configured.</p>
+                {% endif %}
+
+                <script>
+                    (function() {
+                        var visibleLen = MsgFmt.visibleLen;
+                        function enforce(ta) {
+                            var lines = ta.value.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+                            var changed = false;
+                            if (lines.length > 3) { lines = lines.slice(0, 3); changed = true; }
+                            for (var i = 0; i < lines.length; i++) {
+                                while (visibleLen(lines[i]) > 60) {
+                                    lines[i] = lines[i].slice(0, -1);
+                                    changed = true;
+                                }
+                            }
+                            if (changed) ta.value = lines.join('\n');
+                        }
+                        window.footerOnInput = function(ta) { enforce(ta); };
+                        window.footerSetAlign = function(val, btn) {
+                            var hidden = document.getElementById('footer_align');
+                            if (hidden) hidden.value = val;
+                            var ta = document.getElementById('footer_text');
+                            if (ta) ta.style.textAlign = val;
+                            var group = btn.parentElement;
+                            group.querySelectorAll('.justify-btn').forEach(function(b) { b.classList.remove('active'); });
+                            btn.classList.add('active');
+                        };
+                        window.footerFmtToggle = function(fmt) {
+                            var ta = document.getElementById('footer_text');
+                            if (!ta) return;
+                            ta.focus();
+                            MsgFmt.fmtToggle(ta, fmt);
+                            enforce(ta);
+                        };
+
+                        // When the Default switch is on, the message applies to all
+                        // events, so the per-category selectors are meaningless —
+                        // clear and disable them. Restore on toggle off.
+                        var defaultCb = document.getElementById('footer_is_default');
+                        function selectorCheckboxes() {
+                            var form = document.getElementById('footer_form');
+                            if (!form) return [];
+                            return form.querySelectorAll(
+                                'input[name="footer_genders"],'
+                                + 'input[name="footer_distances"],'
+                                + 'input[name="footer_strokes"],'
+                                + 'input[name="footer_age_groups"]'
+                            );
+                        }
+                        function applyDefaultState() {
+                            if (!defaultCb) return;
+                            var on = defaultCb.checked;
+                            selectorCheckboxes().forEach(function (cb) {
+                                if (on) cb.checked = false;
+                                cb.disabled = on;
+                            });
+                            document.querySelectorAll('#footer_form .ms-dd').forEach(function (dd) {
+                                dd.setAttribute('data-disabled', on ? '1' : '0');
+                                var btn = dd.querySelector('.ms-dd-btn');
+                                if (btn) btn.disabled = on;
+                                var menu = dd.querySelector('.ms-dd-menu');
+                                if (menu && on) menu.hidden = true;
+                                updateDdLabel(dd);
+                            });
+                        }
+                        if (defaultCb) {
+                            defaultCb.addEventListener('change', applyDefaultState);
+                        }
+
+                        // ── Multi-select dropdowns for footer selectors ──────
+                        function updateDdLabel(dd) {
+                            var valEl = dd.querySelector('.ms-dd-val');
+                            if (!valEl) return;
+                            var checked = dd.querySelectorAll('input[type="checkbox"]:checked');
+                            if (checked.length === 0) {
+                                valEl.textContent = 'any';
+                                valEl.classList.add('empty');
+                            } else {
+                                var vals = [];
+                                checked.forEach(function (c) {
+                                    var label = c.parentElement;
+                                    vals.push((label ? label.textContent : c.value).trim());
+                                });
+                                valEl.textContent = vals.join(', ');
+                                valEl.classList.remove('empty');
+                            }
+                        }
+                        document.querySelectorAll('#footer_form .ms-dd').forEach(function (dd) {
+                            var btn = dd.querySelector('.ms-dd-btn');
+                            var menu = dd.querySelector('.ms-dd-menu');
+                            if (!btn || !menu) return;
+                            btn.addEventListener('click', function (e) {
+                                e.stopPropagation();
+                                if (dd.getAttribute('data-disabled') === '1') return;
+                                // Close other open menus
+                                document.querySelectorAll('#footer_form .ms-dd-menu').forEach(function (m) {
+                                    if (m !== menu) m.hidden = true;
+                                });
+                                menu.hidden = !menu.hidden;
+                            });
+                            menu.addEventListener('change', function () { updateDdLabel(dd); });
+                            updateDdLabel(dd);
+                        });
+                        document.addEventListener('click', function (e) {
+                            document.querySelectorAll('#footer_form .ms-dd').forEach(function (dd) {
+                                if (!dd.contains(e.target)) {
+                                    var menu = dd.querySelector('.ms-dd-menu');
+                                    if (menu) menu.hidden = true;
+                                }
+                            });
+                        });
+
+                        // Apply the initial Default state after the dropdowns
+                        // have been wired so labels reflect the disabled state.
+                        applyDefaultState();
+
+                        // ── Custom confirmation overlay for removing a footer
+                        //    message (replaces the browser confirm() dialog) ──
+                        var overlay = document.getElementById('footer_remove_confirm');
+                        var pendingForm = null;
+                        function closeOverlay() {
+                            if (!overlay) return;
+                            overlay.classList.remove('open');
+                            pendingForm = null;
+                        }
+                        function openOverlay(form) {
+                            if (!overlay) return;
+                            pendingForm = form;
+                            var summaryEl = document.getElementById('footer_remove_confirm_summary');
+                            var previewEl = document.getElementById('footer_remove_confirm_preview');
+                            if (summaryEl) summaryEl.textContent = form.getAttribute('data-summary') || '';
+                            if (previewEl) previewEl.textContent = form.getAttribute('data-preview') || '';
+                            overlay.classList.add('open');
+                            var ok = document.getElementById('footer_remove_confirm_ok');
+                            if (ok) ok.focus();
+                        }
+                        document.querySelectorAll('.footer-remove-form').forEach(function (f) {
+                            f.addEventListener('submit', function (e) {
+                                if (f === pendingForm) return;
+                                e.preventDefault();
+                                openOverlay(f);
+                            });
+                        });
+                        if (overlay) {
+                            var ok = document.getElementById('footer_remove_confirm_ok');
+                            var cancel = document.getElementById('footer_remove_confirm_cancel');
+                            if (ok) ok.addEventListener('click', function () {
+                                var f = pendingForm;
+                                if (!f) { closeOverlay(); return; }
+                                closeOverlay();
+                                f.submit();
+                            });
+                            if (cancel) cancel.addEventListener('click', closeOverlay);
+                            overlay.addEventListener('click', function (e) {
+                                if (e.target === overlay) closeOverlay();
+                            });
+                            document.addEventListener('keydown', function (e) {
+                                if (e.key === 'Escape' && overlay.classList.contains('open')) closeOverlay();
+                            });
+                        }
+                    })();
+                </script>
+            </div>
+        </div>
+        </div>
+
+        <div class="settings-section" id="section-team-names">
         <h3>Team Names</h3>
         <div class="section-hint">Clear team names to prevent showing scores for that team.</div>
         <div class="row">
@@ -1207,7 +1700,7 @@
         </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-meet-manager">
         <h3>Meet Manager (Hytek/Active) Data</h3>
         <div class="row">
             <div class="col-lg-6">
@@ -1378,41 +1871,146 @@
         {% endif %}
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-ad-display">
         <h3>Ad Display</h3>
+        {% if ad_error %}
+        <div class="row"><div class="col-lg-6">
+            <div class="alert alert-danger" style="margin-bottom: 5px; padding: 6px 12px;">{{ ad_error }}</div>
+        </div></div>
+        {% endif %}
         <div class="row">
             <div class="col-lg-6">
-                <form action="/settings" method="POST">
+                <form action="/settings" method="POST" enctype="multipart/form-data">
                     <div class="input-group">
-                        <label for="ad_url">Ad Image</label>
+                        <label for="ad_images_upload">Upload Ad Images</label>
                         <div class="input-group">
-                            <select id="ad_url" name="ad_url" class="form-control"
-                                oninput="document.getElementById('ad_url_submit').disabled=false;">
-                                <option value="" selected>-- None --</option>
-                                {% for url in ad_url_list %}
-                                {% if url == ad_url %}
-                                <option value="{{url}}" selected>{{url}}</option>
-                                {% else %}
-                                <option value="{{url}}">{{url}}</option>
-                                {% endif %}
-                                {% endfor %}
-                            </select>
+                            <input id="ad_images_upload" name="ad_images" type="file" multiple
+                                accept=".jpg,.jpeg,.png,.gif,.webp" class="form-control">
                             <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="ad_url_submit" disabled>Update</button>
+                                <button class="btn btn-default" type="submit">Upload</button>
                             </span>
                         </div>
+                        <small class="text-muted">JPG, PNG, GIF, or WebP. Select multiple files at once if you like.</small>
                     </div>
                 </form>
             </div>
         </div>
-        {% if ad_url and (ad_url != '') %}
-        <div class="row"><div class="col-lg-6">
-        <img src="{{url_for('static', filename='ad/'+ad_url)}}" style="max-width:100%;border-radius:4px;margin-top:6px;" />
-        </div></div>
-        {% endif %}
+
+        <form action="/settings" method="POST" style="margin-top: 10px;">
+            <input type="hidden" name="ad_form" value="1">
+            <div class="row">
+                <div class="col-lg-6">
+                    <div class="input-group">
+                        <label for="ad_rotation_interval">Rotation Interval</label>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <select id="ad_rotation_interval" name="ad_rotation_interval" class="form-control"
+                                style="width:auto;display:inline-block;">
+                                {% for sec in [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60] %}
+                                <option value="{{ sec }}" {% if ad_rotation_interval == sec %}selected{% endif %}>{{ sec }}s</option>
+                                {% endfor %}
+                            </select>
+                            <button class="btn btn-default" type="submit">Save</button>
+                        </div>
+                        <small class="text-muted">Rotation only runs when at least 2 images are enabled.</small>
+                    </div>
+                </div>
+            </div>
+
+            {% if ad_images %}
+            <div class="row" style="margin-top: 10px;">
+                <div class="col-lg-10">
+                    <style>
+                        .ad-img-table {
+                            width: auto;
+                            border-collapse: collapse;
+                            margin-bottom: 0;
+                        }
+                        .ad-img-table th,
+                        .ad-img-table td {
+                            padding: 6px 10px;
+                            border-top: 1px solid #ddd;
+                            vertical-align: middle;
+                        }
+                        .ad-img-table thead th {
+                            border-top: none;
+                            border-bottom: 2px solid #ddd;
+                            font-weight: 600;
+                            text-align: left;
+                        }
+                        .ad-img-table td.ad-remove-cell {
+                            padding-left: 18px;
+                        }
+                        .ad-icon-btn {
+                            padding: 4px 8px;
+                            line-height: 1;
+                        }
+                        .ad-icon-btn svg {
+                            width: 16px;
+                            height: 16px;
+                            display: block;
+                            fill: currentColor;
+                        }
+                    </style>
+                    <table class="ad-img-table">
+                        <thead>
+                            <tr>
+                                <th>Preview</th>
+                                <th>Enabled</th>
+                                <th>Order</th>
+                                <th>&nbsp;</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ad in ad_images %}
+                            <tr>
+                                <td>
+                                    <img src="{{ url_for('static', filename='ad/' + ad.filename) }}"
+                                        style="max-width:150px;max-height:150px;width:auto;height:auto;object-fit:contain;border-radius:4px;display:block;" />
+                                </td>
+                                <td style="text-align:center;">
+                                    <input type="checkbox" name="ad_enabled_{{ loop.index0 }}"
+                                        {% if ad.enabled %}checked{% endif %}>
+                                </td>
+                                <td style="white-space:nowrap;">
+                                    <button class="btn btn-default btn-sm ad-icon-btn" type="submit"
+                                        name="ad_up_{{ loop.index0 }}" value="1"
+                                        title="Move up"
+                                        {% if loop.first %}disabled{% endif %}>
+                                        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3l6 7H2z"/></svg>
+                                    </button>
+                                    <button class="btn btn-default btn-sm ad-icon-btn" type="submit"
+                                        name="ad_down_{{ loop.index0 }}" value="1"
+                                        title="Move down"
+                                        {% if loop.last %}disabled{% endif %}>
+                                        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13L2 6h12z"/></svg>
+                                    </button>
+                                </td>
+                                <td class="ad-remove-cell">
+                                    <button class="btn btn-danger btn-sm ad-icon-btn" type="submit"
+                                        name="ad_remove_{{ loop.index0 }}" value="1"
+                                        title="Remove">
+                                        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2h6l1 1h3v2H1V3h3l1-1zm-2 4h10l-1 9H4L3 6z"/></svg>
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% else %}
+            <div class="row" style="margin-top: 10px;">
+                <div class="col-lg-6">
+                    <div class="alert alert-warning" style="margin-bottom: 5px; padding: 6px 12px;">
+                        No ad images uploaded.
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </form>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-wifi-network">
         <h3>WiFi Network</h3>
         {% if wifi_available %}
         <div class="row">
@@ -1456,7 +2054,7 @@
         {% endif %}
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-cloud-hosting">
             <h3>Cloud Hosting</h3>
             <div class="section-hint">
                 Sign in to publish this scoreboard to viewers over the internet.
@@ -1490,11 +2088,51 @@
                         onclick="azureReconnect()">Reconnect</button>
                     <button class="btn btn-warning" type="button" id="azure-rotate-btn"
                         onclick="document.getElementById('azure-rotate-overlay').style.display='flex';">Rotate Meet ID</button>
+                    <button class="btn btn-default" type="button" id="azure-friendly-btn"
+                        onclick="azureOpenFriendlyOverlay()">Pick friendly name&hellip;</button>
+
+                    <div id="azure-qr-card" style="display:none;margin-top:14px;border:1px solid #ddd;border-radius:4px;padding:10px 14px;background:#fff;">
+                        <div style="font-weight:bold;margin-bottom:6px;">Scoreboard QR code</div>
+                        <div style="font-size:12px;color:#666;margin-bottom:8px;">
+                            Scannable link that takes phones directly to the live meet URL.
+                            Use the markdown token <code>[[QR]]</code> on a message-board page to render
+                            it inline; the visibility setting below controls the upper-corner overlay
+                            on the scoreboard itself.
+                        </div>
+                        <div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
+                            <div id="azure-qr-preview"
+                                 style="width:160px;height:160px;border:1px solid #eee;background:#fafafa;display:flex;align-items:center;justify-content:center;">
+                                <span style="font-size:11px;color:#999;">No meet ID</span>
+                            </div>
+                            <div style="flex:1;min-width:220px;">
+                                <div class="input-group" style="margin-bottom:8px;">
+                                    <label for="qr_visibility" style="font-size:12px;">Overlay visibility</label>
+                                    <select id="qr_visibility" class="form-control" onchange="azureSaveQrSettings()">
+                                        <option value="off"{% if qr_overlay_visibility == 'off' %} selected{% endif %}>Off (hidden)</option>
+                                        <option value="between_races"{% if qr_overlay_visibility == 'between_races' %} selected{% endif %}>Only between races</option>
+                                        <option value="always"{% if qr_overlay_visibility == 'always' %} selected{% endif %}>Always visible</option>
+                                    </select>
+                                </div>
+                                <div class="input-group" style="margin-bottom:8px;">
+                                    <label for="qr_corner" style="font-size:12px;">Corner</label>
+                                    <select id="qr_corner" class="form-control" onchange="azureSaveQrSettings()">
+                                        <option value="top-left"{% if qr_overlay_corner == 'top-left' %} selected{% endif %}>Top left</option>
+                                        <option value="top-right"{% if qr_overlay_corner == 'top-right' %} selected{% endif %}>Top right</option>
+                                        <option value="bottom-left"{% if qr_overlay_corner == 'bottom-left' %} selected{% endif %}>Bottom left</option>
+                                        <option value="bottom-right"{% if qr_overlay_corner == 'bottom-right' %} selected{% endif %}>Bottom right</option>
+                                    </select>
+                                </div>
+                                <button type="button" class="btn btn-default" id="azure-qr-download-btn"
+                                        onclick="window.location='/azure/qr.png';">Download QR (PNG, 4&quot;&times;4&quot; @ 250 dpi)</button>
+                                <span id="azure-qr-toast" style="margin-left:10px;font-size:12px;color:#3c763d;"></span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-advanced-settings">
         <h3>Advanced Settings</h3>
         <div class="row">
             <div class="col-lg-6">
@@ -1566,7 +2204,7 @@
         </div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="section-danger-zone">
         <h3 style="color:#a94442;">Danger Zone</h3>
         <div class="row">
             <div class="col-lg-6">
@@ -1613,7 +2251,7 @@
                         <label for="azure-cfg-client" style="margin-bottom:2px;">Client ID</label>
                         <input type="text" id="azure-cfg-client" class="form-control" oninput="azureMarkConfigDirty()" placeholder="GUID">
                         <small class="text-muted" style="font-size:11px;">
-                            App ID of the <strong>&ldquo;CTS Scoreboard Relay&rdquo;</strong> app
+                            App ID of the <strong>&ldquo;Swimming Scoreboard Relay&rdquo;</strong> app
                             registration &mdash; <em>not</em> the GitHub Actions service principal.
                             The audience is derived as <code>api://&lt;Client&nbsp;ID&gt;</code>.
                         </small>
@@ -1743,11 +2381,42 @@
 
     <!-- Azure rotate-meet-id confirmation overlay -->
     <div id="azure-rotate-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
-        <div style="background:#fff; padding:24px 32px; border-radius:6px; max-width:400px; text-align:center;">
+        <div style="background:#fff; padding:24px 32px; border-radius:6px; max-width:460px; text-align:left;">
             <h4 style="margin-top:0;">Rotate Meet ID?</h4>
-            <p>This invalidates the current scoreboard URL. Anyone using the old link will see a "link expired" page.</p>
-            <button class="btn btn-warning" type="button" onclick="azureRotateMeetId()">Rotate</button>
-            <button class="btn btn-default" type="button" onclick="document.getElementById('azure-rotate-overlay').style.display='none';">Cancel</button>
+            <p>This generates a brand-new scoreboard URL and <strong>invalidates the current one</strong>. Anyone using the old link will see a &ldquo;Link expired&rdquo; page.</p>
+            <div style="background:#fcf8e3; border:1px solid #faebcc; color:#8a6d3b; padding:10px 14px; border-radius:4px; margin:12px 0; font-size:13px;">
+                <strong>&#x26A0; Printed QR codes will stop working.</strong>
+                If you printed signs, posters, or programs with the QR code for the current URL, families scanning them will see the expired page until you replace them with the new QR.
+            </div>
+            <p style="font-size:13px; color:#777; margin-bottom:16px;">The same meet ID is reused across reconnects, restarts, and outages, so you only need to rotate it if the URL has been compromised or you want to lock out previous viewers.</p>
+            <div style="text-align:right;">
+                <button class="btn btn-default" type="button" onclick="document.getElementById('azure-rotate-overlay').style.display='none';">Cancel</button>
+                <button class="btn btn-warning" type="button" onclick="azureRotateMeetId()">Rotate Meet ID</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Azure pick-friendly-meet-id overlay -->
+    <div id="azure-friendly-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+        <div style="background:#fff; padding:24px 32px; border-radius:6px; max-width:520px; text-align:left;">
+            <h4 style="margin-top:0;">Pick a friendly meet name</h4>
+            <p style="font-size:14px;">Choose a memorable name for your meet's scoreboard URL.
+            Allowed: letters, digits, <code>-</code>, and <code>_</code>. Length 10&ndash;20.</p>
+            <div class="form-group" style="margin-bottom:8px;">
+                <input id="azure-friendly-input" type="text" class="form-control" maxlength="20"
+                    autocomplete="off" spellcheck="false"
+                    style="font-family:monospace;font-size:15px;">
+            </div>
+            <div id="azure-friendly-msg" style="min-height:20px;font-size:13px;margin-bottom:8px;"></div>
+            <div style="background:#fcf8e3; border:1px solid #faebcc; color:#8a6d3b; padding:10px 14px; border-radius:4px; margin:12px 0; font-size:13px;">
+                <strong>&#x26A0; Printed QR codes will stop working.</strong>
+                If you printed signs, posters, or programs with the QR code for the current URL, families scanning them will see the expired page until you replace them with the new QR.
+            </div>
+            <div style="text-align:right;">
+                <button class="btn btn-default" type="button" onclick="document.getElementById('azure-friendly-overlay').style.display='none';">Cancel</button>
+                <button class="btn btn-primary" type="button" id="azure-friendly-submit"
+                    onclick="azureSubmitFriendlyName()" disabled>Use this name</button>
+            </div>
         </div>
     </div>
 
@@ -1838,10 +2507,35 @@
             // Disable Sign In if the active env's relay URL is empty.
             $('azure-signin-btn').disabled = !snap.relay_url;
             $('azure-rotate-btn').disabled = !snap.meet_id;
+            $('azure-friendly-btn').disabled = !snap.meet_id;
             // Hint summary on the config details.
             var cfgStatus = $('azure-config-status');
             if (cfgStatus) {
                 cfgStatus.textContent = snap.relay_url ? '' : '(setup required)';
+            }
+
+            // QR code card: visible only when we have a publishable meet URL.
+            var qrCard = $('azure-qr-card');
+            if (qrCard) {
+                if (snap.meet_id && snap.public_url) {
+                    qrCard.style.display = 'block';
+                    var preview = $('azure-qr-preview');
+                    if (preview) {
+                        // Cache-bust per snapshot so URL/env changes refresh
+                        // the preview without a hard reload.
+                        var token = encodeURIComponent(
+                            (snap.environment || '') + '|' +
+                            (snap.public_url || '') + '|' +
+                            (snap.meet_id || ''));
+                        preview.innerHTML = '<img alt="QR code preview" ' +
+                            'src="/azure/qr.png?v=' + token + '" ' +
+                            'style="width:100%;height:100%;display:block;">';
+                    }
+                    var dlBtn = $('azure-qr-download-btn');
+                    if (dlBtn) dlBtn.disabled = false;
+                } else {
+                    qrCard.style.display = 'none';
+                }
             }
         }
 
@@ -1882,6 +2576,46 @@
                 });
             });
         }
+
+        // ----- Save QR overlay settings -----
+        window.azureSaveQrSettings = function() {
+            var visibility = $('qr_visibility').value;
+            var corner = $('qr_corner').value;
+            var toast = $('azure-qr-toast');
+            if (toast) toast.textContent = 'Saving\u2026';
+            postJSON('/azure/qr_settings', { visibility: visibility, corner: corner })
+                .then(function() {
+                    if (toast) {
+                        toast.style.color = '#3c763d';
+                        toast.textContent = 'Saved';
+                        setTimeout(function() { toast.textContent = ''; }, 1800);
+                    }
+                })
+                .catch(function(err) {
+                    if (toast) {
+                        toast.style.color = '#a94442';
+                        toast.textContent = 'Save failed: ' + (err && err.message || err);
+                    }
+                });
+        };
+
+        // ----- Insert auto-generated QR message page -----
+        window.azureInsertQrPage = function() {
+            postJSON('/azure/insert_qr_page', {})
+                .then(function(resp) {
+                    if (resp && resp.injected) {
+                        // Reload so the new page appears in the form. Settings
+                        // form state is server-rendered, so a soft reload is
+                        // the simplest way to surface the new tab.
+                        window.location.reload();
+                    } else {
+                        showToast('QR page already present (or page list is full).', 'error');
+                    }
+                })
+                .catch(function(err) {
+                    showToast('Insert failed: ' + (err && err.message || err), 'error');
+                });
+        };
 
         // ----- Sign in (device-code) -----
         window.azureSignIn = function() {
@@ -2026,6 +2760,132 @@
             postJSON('/azure/rotate_id', {})
                 .then(function(r) { applyStatus(r.status); showToast('New meet ID issued.'); })
                 .catch(function(err) { showToast('Rotate failed: ' + err.message, 'error'); });
+        };
+
+        // ----- Friendly meet-id picker -----
+        var _friendlyDebounce = null;
+        var _friendlyLastChecked = '';
+
+        function _setFriendlyMsg(text, kind) {
+            var el = $('azure-friendly-msg');
+            if (!el) return;
+            el.textContent = text || '';
+            if (kind === 'error') {
+                el.style.color = '#a94442';
+            } else if (kind === 'ok') {
+                el.style.color = '#3c763d';
+            } else {
+                el.style.color = '#777';
+            }
+        }
+
+        function _setFriendlySubmitEnabled(enabled) {
+            var btn = $('azure-friendly-submit');
+            if (btn) btn.disabled = !enabled;
+        }
+
+        function _friendlyValidateLocal(name) {
+            if (!window.MeetId) return { ok: true, error: null }; // allow if helper missing
+            return window.MeetId.validate(name);
+        }
+
+        function _friendlyCheckAvailability(name) {
+            if (_friendlyLastChecked === name) return;
+            _friendlyLastChecked = name;
+            _setFriendlyMsg('Checking availability\u2026', 'info');
+            _setFriendlySubmitEnabled(false);
+            postJSON('/azure/check_meet_id', { name: name })
+                .then(function(r) {
+                    // Ignore stale responses if user kept typing.
+                    if ($('azure-friendly-input').value.trim() !== name) return;
+                    if (!r.ok) {
+                        _setFriendlyMsg(r.error || 'Not available.', 'error');
+                        _setFriendlySubmitEnabled(false);
+                        return;
+                    }
+                    if (r.available) {
+                        var who = (r.owner === 'self')
+                            ? 'Already yours \u2014 confirm to keep it.'
+                            : 'Available!';
+                        _setFriendlyMsg(who, 'ok');
+                        _setFriendlySubmitEnabled(true);
+                    } else {
+                        _setFriendlyMsg('That name is already in use.', 'error');
+                        _setFriendlySubmitEnabled(false);
+                    }
+                })
+                .catch(function(err) {
+                    _setFriendlyMsg('Check failed: ' + err.message, 'error');
+                    _setFriendlySubmitEnabled(false);
+                });
+        }
+
+        function _onFriendlyInput() {
+            var raw = $('azure-friendly-input').value;
+            var name = raw.trim();
+            _setFriendlySubmitEnabled(false);
+            if (_friendlyDebounce) {
+                clearTimeout(_friendlyDebounce);
+                _friendlyDebounce = null;
+            }
+            var v = _friendlyValidateLocal(name);
+            if (!v.ok) {
+                _setFriendlyMsg(v.error, 'error');
+                return;
+            }
+            _setFriendlyMsg('Looks valid \u2014 checking\u2026', 'info');
+            _friendlyDebounce = setTimeout(function() {
+                _friendlyCheckAvailability(name);
+            }, 400);
+        }
+
+        window.azureOpenFriendlyOverlay = function() {
+            var teamHomeEl = document.getElementById('team_home');
+            var teamHome = (teamHomeEl ? teamHomeEl.value : '') || '';
+            var def = '';
+            if (window.MeetId) {
+                def = window.MeetId.deriveDefault(teamHome);
+            }
+            var input = $('azure-friendly-input');
+            input.value = def;
+            _friendlyLastChecked = '';
+            $('azure-friendly-overlay').style.display = 'flex';
+            _setFriendlyMsg('', 'info');
+            _setFriendlySubmitEnabled(false);
+            // Wire input listener once.
+            if (!input._friendlyWired) {
+                input.addEventListener('input', _onFriendlyInput);
+                input._friendlyWired = true;
+            }
+            // Trigger initial validation/availability for the default.
+            setTimeout(_onFriendlyInput, 0);
+            input.focus();
+            input.select();
+        };
+
+        window.azureSubmitFriendlyName = function() {
+            var name = $('azure-friendly-input').value.trim();
+            var v = _friendlyValidateLocal(name);
+            if (!v.ok) {
+                _setFriendlyMsg(v.error, 'error');
+                return;
+            }
+            _setFriendlySubmitEnabled(false);
+            postJSON('/azure/set_meet_id', { name: name })
+                .then(function(r) {
+                    if (!r.ok) {
+                        _setFriendlyMsg(r.error || 'Failed to set name.', 'error');
+                        _setFriendlySubmitEnabled(true);
+                        return;
+                    }
+                    $('azure-friendly-overlay').style.display = 'none';
+                    applyStatus(r.status);
+                    showToast('Meet name updated to ' + r.meet_id + '.');
+                })
+                .catch(function(err) {
+                    _setFriendlyMsg('Update failed: ' + err.message, 'error');
+                    _setFriendlySubmitEnabled(true);
+                });
         };
 
         // ----- Config form -----
@@ -2382,6 +3242,42 @@
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"
         integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa"
         crossorigin="anonymous"></script>
+
+    <!-- Auto-scroll to the section that submitted the most recent POST.
+         Each settings form has its enclosing <div class="settings-section">
+         id (e.g. "section-footer-messages") injected as a hidden _section
+         field on submit, and the server passes that id back as
+         `scroll_to_section` so we can restore scroll position after reload. -->
+    <script>
+    (function () {
+        // Auto-inject the enclosing section id into any /settings POST form.
+        document.addEventListener('submit', function (e) {
+            var form = e.target;
+            if (!form || form.tagName !== 'FORM') return;
+            var action = (form.getAttribute('action') || '').split('?')[0];
+            if (action !== '/settings') return;
+            var section = form.closest('.settings-section');
+            if (!section || !section.id) return;
+            if (form.querySelector('input[name="_section"]')) return;
+            var hidden = document.createElement('input');
+            hidden.type = 'hidden';
+            hidden.name = '_section';
+            hidden.value = section.id;
+            form.appendChild(hidden);
+        }, true);
+
+        // Scroll to the section returned by the server (if any).
+        {% if scroll_to_section %}
+        var target = document.getElementById({{ scroll_to_section | tojson }});
+        if (target) {
+            // Defer until layout settles so headers / fonts don't throw off offset.
+            window.addEventListener('load', function () {
+                target.scrollIntoView({ block: 'start' });
+            });
+        }
+        {% endif %}
+    })();
+    </script>
 </body>
 
 </html>

@@ -9,8 +9,11 @@ import structlog
 from app.telemetry import (
     Metrics,
     _StubCounter,
+    _StubHistogram,
+    _StubUpDownCounter,
     configure_telemetry,
     get_metrics,
+    record_latency,
     reset_for_tests,
 )
 
@@ -69,3 +72,46 @@ def test_structlog_friendly_in_local_mode(capsys):
     out = capsys.readouterr().out
     # Console renderer is not JSON, but key=value style.
     assert "meet_id" in out and "abc" in out
+
+
+def test_stub_histogram_records_observations():
+    h = _StubHistogram()
+    h.record(0.001, {"op": "put_state"})
+    h.record(0.002)
+    assert h.events[0] == (0.001, {"op": "put_state"})
+    assert h.events[1] == (0.002, None)
+
+
+def test_stub_updown_counter_tracks_running_total():
+    g = _StubUpDownCounter()
+    g.add(1, {"namespace": "/scoreboard"})
+    g.add(1, {"namespace": "/scoreboard"})
+    g.add(-1, {"namespace": "/scoreboard"})
+    assert g.total == 1
+    assert len(g.events) == 3
+
+
+def test_configure_registers_new_metric_fields():
+    m = configure_telemetry(connection_string="", environment="local")
+    assert isinstance(m.event_handler_seconds, _StubHistogram)
+    assert isinstance(m.redis_op_seconds, _StubHistogram)
+    assert isinstance(m.emit_fanout_seconds, _StubHistogram)
+    assert isinstance(m.active_sockets, _StubUpDownCounter)
+    assert isinstance(m.pi_connections, _StubUpDownCounter)
+
+
+def test_record_latency_writes_one_observation():
+    h = _StubHistogram()
+    with record_latency(h, {"op": "x"}):
+        pass
+    assert len(h.events) == 1
+    elapsed, attrs = h.events[0]
+    assert elapsed >= 0
+    assert attrs == {"op": "x"}
+
+
+def test_record_latency_records_even_on_exception():
+    h = _StubHistogram()
+    with pytest.raises(ValueError), record_latency(h, {"op": "x"}):
+        raise ValueError("boom")
+    assert len(h.events) == 1
