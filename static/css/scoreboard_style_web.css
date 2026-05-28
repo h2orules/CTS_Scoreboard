@@ -1008,6 +1008,31 @@ table.scoreboard_table td[id^="lane_place"] {
         margin-bottom: 4px;
     }
 
+    /* On mobile, place the set name subheader on its own line so the
+       differentiator + record row has the full width to itself. The
+       column-1 placeholder for subsequent rows in the set is hidden so
+       items shift left and stay aligned. */
+    .records-grid .set-subheader {
+        grid-column: 1 / -1;
+    }
+
+    .records-grid .set-subheader-spacer {
+        display: none;
+    }
+
+    /* Force each record onto its own row by anchoring its first cell to
+       grid column 1; subsequent record cells flow into columns 2+, and
+       the next record wraps to a new row. */
+    .records-grid .record-start {
+        grid-column: 1;
+    }
+
+    /* Indent the differentiator subheader (e.g. "Girls"/"Boys") so it
+       reads as belonging to the set subheader above it. */
+    .records-grid .qual-subheader {
+        padding-left: 2ch;
+    }
+
     .content_meet_title {
         font-size: min(30px, 4.5vw);
     }
@@ -1070,8 +1095,8 @@ table.scoreboard_table td[id^="lane_place"] {
     /* Footer message: shrink the type slightly and keep some breathing
        room around the edges on small screens. */
     .scoreboard_footer_cell {
-        font-size: 12px !important;
-        padding: 6px 10px;
+        font-size: 3vw !important;
+        padding: 12px;
     }
 }
 
