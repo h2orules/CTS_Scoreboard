@@ -1121,7 +1121,7 @@ table.scoreboard_table td[id^="lane_place"] {
     pointer-events: none;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px) {
     .qr-overlay {
         width: 160px;
         height: 160px;
@@ -1137,6 +1137,8 @@ table.scoreboard_table td[id^="lane_place"] {
     display: block;
     width: 200px !important;
     height: 200px !important;
+    max-width: 100%;
+    max-height: 100%;
 }
 
 .qr-overlay-top-left {
