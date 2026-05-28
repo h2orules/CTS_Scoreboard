@@ -140,20 +140,19 @@ jobs:
           # `az containerapp job start` only accepts --env-vars and resource
           # identifiers; replica count / parallelism / timeout are job-level
           # configuration that must be applied via `update` first. The CLI's
-          # `update` quirk requires --image even when only trigger config is
-          # changing, so we read the current image back and pass it through.
-          # `--container-name` must match the container name in the Bicep
-          # (`stress`); without it the CLI creates a new container slot
-          # named after the job and the image is silently lost.
-          IMG=$(az containerapp job show -g "$RG" -n "$JOB" \
-            --query 'properties.template.containers[0].image' -o tsv)
-          if [[ -z "$IMG" ]]; then
-            echo "::error::Could not read existing image for $JOB in $RG"; exit 1
+          # `update` quirk requires --image (and --container-name matching
+          # the existing slot) even when only trigger config is changing,
+          # so read both back from the live job and pass them through.
+          read CNAME IMG < <(az containerapp job show -g "$RG" -n "$JOB" \
+            --query 'properties.template.containers[0].[name,image]' -o tsv \
+            | paste -sd ' ' -)
+          if [[ -z "$IMG" || -z "$CNAME" ]]; then
+            echo "::error::Could not read container name/image for $JOB in $RG"; exit 1
           fi
           az containerapp job update \
             -g "$RG" \
             -n "$JOB" \
-            --container-name stress \
+            --container-name "$CNAME" \
             --image "$IMG" \
             --replica-completion-count "$R" \
             --parallelism "$R" \
@@ -184,15 +183,16 @@ jobs:
           RG="cts-scoreboard-stress-${REGION}"
           JOB="cts-sb-stress-${REGION}-job"
           R=${{ steps.split.outputs.eastus2_replicas }}
-          IMG=$(az containerapp job show -g "$RG" -n "$JOB" \
-            --query 'properties.template.containers[0].image' -o tsv)
-          if [[ -z "$IMG" ]]; then
-            echo "::error::Could not read existing image for $JOB in $RG"; exit 1
+          read CNAME IMG < <(az containerapp job show -g "$RG" -n "$JOB" \
+            --query 'properties.template.containers[0].[name,image]' -o tsv \
+            | paste -sd ' ' -)
+          if [[ -z "$IMG" || -z "$CNAME" ]]; then
+            echo "::error::Could not read container name/image for $JOB in $RG"; exit 1
           fi
           az containerapp job update \
             -g "$RG" \
             -n "$JOB" \
-            --container-name stress \
+            --container-name "$CNAME" \
             --image "$IMG" \
             --replica-completion-count "$R" \
             --parallelism "$R" \
