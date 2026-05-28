@@ -1,0 +1,228 @@
+name: stress-run
+
+# Starts a single execution of the stress-test job pool. Inputs control
+# the target URL, total browser count, per-replica fanout, hold/delay timing,
+# cache mode, and total run duration. In `multi` mode the load is split
+# 50/50 across westus and eastus2.
+#
+# Each execution is independent. Run this workflow as many times as you
+# want simultaneous waves; use `stress-stop.yml` to cancel running waves.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: 'Full URL of the live meet page to load (e.g. https://cts-sb-prod-app.<region>.azurecontainerapps.io/web/home?meet=ABC)'
+        required: true
+        type: string
+      total_browsers:
+        description: 'Total number of concurrent browsers across all replicas/regions'
+        required: true
+        type: number
+        default: 400
+      browsers_per_replica:
+        description: 'Browsers run per job replica. replicas = ceil(total_browsers / browsers_per_replica)'
+        required: true
+        type: number
+        default: 10
+      min_hold_seconds:
+        description: 'Minimum seconds a browser stays connected to the meet page'
+        required: true
+        type: number
+        default: 30
+      max_hold_seconds:
+        description: 'Maximum seconds a browser stays connected'
+        required: true
+        type: number
+        default: 120
+      min_delay_seconds:
+        description: 'Minimum seconds between closing one browser and reopening the next'
+        required: true
+        type: number
+        default: 2
+      max_delay_seconds:
+        description: 'Maximum seconds between cycles'
+        required: true
+        type: number
+        default: 10
+      cache_mode:
+        description: 'cold = fresh browser per cycle, hot = persistent context, mixed = alternate'
+        required: true
+        type: choice
+        options: [hot, cold, mixed]
+        default: mixed
+      total_duration_seconds:
+        description: 'Total wall-clock duration of the run'
+        required: true
+        type: number
+        default: 600
+      mode:
+        description: 'single (westus only) or multi (split across westus + eastus2)'
+        required: true
+        type: choice
+        options: [single, multi]
+        default: single
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  start:
+    runs-on: ubuntu-latest
+    environment: stress    # required-reviewer gate + OIDC federation subject
+    env:
+      AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate inputs
+        run: |
+          T=${{ inputs.total_browsers }}
+          P=${{ inputs.browsers_per_replica }}
+          if (( T < 1 || T > 1000 )); then
+            echo "::error::total_browsers must be between 1 and 1000 (got $T)"
+            exit 1
+          fi
+          if (( P < 1 || P > 50 )); then
+            echo "::error::browsers_per_replica must be between 1 and 50 (got $P)"
+            exit 1
+          fi
+          if (( ${{ inputs.min_hold_seconds }} > ${{ inputs.max_hold_seconds }} )); then
+            echo "::error::min_hold_seconds > max_hold_seconds"; exit 1
+          fi
+          if (( ${{ inputs.min_delay_seconds }} > ${{ inputs.max_delay_seconds }} )); then
+            echo "::error::min_delay_seconds > max_delay_seconds"; exit 1
+          fi
+
+      - name: Compute per-region split
+        id: split
+        run: |
+          T=${{ inputs.total_browsers }}
+          P=${{ inputs.browsers_per_replica }}
+          if [[ "${{ inputs.mode }}" == "multi" ]]; then
+            T_W=$(( (T + 1) / 2 ))
+            T_E=$(( T - T_W ))
+          else
+            T_W=$T
+            T_E=0
+          fi
+          R_W=$(( (T_W + P - 1) / P ))
+          R_E=$(( T_E == 0 ? 0 : (T_E + P - 1) / P ))
+          # Actual browser counts after rounding up to whole replicas.
+          A_W=$(( R_W * P ))
+          A_E=$(( R_E * P ))
+          {
+            echo "westus_replicas=$R_W"
+            echo "eastus2_replicas=$R_E"
+            echo "westus_browsers=$A_W"
+            echo "eastus2_browsers=$A_E"
+            echo "total_browsers=$(( A_W + A_E ))"
+          } >> $GITHUB_OUTPUT
+
+      - name: Azure login (OIDC)
+        uses: azure/login@v3
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Start westus execution
+        if: steps.split.outputs.westus_replicas != '0'
+        id: start_westus
+        run: |
+          REGION=westus
+          RG="cts-scoreboard-stress-${REGION}"
+          JOB="cts-sb-stress-${REGION}-job"
+          R=${{ steps.split.outputs.westus_replicas }}
+          # `az containerapp job start` only accepts --env-vars and resource
+          # identifiers; replica count / parallelism / timeout are job-level
+          # configuration that must be applied via `update` first.
+          az containerapp job update \
+            -g "$RG" \
+            -n "$JOB" \
+            --replica-completion-count "$R" \
+            --parallelism "$R" \
+            --replica-timeout ${{ inputs.total_duration_seconds }} \
+            -o none
+          OUT=$(az containerapp job start \
+            -g "$RG" \
+            -n "$JOB" \
+            --env-vars \
+              TARGET_URL="${{ inputs.target_url }}" \
+              BROWSERS_PER_REPLICA="${{ inputs.browsers_per_replica }}" \
+              MIN_HOLD_SECONDS="${{ inputs.min_hold_seconds }}" \
+              MAX_HOLD_SECONDS="${{ inputs.max_hold_seconds }}" \
+              MIN_DELAY_SECONDS="${{ inputs.min_delay_seconds }}" \
+              MAX_DELAY_SECONDS="${{ inputs.max_delay_seconds }}" \
+              CACHE_MODE="${{ inputs.cache_mode }}" \
+              TOTAL_DURATION_SECONDS="${{ inputs.total_duration_seconds }}" \
+            -o json)
+          EXEC=$(echo "$OUT" | jq -r '.name // .id | split("/") | last')
+          echo "exec=$EXEC" >> $GITHUB_OUTPUT
+          echo "::notice title=westus execution started::$EXEC ($R replicas)"
+
+      - name: Start eastus2 execution
+        if: steps.split.outputs.eastus2_replicas != '0'
+        id: start_eastus2
+        run: |
+          REGION=eastus2
+          RG="cts-scoreboard-stress-${REGION}"
+          JOB="cts-sb-stress-${REGION}-job"
+          R=${{ steps.split.outputs.eastus2_replicas }}
+          az containerapp job update \
+            -g "$RG" \
+            -n "$JOB" \
+            --replica-completion-count "$R" \
+            --parallelism "$R" \
+            --replica-timeout ${{ inputs.total_duration_seconds }} \
+            -o none
+          OUT=$(az containerapp job start \
+            -g "$RG" \
+            -n "$JOB" \
+            --env-vars \
+              TARGET_URL="${{ inputs.target_url }}" \
+              BROWSERS_PER_REPLICA="${{ inputs.browsers_per_replica }}" \
+              MIN_HOLD_SECONDS="${{ inputs.min_hold_seconds }}" \
+              MAX_HOLD_SECONDS="${{ inputs.max_hold_seconds }}" \
+              MIN_DELAY_SECONDS="${{ inputs.min_delay_seconds }}" \
+              MAX_DELAY_SECONDS="${{ inputs.max_delay_seconds }}" \
+              CACHE_MODE="${{ inputs.cache_mode }}" \
+              TOTAL_DURATION_SECONDS="${{ inputs.total_duration_seconds }}" \
+            -o json)
+          EXEC=$(echo "$OUT" | jq -r '.name // .id | split("/") | last')
+          echo "exec=$EXEC" >> $GITHUB_OUTPUT
+          echo "::notice title=eastus2 execution started::$EXEC ($R replicas)"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## Stress run kicked off"
+            echo ""
+            echo "| Setting | Value |"
+            echo "|---|---|"
+            echo "| Mode | ${{ inputs.mode }} |"
+            echo "| Target URL | \`${{ inputs.target_url }}\` |"
+            echo "| Total browsers (requested) | ${{ inputs.total_browsers }} |"
+            echo "| Total browsers (actual) | ${{ steps.split.outputs.total_browsers }} |"
+            echo "| Browsers per replica | ${{ inputs.browsers_per_replica }} |"
+            echo "| Hold (s) | ${{ inputs.min_hold_seconds }}-${{ inputs.max_hold_seconds }} |"
+            echo "| Delay (s) | ${{ inputs.min_delay_seconds }}-${{ inputs.max_delay_seconds }} |"
+            echo "| Cache mode | ${{ inputs.cache_mode }} |"
+            echo "| Duration (s) | ${{ inputs.total_duration_seconds }} |"
+            echo ""
+            echo "### Per-region executions"
+            echo "| Region | Replicas | Browsers | Execution |"
+            echo "|---|---|---|---|"
+            echo "| westus  | ${{ steps.split.outputs.westus_replicas }}  | ${{ steps.split.outputs.westus_browsers }}  | \`${{ steps.start_westus.outputs.exec }}\` |"
+            echo "| eastus2 | ${{ steps.split.outputs.eastus2_replicas }} | ${{ steps.split.outputs.eastus2_browsers }} | \`${{ steps.start_eastus2.outputs.exec }}\` |"
+            echo ""
+            echo "Tail logs with:"
+            echo '```'
+            echo "az containerapp job execution show -g cts-scoreboard-stress-westus -n cts-sb-stress-westus-job --execution-name <exec>"
+            echo '```'
+            echo "Cancel with the **stress-stop** workflow."
+          } >> $GITHUB_STEP_SUMMARY
