@@ -130,11 +130,15 @@
       {%- if nsg.col_year -%}
 <div class="rec_year {{ rec.color_class }}">{{ rec.record_year or '' }}</div>
       {%- endif -%}
-      {%- if nsg.col_team -%}
+      {%- if is_team_specific and nsg.col_team and nsg.col_name -%}
+<div class="rec_name {{ rec.color_class }}" style="grid-column: span 2">{{ rec.relay_names or rec.swimmer_name or '' }}</div>
+      {%- else -%}
+        {%- if nsg.col_team -%}
 <div class="rec_team {{ rec.color_class }}">{{ rec.record_team if (not is_team_specific and rec.record_team) else '' }}</div>
-      {%- endif -%}
-      {%- if nsg.col_name -%}
+        {%- endif -%}
+        {%- if nsg.col_name -%}
 <div class="rec_name {{ rec.color_class }}">{{ rec.relay_names or rec.swimmer_name or '' }}</div>
+        {%- endif -%}
       {%- endif -%}
     {%- endfor -%}
   {%- endif -%}
