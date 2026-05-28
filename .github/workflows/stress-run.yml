@@ -139,10 +139,15 @@ jobs:
           R=${{ steps.split.outputs.westus_replicas }}
           # `az containerapp job start` only accepts --env-vars and resource
           # identifiers; replica count / parallelism / timeout are job-level
-          # configuration that must be applied via `update` first.
+          # configuration that must be applied via `update` first. The CLI's
+          # `update` quirk requires --image even when only trigger config is
+          # changing, so we read the current image back and pass it through.
+          IMG=$(az containerapp job show -g "$RG" -n "$JOB" \
+            --query 'properties.template.containers[0].image' -o tsv)
           az containerapp job update \
             -g "$RG" \
             -n "$JOB" \
+            --image "$IMG" \
             --replica-completion-count "$R" \
             --parallelism "$R" \
             --replica-timeout ${{ inputs.total_duration_seconds }} \
@@ -172,9 +177,12 @@ jobs:
           RG="cts-scoreboard-stress-${REGION}"
           JOB="cts-sb-stress-${REGION}-job"
           R=${{ steps.split.outputs.eastus2_replicas }}
+          IMG=$(az containerapp job show -g "$RG" -n "$JOB" \
+            --query 'properties.template.containers[0].image' -o tsv)
           az containerapp job update \
             -g "$RG" \
             -n "$JOB" \
+            --image "$IMG" \
             --replica-completion-count "$R" \
             --parallelism "$R" \
             --replica-timeout ${{ inputs.total_duration_seconds }} \
