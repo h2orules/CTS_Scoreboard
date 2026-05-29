@@ -46,6 +46,32 @@ class _OrjsonForSocketIO:
         return orjson.loads(s)
 
 
+def _build_state_redis(url: str) -> redis_async.Redis:
+    """Build the async Redis client used by MeetStateStore.
+
+    Uses a BlockingConnectionPool so request coroutines queue (with a short
+    timeout) for a connection instead of erroring with
+    ``ConnectionError: Too many connections`` the moment the pool saturates.
+    The per-worker cap is intentionally small so the total connection count
+    across workers x replicas stays well under the Azure Cache for Redis
+    Basic C0 ceiling (256 conns) even at our current ``maxReplicas`` of 20:
+    10 conns/worker x 2 workers x 20 replicas = 400, plus the Socket.IO
+    pub/sub manager's connections. If real load consistently queues here,
+    bump the Redis SKU (C1 = 1000 conns) rather than this cap.
+    """
+    pool = redis_async.BlockingConnectionPool.from_url(
+        url,
+        decode_responses=False,
+        max_connections=10,
+        timeout=5,
+        health_check_interval=30,
+        socket_keepalive=True,
+        socket_timeout=5,
+        socket_connect_timeout=5,
+    )
+    return redis_async.Redis(connection_pool=pool)
+
+
 def build_app(
     *,
     redis_client: Any = None,
@@ -61,14 +87,7 @@ def build_app(
         connection_string=settings.applicationinsights_connection_string,
         environment=settings.environment,
     )
-    redis_handle = redis_client or redis_async.from_url(
-        settings.redis_url,
-        decode_responses=False,
-        health_check_interval=30,
-        socket_keepalive=True,
-        socket_timeout=60,
-        socket_connect_timeout=10,
-    )
+    redis_handle = redis_client or _build_state_redis(settings.redis_url)
     store = MeetStateStore(redis_handle)
 
     @asynccontextmanager
@@ -144,8 +163,8 @@ def build_app(
             redis_options={
                 "health_check_interval": 30,
                 "socket_keepalive": True,
-                "socket_timeout": 60,
-                "socket_connect_timeout": 10,
+                "socket_timeout": 5,
+                "socket_connect_timeout": 5,
             },
         )
 
