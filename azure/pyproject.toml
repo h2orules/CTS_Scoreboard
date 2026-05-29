@@ -12,6 +12,7 @@ dependencies = [
     "pydantic-settings>=2.6",
     "jinja2>=3.1",
     "redis>=5.2",
+    "orjson>=3.10",
     "azure-data-tables>=12.5",
     "azure-storage-blob>=12.23",
     "azure-identity>=1.19",
