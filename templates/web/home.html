@@ -853,6 +853,19 @@
             qrChanged = true;
         }
 
+        // Re-render qualifying info / records whenever the server sends a
+        // new key. send_event_info() emits this on every event/heat change;
+        // the race FSM may not transition (e.g. PreRace -> PreRace), so we
+        // can't rely on the race_state block below to trigger it.
+        if ('qualifying_times_key' in new_s &&
+            new_s['qualifying_times_key'] !== qualifyingTimesKey) {
+            renderQualifyingInfo(
+                new_s['qualifying_times'] || [],
+                new_s['record_sets'] || [],
+                new_s['qualifying_times_key']
+            );
+        }
+
         // Track race state from server FSM and handle transitions
         var eventHeatChanged = false;
         if ("race_state" in s && s["race_state"] !== raceState) {
