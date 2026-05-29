@@ -61,7 +61,7 @@ def build_app(
         connection_string=settings.applicationinsights_connection_string,
         environment=settings.environment,
     )
-    redis_handle = redis_client or redis_sync.from_url(
+    redis_handle = redis_client or redis_async.from_url(
         settings.redis_url,
         decode_responses=False,
         health_check_interval=30,
