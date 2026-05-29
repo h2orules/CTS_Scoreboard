@@ -116,21 +116,21 @@ resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   }
 }
 
-// Monitoring Reader on Application Insights for the same UAMI. The Container
-// App's KEDA azure-monitor scale rule (defined below) uses this identity to
-// query the `active_sockets` custom metric we publish from app/telemetry.py.
-// Without this role grant, KEDA gets a 403 and falls back to never scaling
-// on the metric (silent failure — verify the new rule fires after deploy).
-resource aiMonitoringReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: ai
-  name: guid(ai.id, uami.id, 'MonitoringReader')
-  properties: {
-    principalId: uami.properties.principalId
-    principalType: 'ServicePrincipal'
-    // Monitoring Reader: 43d0d8ad-25c7-4714-9337-8ba259a9fe05
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '43d0d8ad-25c7-4714-9337-8ba259a9fe05')
-  }
-}
+// Monitoring Reader on Application Insights for the same UAMI is required
+// by the Container App's KEDA `azure-monitor` scale rule below so it can
+// query the `active_sockets` custom metric we publish from
+// app/telemetry.py. This role assignment is NOT declared here on purpose:
+// the GitHub Actions SP that runs `azure-infra-deploy` is constrained by
+// an RBAC condition that permits only the AcrPull role id, so attempting
+// to declare `Microsoft.Authorization/roleAssignments` for any other role
+// fails with `Authorization failed`. Granting it via Bicep would require
+// widening the SP's RBAC condition, which we deliberately keep narrow.
+//
+// Instead, run this once per environment as the tenant admin (after the
+// first Bicep deploy creates the UAMI and AI resources). See
+// `azure/docs/AZURE_SETUP.md` → "Scaling: KEDA azure-monitor rule" for
+// the exact command. Without this grant, KEDA's metric queries get 403
+// and the rule silently never fires.
 
 // ---------- storage (Tables + Blob) ----------
 resource storage 'Microsoft.Storage/storageAccounts@2023-05-01' = {
@@ -205,7 +205,11 @@ resource caEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
 // step is idempotent: it creates the cert on first run and renews/reattaches
 // on subsequent runs. See azure/docs/CUSTOM_DOMAIN_SETUP.md.
 
-resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
+// API version 2024-10-02-preview is required for the `identity` property
+// on a CustomScaleRule (the `sockets-rule` below). The stable 2024-03-01
+// schema does not expose it (Bicep BCP037) and KEDA can't authenticate
+// against Azure Monitor without it.
+resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
   name: caName
   location: location
   identity: {
