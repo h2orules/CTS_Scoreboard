@@ -173,6 +173,12 @@ def build_app(
         cors_allowed_origins="*",
         client_manager=client_manager,
         json=_OrjsonForSocketIO,
+        # Engine.IO heartbeat. Default ping_timeout=20s drops viewers
+        # whenever a replica's asyncio loop is momentarily saturated
+        # (the hot-replica failure mode under stress). 60s gives the
+        # coalescer time to drain backlog without killing live connections.
+        ping_interval=25,
+        ping_timeout=60,
     )
 
     register_handlers(
@@ -181,6 +187,7 @@ def build_app(
         tenant_id=settings.entra_tenant_id,
         audience=settings.entra_audience,
         token_validator=token_validator,
+        coalesce_window_s=settings.coalesce_window_seconds,
     )
 
     watchdog = MeetWatchdog(
