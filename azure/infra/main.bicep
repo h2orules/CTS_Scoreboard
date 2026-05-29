@@ -263,8 +263,8 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
           name: 'relay'
           image: containerImage
           resources: {
-            cpu: json(environmentName == 'prod' ? '1.0' : '0.5')
-            memory: environmentName == 'prod' ? '2Gi' : '1Gi'
+            cpu: json(environmentName == 'prod' ? '2.0' : '0.5')
+            memory: environmentName == 'prod' ? '4Gi' : '1Gi'
           }
           env: [
             { name: 'ENVIRONMENT', value: environmentName }
@@ -315,8 +315,35 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
                 // desired replica count.
                 metricAggregationType: 'Total'
                 metricAggregationInterval: '0:1:0'
-                targetValue: '80'
+                targetValue: '50'
                 // No activation threshold — minReplicas owns the floor.
+                activationTargetValue: '0'
+              }
+              identity: uami.id
+            }
+          }
+          {
+            name: 'sockets-avg-rule'
+            custom: {
+              // Sibling of sockets-rule that reacts to per-replica imbalance.
+              // Because WebSockets are sticky, a single "hot" replica can
+              // accumulate far more sockets than the Total/N average — the
+              // Total rule won't scale until the cluster sum grows, but by
+              // then the hot replica's event loop is already saturated.
+              // Using 'Average' here means KEDA also adds replicas when the
+              // per-replica mean climbs, giving new viewers somewhere
+              // balanced to land.
+              type: 'azure-monitor'
+              metadata: {
+                tenantId: subscription().tenantId
+                subscriptionId: subscription().subscriptionId
+                resourceGroupName: resourceGroup().name
+                resourceURI: 'microsoft.insights/components/${aiName}'
+                metricName: 'active_sockets'
+                metricNamespace: 'azure.applicationinsights'
+                metricAggregationType: 'Average'
+                metricAggregationInterval: '0:1:0'
+                targetValue: '60'
                 activationTargetValue: '0'
               }
               identity: uami.id

@@ -41,11 +41,22 @@ def register_handlers(
     tenant_id: str,
     audience: str,
     token_validator=None,
+    coalesce_window_s: float = 0.0,
 ) -> None:
     """Register all namespace handlers on the given AsyncServer.
 
     ``token_validator`` is overridable for tests; defaults to
-    :func:`app.auth.validate_pi_token`."""
+    :func:`app.auth.validate_pi_token`.
+
+    ``coalesce_window_s`` enables the per-meet coalescing buffer for the
+    high-frequency Pi events (``update_scoreboard``, ``event_info``,
+    ``scores_info``, ``message_overlay_state``). When > 0, incoming
+    payloads are merged into a pending buffer and flushed (HSET + emit)
+    once per window, capping Redis and Socket.IO pub/sub rate regardless
+    of how fast the Pi sends frames. Defaults to 0 (immediate) so unit
+    tests keep their synchronous semantics; ``main.py`` opts in to a
+    small window for production.
+    """
     validator = token_validator or (
         lambda token: validate_pi_token(token, tenant_id=tenant_id, audience=audience)
     )
@@ -61,6 +72,87 @@ def register_handlers(
             metrics.emit_fanout_seconds,
             {"event": event, "namespace": "/scoreboard"},
         )
+
+    # ============================================================
+    # Coalescing buffer (B1).
+    #
+    # Keyed by (meet_id, event_name). High-frequency Pi events get
+    # merged into ``_pending`` and flushed by a single background task
+    # per key after ``coalesce_window_s``. Top-level fields collapse on
+    # merge (last write wins per field), so a Pi sending 10 Hz of
+    # ``update_scoreboard`` frames where only ``clock`` changes ends up
+    # producing one HSET + one emit per window instead of one per frame.
+    # ============================================================
+    _pending: dict[tuple[str, str], dict[str, Any]] = {}
+    _pending_wrap: dict[tuple[str, str], str | None] = {}
+    _pending_tasks: dict[tuple[str, str], asyncio.Task[None]] = {}
+
+    async def _put_state_and_emit_now(
+        meet_id: str, event: str, state_field: dict[str, Any], emit_payload: Any
+    ) -> None:
+        """Single-shot HSET + fan-out emit, overlapped via gather. Used
+        both for the immediate path (``coalesce_window_s == 0``) and for
+        the coalesced flush."""
+
+        async def _timed_emit() -> None:
+            with _emit_timer(event):
+                await sio.emit(event, emit_payload, room=meet_id, namespace="/scoreboard")
+
+        await asyncio.gather(
+            store.put_state(meet_id, state_field),
+            _timed_emit(),
+        )
+
+    async def _flush_coalesced(meet_id: str, event: str) -> None:
+        try:
+            await asyncio.sleep(coalesce_window_s)
+        except asyncio.CancelledError:
+            return
+        key = (meet_id, event)
+        payload = _pending.pop(key, None)
+        wrap_key = _pending_wrap.pop(key, None)
+        _pending_tasks.pop(key, None)
+        if not payload:
+            return
+        await _put_state_and_emit_now(
+            meet_id, event, {wrap_key: payload} if wrap_key else payload, payload
+        )
+
+    async def _enqueue_or_run(
+        meet_id: str,
+        event: str,
+        payload: dict[str, Any],
+        state_wrap_key: str | None,
+    ) -> None:
+        """Either run put_state+emit immediately (window == 0) or merge
+        into the pending buffer and ensure a flush task is scheduled."""
+        if coalesce_window_s <= 0:
+            state_field = {state_wrap_key: payload} if state_wrap_key else payload
+            await _put_state_and_emit_now(meet_id, event, state_field, payload)
+            return
+        key = (meet_id, event)
+        pending = _pending.get(key)
+        if pending is None:
+            _pending[key] = dict(payload)
+            _pending_wrap[key] = state_wrap_key
+        else:
+            pending.update(payload)
+        if key not in _pending_tasks:
+            _pending_tasks[key] = asyncio.create_task(
+                _flush_coalesced(meet_id, event)
+            )
+
+    def _drop_coalesced_for_meet(meet_id: str) -> None:
+        """Discard any pending buffers for a meet on Pi disconnect so a
+        subsequent Pi reconnect doesn't inherit stale fields."""
+        for key in list(_pending_tasks):
+            if key[0] != meet_id:
+                continue
+            task = _pending_tasks.pop(key, None)
+            _pending.pop(key, None)
+            _pending_wrap.pop(key, None)
+            if task is not None and not task.done():
+                task.cancel()
 
     # ============================================================
     # /pi namespace - upstream from the Raspberry Pi
@@ -105,6 +197,7 @@ def register_handlers(
         sess = await sio.get_session(sid, namespace="/pi")
         meet_id = sess.get(_SESSION_PI_MEET)
         if meet_id:
+            _drop_coalesced_for_meet(meet_id)
             await store.mark_status(meet_id, "degraded")
             # Tell viewers their feed went dark.
             with _emit_timer("feed_status"):
@@ -165,42 +258,7 @@ def register_handlers(
             if not meet_id:
                 return
             metrics.relay_event_processed.add(1, {"event": "update_scoreboard"})
-            # Hottest path in the relay. Overlap the Redis HSET with the
-            # Socket.IO fan-out to halve the critical path: late joiners
-            # hydrating between the two reads from the prior snapshot and
-            # then receive the new emit, converging to the same end state.
-
-            async def _timed_emit() -> None:
-                with _emit_timer("update_scoreboard"):
-                    await sio.emit(
-                        "update_scoreboard",
-                        payload,
-                        room=meet_id,
-                        namespace="/scoreboard",
-                    )
-
-            await asyncio.gather(
-                store.put_state(meet_id, payload),
-                _timed_emit(),
-            )
-
-    async def _put_state_and_emit(
-        meet_id: str, event: str, state_field: dict[str, Any], emit_payload: Any
-    ) -> None:
-        """Overlap an HSET with the corresponding fan-out emit. Mirrors the
-        pattern in on_update_scoreboard and is used by event_info,
-        scores_info, and message_overlay_state — all of which both update
-        cached state (so reconnecting browsers hydrate to the same value)
-        and broadcast a live update."""
-
-        async def _timed_emit() -> None:
-            with _emit_timer(event):
-                await sio.emit(event, emit_payload, room=meet_id, namespace="/scoreboard")
-
-        await asyncio.gather(
-            store.put_state(meet_id, state_field),
-            _timed_emit(),
-        )
+            await _enqueue_or_run(meet_id, "update_scoreboard", payload, None)
 
     @sio.on("event_info", namespace="/pi")
     async def on_event_info(sid: str, payload: dict[str, Any]) -> None:
@@ -210,7 +268,7 @@ def register_handlers(
             if not meet_id:
                 return
             # Treat event_info as part of state so reconnecting browsers hydrate.
-            await _put_state_and_emit(meet_id, "event_info", {"event_info": payload}, payload)
+            await _enqueue_or_run(meet_id, "event_info", payload, "event_info")
 
     @sio.on("scores_info", namespace="/pi")
     async def on_scores_info(sid: str, payload: dict[str, Any]) -> None:
@@ -219,7 +277,7 @@ def register_handlers(
             meet_id = sess.get(_SESSION_PI_MEET)
             if not meet_id:
                 return
-            await _put_state_and_emit(meet_id, "scores_info", {"scores_info": payload}, payload)
+            await _enqueue_or_run(meet_id, "scores_info", payload, "scores_info")
 
     @sio.on("message_overlay_state", namespace="/pi")
     async def on_message_overlay_state(sid: str, payload: dict[str, Any]) -> None:
@@ -228,11 +286,8 @@ def register_handlers(
             meet_id = sess.get(_SESSION_PI_MEET)
             if not meet_id:
                 return
-            await _put_state_and_emit(
-                meet_id,
-                "message_overlay_state",
-                {"message_overlay_state": payload},
-                payload,
+            await _enqueue_or_run(
+                meet_id, "message_overlay_state", payload, "message_overlay_state"
             )
 
     @sio.on("template_push", namespace="/pi")

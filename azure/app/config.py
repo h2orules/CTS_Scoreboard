@@ -61,6 +61,13 @@ class Settings(BaseSettings):
     heartbeat_degraded_seconds: int = Field(default=60)
     heartbeat_close_seconds: int = Field(default=8 * 3600)
 
+    # ---- relay performance ----
+    # Per-meet coalescing window for high-frequency Pi events. Incoming
+    # update_scoreboard / event_info / scores_info / message_overlay_state
+    # payloads merge into a pending buffer and flush once per window,
+    # capping Redis writes and Socket.IO fan-out rate. 0 disables.
+    coalesce_window_seconds: float = Field(default=0.1, ge=0.0, le=2.0)
+
     # ---- telemetry ----
     applicationinsights_connection_string: str = Field(default="")
 

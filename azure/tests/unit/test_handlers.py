@@ -507,3 +507,72 @@ async def test_meet_open_rejects_other_pi_reclaiming_rotated_id():
     assert meta["pi_account_id"] == "oid-original"
     assert meta["status"] == "expired_id_rotated"
     assert meta["host_team_name"] == "Orig"
+
+
+@pytest.mark.asyncio
+async def test_coalescer_merges_update_scoreboard_frames():
+    """Multiple update_scoreboard frames within the window collapse to a
+    single HSET + single emit, with last-write-wins on overlapping fields."""
+    import asyncio
+
+    sio, _, _, emits = _make_sio_with_spies()
+    store = _store()
+    register_handlers(
+        sio, store=store, tenant_id="tid", audience="api://aud",
+        token_validator=_ok_validator, coalesce_window_s=0.05,
+    )
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
+    )
+
+    # Three rapid frames: lane_1 first, lane_2 added, clock overwrites.
+    await _handler(sio, "/pi", "update_scoreboard")("sidPi", {"lane_1": "A", "clock": "00:01.0"})
+    await _handler(sio, "/pi", "update_scoreboard")("sidPi", {"lane_2": "B", "clock": "00:02.0"})
+    await _handler(sio, "/pi", "update_scoreboard")("sidPi", {"clock": "00:03.0"})
+
+    # Nothing emitted yet — still inside the window.
+    relayed = [e for e in emits if e["event"] == "update_scoreboard"
+               and e["namespace"] == "/scoreboard"]
+    assert relayed == []
+
+    # Wait past the flush window.
+    await asyncio.sleep(0.12)
+
+    relayed = [e for e in emits if e["event"] == "update_scoreboard"
+               and e["namespace"] == "/scoreboard"]
+    assert len(relayed) == 1, f"expected one coalesced emit, got {len(relayed)}"
+    assert relayed[0]["data"] == {"lane_1": "A", "lane_2": "B", "clock": "00:03.0"}
+    assert await store.get_state(MEET) == {
+        "lane_1": "A", "lane_2": "B", "clock": "00:03.0",
+    }
+
+
+@pytest.mark.asyncio
+async def test_coalescer_separates_distinct_events():
+    """update_scoreboard and event_info coalesce independently, each flushing
+    one combined HSET+emit per window."""
+    import asyncio
+
+    sio, _, _, emits = _make_sio_with_spies()
+    store = _store()
+    register_handlers(
+        sio, store=store, tenant_id="tid", audience="api://aud",
+        token_validator=_ok_validator, coalesce_window_s=0.05,
+    )
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
+    )
+
+    await _handler(sio, "/pi", "update_scoreboard")("sidPi", {"clock": "00:01.0"})
+    await _handler(sio, "/pi", "event_info")("sidPi", {"event": 1, "heat": 2})
+    await _handler(sio, "/pi", "event_info")("sidPi", {"event": 1, "heat": 3})
+
+    await asyncio.sleep(0.12)
+
+    upd = [e for e in emits if e["event"] == "update_scoreboard"]
+    evi = [e for e in emits if e["event"] == "event_info"]
+    assert len(upd) == 1 and upd[0]["data"] == {"clock": "00:01.0"}
+    assert len(evi) == 1 and evi[0]["data"] == {"event": 1, "heat": 3}
+    state = await store.get_state(MEET)
+    assert state["clock"] == "00:01.0"
+    assert state["event_info"] == {"event": 1, "heat": 3}
