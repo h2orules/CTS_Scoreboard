@@ -558,3 +558,81 @@ In Application Insights → **Alerts** → **Create alert rule** (signal type
 Application Insights → **Workbooks** → **New** → paste each KQL query
 above into a separate timechart tile. Save as "Relay Performance" so
 on-call has one dashboard.
+
+---
+
+## Scaling: KEDA `azure-monitor` rule on `active_sockets`
+
+The Container App ships with two scale rules; KEDA scales to the
+**maximum** desired-replica count across all rules.
+
+| Rule | Type | Trigger | Why it exists |
+|---|---|---|---|
+| `sockets-rule` | KEDA `azure-monitor` | Total `active_sockets` ÷ 80 | Primary signal: steady-state viewer load |
+| `http-rule` | Built-in HTTP | 50 concurrent HTTP requests / replica | Backstop for page-load surges before the upgrade-to-WebSocket lands as a counted socket |
+
+`sockets-rule` queries the `active_sockets` custom metric (published by
+`app/telemetry.py`) on the App Insights resource via the **Monitoring
+Reader** role on the existing user-assigned managed identity (`uami`).
+Both the role assignment and the identity reference are wired in
+`infra/main.bicep`.
+
+### Why the rule was added
+
+In the 400-browser / 305-socket stress test, the existing HTTP rule
+didn't trip until the originating replica's asyncio event loop was
+already saturated, producing 100+ second emit fan-out tails. The new
+rule reacts to socket count directly (Pi sockets are noise — ≤ 1 per
+replica) and asks for ~4 replicas at 305 concurrent viewers (305 / 80).
+Combined with `minReplicas: 2` in prod, the first viewers always land
+on at least two warm workers.
+
+### Tuning
+
+- **`targetValue: '80'`** — chosen from the stress-test data. Above ~120
+  sockets per replica we saw the loop-saturation regime; 80 leaves
+  headroom and is still cheap. Do not raise without re-running the
+  stress test and checking `emit_fanout_seconds` p95.
+- **`metricAggregationType: 'Total'`** — Total sums the per-replica
+  cumulative values returned by the OTel UpDownCounter, so KEDA sees
+  the true global socket count.
+- **`metricAggregationInterval: '0:1:0'`** — matches the OTel SDK's
+  default 60s metric-export interval; smaller windows risk one-replica
+  windows where data hasn't yet exported.
+- **`minReplicas`** — defaults to **2** for prod (was 1) and **0** for
+  preprod (unchanged).
+
+### Verification after deploy
+
+1. Wait ~5 minutes after the first revision is healthy, then in
+   Application Insights → **Logs**:
+   ```kql
+   customMetrics
+   | where timestamp > ago(15m)
+   | where name == "active_sockets"
+   | summarize sockets = sum(valueSum) by bin(timestamp, 1m)
+   ```
+   You should see a non-zero baseline (the Pi connection) within a few
+   minutes of any Pi opening a meet.
+
+2. Confirm the KEDA scaler is healthy. In Azure Portal, on the
+   Container App → **Revisions and replicas** → select a replica →
+   **Console logs**, look for `Found 0 errors` from the KEDA
+   azure-monitor scaler. A `403` here means the Monitoring Reader role
+   hasn't propagated yet — wait 5 min and re-check.
+
+3. Drive synthetic load (≥ 100 sockets) and confirm replica count
+   climbs within ~1–2 minutes (one polling interval + container start).
+
+### Known gotcha — pre-aggregated custom metrics
+
+OTel custom metrics flow to App Insights as both `customMetrics`
+(Log Analytics, always available) and as Azure Monitor metrics under
+namespace `azure.applicationinsights` (used by KEDA). The Azure Monitor
+side requires the App Insights resource to have **custom-metric
+dimensions** enabled to surface arbitrary tags, but `active_sockets` is
+queried *without* a dimension filter, so we only need the aggregated
+metric itself — which is on by default. If a future scaler filters by
+`namespace`, you must enable dimensions on the AI resource (Portal →
+Application Insights → **Usage and estimated costs** → **Custom
+metrics** → "With dimensions").
