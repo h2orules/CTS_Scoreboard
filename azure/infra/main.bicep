@@ -31,7 +31,7 @@ param minReplicas int = environmentName == 'preprod' ? 0 : 2
 // need sticky sessions on the ingress: each connection lives on
 // whichever worker accepts the upgrade for its lifetime, and broadcasts
 // to rooms reach clients on every other worker/replica via Redis.
-param maxReplicas int = environmentName == 'prod' ? 10 : 2
+param maxReplicas int = environmentName == 'prod' ? 20 : 2
 
 @description('Entra tenant ID used to validate Pi access tokens.')
 param entraTenantId string
