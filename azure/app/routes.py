@@ -329,7 +329,7 @@ def build_router(
         bundle = store.get_current_template(meet_id)
         context = store.get_context(meet_id)
         if not bundle or not context:
-            host = escape(meta.get("host_team_name", "")) or "the host"
+            host = escape(meta.get("host_team_name", "")) or "The host"
             return _state_page(
                 title="Connecting to the scoreboard",
                 body=f"<strong>{host}</strong> is online but hasn&rsquo;t "
