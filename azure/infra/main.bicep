@@ -20,7 +20,7 @@ param targetPort int = 8000
 @description('Min replicas for the Container App. 0 enables scale-to-zero (preprod).')
 @minValue(0)
 @maxValue(10)
-param minReplicas int = environmentName == 'preprod' ? 0 : 1
+param minReplicas int = environmentName == 'preprod' ? 0 : 2
 
 @description('Max replicas for the Container App.')
 @minValue(1)
@@ -31,7 +31,7 @@ param minReplicas int = environmentName == 'preprod' ? 0 : 1
 // need sticky sessions on the ingress: each connection lives on
 // whichever worker accepts the upgrade for its lifetime, and broadcasts
 // to rooms reach clients on every other worker/replica via Redis.
-param maxReplicas int = environmentName == 'prod' ? 10 : 2
+param maxReplicas int = environmentName == 'prod' ? 20 : 2
 
 @description('Entra tenant ID used to validate Pi access tokens.')
 param entraTenantId string
@@ -113,6 +113,22 @@ resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
     principalId: uami.properties.principalId
     principalType: 'ServicePrincipal'
     roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
+  }
+}
+
+// Monitoring Reader on Application Insights for the same UAMI. The Container
+// App's KEDA azure-monitor scale rule (defined below) uses this identity to
+// query the `active_sockets` custom metric we publish from app/telemetry.py.
+// Without this role grant, KEDA gets a 403 and falls back to never scaling
+// on the metric (silent failure — verify the new rule fires after deploy).
+resource aiMonitoringReader 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: ai
+  name: guid(ai.id, uami.id, 'MonitoringReader')
+  properties: {
+    principalId: uami.properties.principalId
+    principalType: 'ServicePrincipal'
+    // Monitoring Reader: 43d0d8ad-25c7-4714-9337-8ba259a9fe05
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '43d0d8ad-25c7-4714-9337-8ba259a9fe05')
   }
 }
 
@@ -265,7 +281,43 @@ resource containerApp 'Microsoft.App/containerApps@2024-03-01' = {
       scale: {
         minReplicas: minReplicas
         maxReplicas: maxReplicas
+        // KEDA scales to the MAX desired replicas across all rules. The
+        // sockets-rule is the primary scaling signal for the steady-state
+        // viewer load; http-rule remains as a backstop for page-load
+        // surges (large group of new connections opening at once) that
+        // sockets-rule wouldn't catch until the sockets actually upgraded.
         rules: [
+          {
+            name: 'sockets-rule'
+            custom: {
+              // KEDA azure-monitor scaler reading the custom `active_sockets`
+              // up-down counter published by app/telemetry.py. Total across
+              // all replicas (and both namespaces — /pi adds ≤ 1 per replica)
+              // ≈ current concurrent WebSocket count. Target per-replica is
+              // tuned for the asyncio event-loop ceiling we measured under
+              // load; do not raise above ~120 without re-running the stress
+              // test.
+              type: 'azure-monitor'
+              metadata: {
+                tenantId: subscription().tenantId
+                subscriptionId: subscription().subscriptionId
+                resourceGroupName: resourceGroup().name
+                resourceURI: 'microsoft.insights/components/${aiName}'
+                metricName: 'active_sockets'
+                metricNamespace: 'azure.applicationinsights'
+                // 'Total' aggregates samples across the 1-min export window
+                // and across replicas, so KEDA sees the true total open
+                // socket count. KEDA then divides by targetValue to get the
+                // desired replica count.
+                metricAggregationType: 'Total'
+                metricAggregationInterval: '0:1:0'
+                targetValue: '80'
+                // No activation threshold — minReplicas owns the floor.
+                activationTargetValue: '0'
+              }
+              identity: uami.id
+            }
+          }
           {
             name: 'http-rule'
             http: { metadata: { concurrentRequests: '50' } }
