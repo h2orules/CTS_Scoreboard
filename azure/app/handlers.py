@@ -10,6 +10,7 @@ mirrors state to Redis and fans out to browser viewers in the meet's room.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from contextlib import AbstractContextManager
@@ -104,7 +105,7 @@ def register_handlers(
         sess = await sio.get_session(sid, namespace="/pi")
         meet_id = sess.get(_SESSION_PI_MEET)
         if meet_id:
-            store.mark_status(meet_id, "degraded")
+            await store.mark_status(meet_id, "degraded")
             # Tell viewers their feed went dark.
             with _emit_timer("feed_status"):
                 await sio.emit(
@@ -130,7 +131,7 @@ def register_handlers(
             pi_oid = sess.get(_SESSION_PI_OID, "")
             # Reject if this id is owned by a different Pi. Self-claim is fine
             # (idempotent re-open). "no" means it's free / metadata expired.
-            taken = store.is_meet_id_taken(meet_id, by_account_id=pi_oid)
+            taken = await store.is_meet_id_taken(meet_id, by_account_id=pi_oid)
             if taken == "other":
                 log.warning(
                     "pi meet_open: meet_id=%s already owned by another Pi (oid=%s)",
@@ -140,11 +141,11 @@ def register_handlers(
             # If the Pi previously owned a different id (friendly-name change or
             # Rotate Meet ID), mark the old id expired so old QR codes get the
             # friendly "Link expired" page.
-            prev_id = store.get_pi_meet_id(pi_oid) if pi_oid else None
+            prev_id = await store.get_pi_meet_id(pi_oid) if pi_oid else None
             if prev_id and prev_id != meet_id:
-                store.mark_status(prev_id, "expired_id_rotated")
+                await store.mark_status(prev_id, "expired_id_rotated")
                 log.info("pi meet_open: marked previous meet_id=%s expired_id_rotated", prev_id)
-            store.open_meet(
+            await store.open_meet(
                 meet_id,
                 host_team_name=payload.get("host_team_name", ""),
                 protocol_version=int(payload.get("protocol_version", PROTOCOL_VERSION_CURRENT)),
@@ -163,10 +164,43 @@ def register_handlers(
             meet_id = sess.get(_SESSION_PI_MEET)
             if not meet_id:
                 return
-            store.put_state(meet_id, payload)
             metrics.relay_event_processed.add(1, {"event": "update_scoreboard"})
-            with _emit_timer("update_scoreboard"):
-                await sio.emit("update_scoreboard", payload, room=meet_id, namespace="/scoreboard")
+            # Hottest path in the relay. Overlap the Redis HSET with the
+            # Socket.IO fan-out to halve the critical path: late joiners
+            # hydrating between the two reads from the prior snapshot and
+            # then receive the new emit, converging to the same end state.
+
+            async def _timed_emit() -> None:
+                with _emit_timer("update_scoreboard"):
+                    await sio.emit(
+                        "update_scoreboard",
+                        payload,
+                        room=meet_id,
+                        namespace="/scoreboard",
+                    )
+
+            await asyncio.gather(
+                store.put_state(meet_id, payload),
+                _timed_emit(),
+            )
+
+    async def _put_state_and_emit(
+        meet_id: str, event: str, state_field: dict[str, Any], emit_payload: Any
+    ) -> None:
+        """Overlap an HSET with the corresponding fan-out emit. Mirrors the
+        pattern in on_update_scoreboard and is used by event_info,
+        scores_info, and message_overlay_state — all of which both update
+        cached state (so reconnecting browsers hydrate to the same value)
+        and broadcast a live update."""
+
+        async def _timed_emit() -> None:
+            with _emit_timer(event):
+                await sio.emit(event, emit_payload, room=meet_id, namespace="/scoreboard")
+
+        await asyncio.gather(
+            store.put_state(meet_id, state_field),
+            _timed_emit(),
+        )
 
     @sio.on("event_info", namespace="/pi")
     async def on_event_info(sid: str, payload: dict[str, Any]) -> None:
@@ -176,9 +210,7 @@ def register_handlers(
             if not meet_id:
                 return
             # Treat event_info as part of state so reconnecting browsers hydrate.
-            store.put_state(meet_id, {"event_info": payload})
-            with _emit_timer("event_info"):
-                await sio.emit("event_info", payload, room=meet_id, namespace="/scoreboard")
+            await _put_state_and_emit(meet_id, "event_info", {"event_info": payload}, payload)
 
     @sio.on("scores_info", namespace="/pi")
     async def on_scores_info(sid: str, payload: dict[str, Any]) -> None:
@@ -187,9 +219,7 @@ def register_handlers(
             meet_id = sess.get(_SESSION_PI_MEET)
             if not meet_id:
                 return
-            store.put_state(meet_id, {"scores_info": payload})
-            with _emit_timer("scores_info"):
-                await sio.emit("scores_info", payload, room=meet_id, namespace="/scoreboard")
+            await _put_state_and_emit(meet_id, "scores_info", {"scores_info": payload}, payload)
 
     @sio.on("message_overlay_state", namespace="/pi")
     async def on_message_overlay_state(sid: str, payload: dict[str, Any]) -> None:
@@ -198,14 +228,12 @@ def register_handlers(
             meet_id = sess.get(_SESSION_PI_MEET)
             if not meet_id:
                 return
-            store.put_state(meet_id, {"message_overlay_state": payload})
-            with _emit_timer("message_overlay_state"):
-                await sio.emit(
-                    "message_overlay_state",
-                    payload,
-                    room=meet_id,
-                    namespace="/scoreboard",
-                )
+            await _put_state_and_emit(
+                meet_id,
+                "message_overlay_state",
+                {"message_overlay_state": payload},
+                payload,
+            )
 
     @sio.on("template_push", namespace="/pi")
     async def on_template_push(sid: str, bundle: dict[str, Any]) -> dict[str, Any]:
@@ -214,7 +242,7 @@ def register_handlers(
             meet_id = sess.get(_SESSION_PI_MEET)
             if not meet_id:
                 return {"ok": False, "error": "no meet"}
-            bundle_id = store.put_template(meet_id, bundle)
+            bundle_id = await store.put_template(meet_id, bundle)
             # Tell browsers a new template is available; they re-fetch via HTTP.
             with _emit_timer("template_changed"):
                 await sio.emit(
@@ -232,7 +260,7 @@ def register_handlers(
             meet_id = sess.get(_SESSION_PI_MEET)
             if not meet_id:
                 return {"ok": False, "error": "no meet"}
-            store.put_context(meet_id, context)
+            await store.put_context(meet_id, context)
             return {"ok": True}
 
     @sio.on("reload_clients", namespace="/pi")
@@ -266,7 +294,7 @@ def register_handlers(
             if not meet_id:
                 return {"ok": False, "error": "no meet"}
             names = payload.get("fragments") or []
-            removed = store.invalidate_fragments(meet_id, list(names))
+            removed = await store.invalidate_fragments(meet_id, list(names))
             with _emit_timer("invalidate"):
                 await sio.emit(
                     "invalidate",
@@ -293,7 +321,7 @@ def register_handlers(
             html = payload.get("html")
             if not name or not key or html is None:
                 return
-            store.put_fragment(meet_id, str(name), str(key), str(html))
+            await store.put_fragment(meet_id, str(name), str(key), str(html))
 
     @sio.on("heartbeat", namespace="/pi")
     async def on_heartbeat(sid: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -302,7 +330,7 @@ def register_handlers(
             meet_id = sess.get(_SESSION_PI_MEET)
             if not meet_id:
                 return {"ok": False}
-            store.heartbeat(meet_id)
+            await store.heartbeat(meet_id)
             # Count distinct browser viewers in the meet's room.
             try:
                 participants = sio.manager.get_participants(namespace="/scoreboard", room=meet_id)
@@ -318,7 +346,7 @@ def register_handlers(
             meet_id = sess.get(_SESSION_PI_MEET)
             if not meet_id:
                 return {"ok": False}
-            store.close_meet(meet_id)
+            await store.close_meet(meet_id)
             with _emit_timer("meet_closed"):
                 await sio.emit(
                     "meet_closed", {"meet_id": meet_id}, room=meet_id, namespace="/scoreboard"
@@ -336,7 +364,7 @@ def register_handlers(
             # Allow connection without a meet so the home page can run before
             # the user picks a meet, but they can't join a room yet.
             return None
-        meta = store.get_metadata(meet_id)
+        meta = await store.get_metadata(meet_id)
         if not meta:
             raise socketio.exceptions.ConnectionRefusedError("unknown_meet")
         await sio.enter_room(sid, meet_id, namespace="/scoreboard")
@@ -344,7 +372,7 @@ def register_handlers(
         metrics.browser_connected.add(1, {"meet_id": meet_id})
         metrics.active_sockets.add(1, {"namespace": "/scoreboard"})
         # Hydrate the freshly connected browser with the latest state.
-        state = store.get_state(meet_id)
+        state = await store.get_state(meet_id)
         if state:
             await sio.emit("update_scoreboard", state, to=sid, namespace="/scoreboard")
         await sio.emit(

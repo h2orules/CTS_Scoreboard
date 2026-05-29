@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import fakeredis
+import fakeredis.aioredis
 import pytest
 import socketio
 
@@ -46,7 +46,7 @@ def _make_sio_with_spies():
 
 
 def _store():
-    return MeetStateStore(fakeredis.FakeRedis())
+    return MeetStateStore(fakeredis.aioredis.FakeRedis())
 
 
 def _ok_validator(_token: str) -> PiIdentity:
@@ -118,7 +118,7 @@ async def test_meet_open_writes_metadata_and_notifies_viewers():
         "sidPi", {"meet_id": MEET, "host_team_name": "Foo", "protocol_version": 1}
     )
     assert res == {"ok": True}
-    assert store.get_metadata(MEET)["host_team_name"] == "Foo"
+    assert (await store.get_metadata(MEET))["host_team_name"] == "Foo"
     feed = [e for e in emits if e["event"] == "feed_status" and e["namespace"] == "/scoreboard"]
     assert feed and feed[-1]["data"] == {"status": "live"}
 
@@ -133,7 +133,7 @@ async def test_update_scoreboard_writes_state_and_fanout():
         "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
     )
     await _handler(sio, "/pi", "update_scoreboard")("sidPi", {"clock": "00:30.50"})
-    assert store.get_state(MEET) == {"clock": "00:30.50"}
+    assert await store.get_state(MEET) == {"clock": "00:30.50"}
     relayed = [e for e in emits
                if e["event"] == "update_scoreboard" and e["namespace"] == "/scoreboard"]
     assert relayed and relayed[-1]["room"] == MEET
@@ -152,7 +152,7 @@ async def test_template_push_stores_bundle_and_emits_template_changed():
               "static_files": {}, "partial_files": {}, "template_path": "web/home.html"}
     res = await _handler(sio, "/pi", "template_push")("sidPi", bundle)
     assert res == {"ok": True, "bundle_id": "bid1"}
-    cur = store.get_current_template(MEET)
+    cur = await store.get_current_template(MEET)
     assert cur and cur["bundle_id"] == "bid1"
     changed = [e for e in emits if e["event"] == "template_changed"]
     assert changed and changed[-1]["data"] == {"bundle_id": "bid1"}
@@ -162,8 +162,8 @@ async def test_template_push_stores_bundle_and_emits_template_changed():
 async def test_invalidate_removes_fragments_and_fanout():
     sio, _, _, emits = _make_sio_with_spies()
     store = _store()
-    store.open_meet(MEET, host_team_name="X", protocol_version=1, pi_account_id="oid")
-    store.put_fragment(MEET, "qt", "k1", "<a/>")
+    await store.open_meet(MEET, host_team_name="X", protocol_version=1, pi_account_id="oid")
+    await store.put_fragment(MEET, "qt", "k1", "<a/>")
     register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
                       token_validator=_ok_validator)
     await _handler(sio, "/pi", "connect")(
@@ -171,7 +171,7 @@ async def test_invalidate_removes_fragments_and_fanout():
     )
     res = await _handler(sio, "/pi", "invalidate")("sidPi", {"fragments": ["qt"]})
     assert res["ok"] and res["removed"] == 1
-    assert store.get_fragment(MEET, "qt") is None
+    assert await store.get_fragment(MEET, "qt") is None
     invalidates = [e for e in emits if e["event"] == "invalidate"]
     assert invalidates
 
@@ -180,7 +180,7 @@ async def test_invalidate_removes_fragments_and_fanout():
 async def test_heartbeat_returns_active_client_count():
     sio, _, _, _ = _make_sio_with_spies()
     store = _store()
-    store.open_meet(MEET, host_team_name="X", protocol_version=1, pi_account_id="oid")
+    await store.open_meet(MEET, host_team_name="X", protocol_version=1, pi_account_id="oid")
     register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
                       token_validator=_ok_validator)
     await _handler(sio, "/pi", "connect")(
@@ -207,8 +207,8 @@ async def test_browser_connect_unknown_meet_is_refused():
 async def test_browser_connect_hydrates_with_state():
     sio, _, rooms, emits = _make_sio_with_spies()
     store = _store()
-    store.open_meet(MEET, host_team_name="X", protocol_version=1, pi_account_id="oid")
-    store.put_state(MEET, {"clock": "00:30.50"})
+    await store.open_meet(MEET, host_team_name="X", protocol_version=1, pi_account_id="oid")
+    await store.put_state(MEET, {"clock": "00:30.50"})
     register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
                       token_validator=_ok_validator)
     await _handler(sio, "/scoreboard", "connect")("sidB", {}, {"meet_id": MEET})
@@ -231,7 +231,7 @@ async def test_pi_disconnect_marks_meet_degraded():
         "sidPi", {"meet_id": MEET, "host_team_name": "Foo", "protocol_version": 1}
     )
     await _handler(sio, "/pi", "disconnect")("sidPi")
-    assert store.get_metadata(MEET)["status"] == "degraded"
+    assert (await store.get_metadata(MEET))["status"] == "degraded"
     degraded = [e for e in emits
                 if e["event"] == "feed_status" and e["data"] == {"status": "degraded"}]
     assert degraded
@@ -250,7 +250,7 @@ async def test_meet_context_stored_in_redis():
         "sidPi", {"meet_title": "Foo", "num_lanes": 6}
     )
     assert res == {"ok": True}
-    ctx = store.get_context(MEET)
+    ctx = await store.get_context(MEET)
     assert ctx == {"meet_title": "Foo", "num_lanes": 6}
 
 
@@ -372,7 +372,7 @@ async def test_browser_connect_increments_active_sockets_scoreboard():
 
     sio, *_ = _make_sio_with_spies()
     store = _store()
-    store.open_meet(MEET, host_team_name="X", protocol_version=1, pi_account_id="oid")
+    await store.open_meet(MEET, host_team_name="X", protocol_version=1, pi_account_id="oid")
     register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
                       token_validator=_ok_validator)
     await _handler(sio, "/scoreboard", "connect")("sidB", {}, {"meet_id": MEET})
@@ -390,7 +390,7 @@ async def test_browser_disconnect_decrements_active_sockets_scoreboard():
 
     sio, *_ = _make_sio_with_spies()
     store = _store()
-    store.open_meet(MEET, host_team_name="X", protocol_version=1, pi_account_id="oid")
+    await store.open_meet(MEET, host_team_name="X", protocol_version=1, pi_account_id="oid")
     register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
                       token_validator=_ok_validator)
     await _handler(sio, "/scoreboard", "connect")("sidB", {}, {"meet_id": MEET})
@@ -408,7 +408,7 @@ async def test_meet_open_rejected_when_id_owned_by_other_pi():
     sio, _, _, _ = _make_sio_with_spies()
     store = _store()
     # Pre-claim by a different Pi.
-    store.open_meet(MEET, host_team_name="Other", protocol_version=1, pi_account_id="oid-other")
+    await store.open_meet(MEET, host_team_name="Other", protocol_version=1, pi_account_id="oid-other")
     register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
                       token_validator=_ok_validator)
     await _handler(sio, "/pi", "connect")(
@@ -419,7 +419,7 @@ async def test_meet_open_rejected_when_id_owned_by_other_pi():
     )
     assert res == {"ok": False, "error": "meet_id_taken"}
     # Owner unchanged.
-    assert store.get_metadata(MEET)["host_team_name"] == "Other"
+    assert (await store.get_metadata(MEET))["host_team_name"] == "Other"
 
 
 @pytest.mark.asyncio
@@ -429,7 +429,7 @@ async def test_meet_open_marks_previous_id_expired_when_changed():
     OLD = "oldMeetID12345"
     NEW = "newFriendly-26"
     # Pre-bind under the validator's account_id ("oid-pi").
-    store.open_meet(OLD, host_team_name="Foo", protocol_version=1, pi_account_id="oid-pi")
+    await store.open_meet(OLD, host_team_name="Foo", protocol_version=1, pi_account_id="oid-pi")
     register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
                       token_validator=_ok_validator)
     await _handler(sio, "/pi", "connect")(
@@ -440,9 +440,9 @@ async def test_meet_open_marks_previous_id_expired_when_changed():
     )
     assert res == {"ok": True}
     # Old id marked expired_id_rotated.
-    assert store.get_metadata(OLD)["status"] == "expired_id_rotated"
+    assert (await store.get_metadata(OLD))["status"] == "expired_id_rotated"
     # New id is live.
-    assert store.get_metadata(NEW)["status"] == "live"
+    assert (await store.get_metadata(NEW))["status"] == "live"
 
 
 @pytest.mark.asyncio
@@ -466,8 +466,8 @@ async def test_meet_open_allows_original_owner_to_reclaim_rotated_id():
     store = _store()
     MID = "Midlakes-2026a"
     # _ok_validator returns account_id="oid-pi".
-    store.open_meet(MID, host_team_name="Foo", protocol_version=1, pi_account_id="oid-pi")
-    store.mark_status(MID, "expired_id_rotated")
+    await store.open_meet(MID, host_team_name="Foo", protocol_version=1, pi_account_id="oid-pi")
+    await store.mark_status(MID, "expired_id_rotated")
     register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
                       token_validator=_ok_validator)
     await _handler(sio, "/pi", "connect")(
@@ -477,7 +477,7 @@ async def test_meet_open_allows_original_owner_to_reclaim_rotated_id():
         "sidPi", {"meet_id": MID, "host_team_name": "Foo", "protocol_version": 1}
     )
     assert res == {"ok": True}
-    meta = store.get_metadata(MID)
+    meta = await store.get_metadata(MID)
     assert meta["status"] == "live"
     assert meta["pi_account_id"] == "oid-pi"
 
@@ -491,8 +491,8 @@ async def test_meet_open_rejects_other_pi_reclaiming_rotated_id():
     MID = "Midlakes-2026b"
     # Original owner is "oid-original"; the connecting Pi's validator
     # returns "oid-pi" (different identity).
-    store.open_meet(MID, host_team_name="Orig", protocol_version=1, pi_account_id="oid-original")
-    store.mark_status(MID, "expired_id_rotated")
+    await store.open_meet(MID, host_team_name="Orig", protocol_version=1, pi_account_id="oid-original")
+    await store.mark_status(MID, "expired_id_rotated")
     register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
                       token_validator=_ok_validator)
     await _handler(sio, "/pi", "connect")(
@@ -503,7 +503,7 @@ async def test_meet_open_rejects_other_pi_reclaiming_rotated_id():
     )
     assert res == {"ok": False, "error": "meet_id_taken"}
     # Original metadata unchanged: still owned by oid-original, still rotated.
-    meta = store.get_metadata(MID)
+    meta = await store.get_metadata(MID)
     assert meta["pi_account_id"] == "oid-original"
     assert meta["status"] == "expired_id_rotated"
     assert meta["host_team_name"] == "Orig"
