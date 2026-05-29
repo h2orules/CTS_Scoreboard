@@ -43,13 +43,18 @@ def _format_lane_time(seconds, final=True):
     """
     m = int(seconds) // 60
     s = seconds - m * 60
-    if final:
-        secs_str = '%5.2f' % s   # e.g. '15.87' or ' 5.23'
-    else:
-        secs_str = '%4.1f' % s   # e.g. '15.8' or ' 5.2'
     if m > 0:
+        # With minutes present, zero-pad seconds (e.g. '1:06.40', not '1: 6.40').
+        if final:
+            secs_str = '%05.2f' % s
+        else:
+            secs_str = '%04.1f' % s
         out = '%d:%s' % (m, secs_str)
     else:
+        if final:
+            secs_str = '%5.2f' % s   # e.g. '15.87' or ' 5.23'
+        else:
+            secs_str = '%4.1f' % s   # e.g. '15.8' or ' 5.2'
         out = secs_str
     return out.rjust(8)
 
