@@ -574,8 +574,38 @@ The Container App ships with two scale rules; KEDA scales to the
 `sockets-rule` queries the `active_sockets` custom metric (published by
 `app/telemetry.py`) on the App Insights resource via the **Monitoring
 Reader** role on the existing user-assigned managed identity (`uami`).
-Both the role assignment and the identity reference are wired in
-`infra/main.bicep`.
+The scale rule and identity reference are wired in `infra/main.bicep`;
+the role assignment itself is a **one-time manual step** (see below) —
+it isn't declared in Bicep because the GitHub Actions service principal
+that runs `azure-infra-deploy` has an RBAC condition that allows only
+the AcrPull role id, and widening that condition trades narrow CI scope
+for declarative-infra purity.
+
+### One-time Monitoring Reader grant (per environment)
+
+After the first Bicep deploy creates the UAMI and the App Insights
+resource, run this once per environment as a tenant admin (or anyone
+with `Microsoft.Authorization/roleAssignments/write` on the AI scope):
+
+```bash
+# Preprod (swap RG/name suffixes for prod)
+ENV="preprod"     # or prod
+RG="cts-scoreboard-$ENV"
+UAMI_PRINCIPAL_ID=$(az identity show \
+  -g "$RG" -n "cts-sb-$ENV-uami" --query principalId -o tsv)
+AI_ID=$(az monitor app-insights component show \
+  -g "$RG" -a "cts-sb-$ENV-ai" --query id -o tsv)
+
+az role assignment create \
+  --assignee-object-id "$UAMI_PRINCIPAL_ID" \
+  --assignee-principal-type ServicePrincipal \
+  --role "Monitoring Reader" \
+  --scope "$AI_ID"
+```
+
+`--assignee-object-id` (not `--assignee`) avoids a Graph lookup that
+fails on UAMI principals. Propagation takes 2–5 minutes; the KEDA
+scaler logs `403` until it lands.
 
 ### Why the rule was added
 
