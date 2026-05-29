@@ -61,8 +61,13 @@ def build_app(
         connection_string=settings.applicationinsights_connection_string,
         environment=settings.environment,
     )
-    redis_handle = redis_client or redis_async.from_url(
-        settings.redis_url, decode_responses=False
+    redis_handle = redis_client or redis_sync.from_url(
+        settings.redis_url,
+        decode_responses=False,
+        health_check_interval=30,
+        socket_keepalive=True,
+        socket_timeout=60,
+        socket_connect_timeout=10,
     )
     store = MeetStateStore(redis_handle)
 
@@ -128,7 +133,21 @@ def build_app(
     # settings.redis_url that fakeredis can't intercept.
     client_manager = None
     if redis_client is None:
-        client_manager = socketio.AsyncRedisManager(settings.redis_url)
+        # Azure Container Apps' load balancer silently drops idle TCP
+        # connections after a few minutes. The Socket.IO pubsub subscriber
+        # blocks indefinitely with no traffic, so without health checks the
+        # connection gets reset and we see "Cannot receive from redis...
+        # retrying in 1 secs" on every cycle. health_check_interval makes
+        # the redis client send PING every 30s, keeping the connection alive.
+        client_manager = socketio.AsyncRedisManager(
+            settings.redis_url,
+            redis_options={
+                "health_check_interval": 30,
+                "socket_keepalive": True,
+                "socket_timeout": 60,
+                "socket_connect_timeout": 10,
+            },
+        )
 
     sio: socketio.AsyncServer = socketio.AsyncServer(
         async_mode="asgi",

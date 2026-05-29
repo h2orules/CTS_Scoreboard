@@ -1676,6 +1676,7 @@ azure_relay_client = AzureRelayClient(
     relay_url=_active_azure_urls()[0],
     bundle_provider=_azure_bundle_provider,
     context_provider=_azure_context_provider,
+    host_team_name_provider=lambda: settings.get('team_home', '') or '',
 )
 # Worker thread is started later, after load_settings(), so the relay URL is
 # populated first. See the block near the bottom of this module.
