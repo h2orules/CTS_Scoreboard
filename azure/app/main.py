@@ -4,7 +4,8 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import Any
 
-import redis as redis_sync
+import orjson
+import redis.asyncio as redis_async
 import socketio
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse, PlainTextResponse
@@ -25,22 +26,42 @@ from app.telemetry import configure_telemetry
 from app.watchdog import MeetWatchdog
 
 
+class _OrjsonForSocketIO:
+    """Adapter so python-socketio can use orjson as its serializer.
+
+    socketio calls ``self.json.dumps(...)`` expecting a ``str`` return; orjson
+    returns ``bytes`` and rejects the ``separators=`` kwarg socketio passes
+    for compact encoding. The shim handles both. Net effect: every Socket.IO
+    packet serialization (including every ``await sio.emit(...)``) skips the
+    stdlib ``json`` codepath, which the stress test showed dominates CPU on
+    the worker that holds the Pi connection.
+    """
+
+    @staticmethod
+    def dumps(obj: Any, **_kwargs: Any) -> str:
+        return orjson.dumps(obj).decode("utf-8")
+
+    @staticmethod
+    def loads(s: Any, **_kwargs: Any) -> Any:
+        return orjson.loads(s)
+
+
 def build_app(
     *,
-    redis_client=None,
-    token_validator=None,
+    redis_client: Any = None,
+    token_validator: Any = None,
 ) -> tuple[FastAPI, socketio.AsyncServer, Any]:
     """Construct the FastAPI app, Socket.IO server, and ASGI composite.
 
     ``redis_client`` and ``token_validator`` are overridable so tests can
-    inject ``fakeredis.FakeRedis`` and stub auth.
+    inject ``fakeredis.aioredis.FakeRedis`` and stub auth.
     """
     settings = get_settings()
     configure_telemetry(
         connection_string=settings.applicationinsights_connection_string,
         environment=settings.environment,
     )
-    redis_handle = redis_client or redis_sync.from_url(
+    redis_handle = redis_client or redis_async.from_url(
         settings.redis_url,
         decode_responses=False,
         health_check_interval=30,
@@ -55,7 +76,21 @@ def build_app(
         app.state.settings = settings
         app.state.redis = redis_handle
         app.state.store = store
-        yield
+        try:
+            yield
+        finally:
+            # Close the async Redis pool on shutdown so connections aren't
+            # leaked between hot reloads in development. No-op on fakeredis.
+            close = getattr(redis_handle, "aclose", None) or getattr(
+                redis_handle, "close", None
+            )
+            if close is not None:
+                try:
+                    result = close()
+                    if hasattr(result, "__await__"):
+                        await result
+                except Exception:  # pragma: no cover - best-effort
+                    pass
 
     fastapi_app = FastAPI(
         title="Swimming Scoreboard Azure Relay",
@@ -118,6 +153,7 @@ def build_app(
         async_mode="asgi",
         cors_allowed_origins="*",
         client_manager=client_manager,
+        json=_OrjsonForSocketIO,
     )
 
     register_handlers(

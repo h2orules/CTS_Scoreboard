@@ -66,8 +66,11 @@ class MeetWatchdog:
         """One pass over all active meets. Public for unit tests."""
         now = self._clock()
         metrics = get_metrics()
-        for meet_id in list(self.store.iter_active_meet_ids()):
-            meta = self.store.get_metadata(meet_id)
+        # Materialize the meet-id list first so the SCAN cursor isn't held
+        # open while emit/mark_status/close_meet are inflight below.
+        meet_ids: list[str] = [m async for m in self.store.iter_active_meet_ids()]
+        for meet_id in meet_ids:
+            meta = await self.store.get_metadata(meet_id)
             if not meta:
                 continue
             status = meta.get("status")
@@ -76,7 +79,7 @@ class MeetWatchdog:
             last_hb = float(meta.get("last_heartbeat") or 0.0)
             age = now - last_hb
             if age >= self.close_after_s:
-                self.store.close_meet(meet_id)
+                await self.store.close_meet(meet_id)
                 metrics.meet_closed.add(1, {"meet_id": meet_id, "reason": "heartbeat_timeout"})
                 await self._emit(
                     "meet_closed",
@@ -89,7 +92,7 @@ class MeetWatchdog:
                     meet_id, age,
                 )
             elif age >= self.degraded_after_s and status != "degraded":
-                self.store.mark_status(meet_id, "degraded")
+                await self.store.mark_status(meet_id, "degraded")
                 metrics.meet_degraded.add(1, {"meet_id": meet_id})
                 await self._emit(
                     "feed_status",
