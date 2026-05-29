@@ -230,6 +230,7 @@ class AzureRelayClient:
         msal_app_factory: Callable[..., Any] | None = None,
         bundle_provider: Callable[[], dict[str, Any] | None] | None = None,
         context_provider: Callable[[], dict[str, Any] | None] | None = None,
+        host_team_name_provider: Callable[[], str] | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self.creds_file = creds_file
@@ -239,6 +240,7 @@ class AzureRelayClient:
         self._msal_factory = msal_app_factory
         self._bundle_provider = bundle_provider
         self._context_provider = context_provider
+        self._host_team_name_provider = host_team_name_provider
         self._clock = clock
 
         self._lock = threading.RLock()
@@ -762,8 +764,15 @@ class AzureRelayClient:
         logger.info("relay: socket connected, sending meet_open")
 
         # Send meet_open handshake so Azure registers the meet.
+        host_team_name = ""
+        if self._host_team_name_provider is not None:
+            try:
+                host_team_name = self._host_team_name_provider() or ""
+            except Exception:
+                logger.exception("relay: host_team_name_provider raised")
         client.emit("meet_open", {
             "meet_id": creds.meet_id,
+            "host_team_name": host_team_name,
             "protocol_version": self.protocol_version,
         }, namespace="/pi")
 
