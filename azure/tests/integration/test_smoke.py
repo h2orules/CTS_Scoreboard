@@ -5,7 +5,7 @@ don't reach out to Azure.
 """
 from __future__ import annotations
 
-import fakeredis
+import fakeredis.aioredis
 import pytest
 from fastapi.testclient import TestClient
 
@@ -15,7 +15,7 @@ from app.state import MeetStateStore
 
 @pytest.fixture
 def app_and_store():
-    fake = fakeredis.FakeRedis()
+    fake = fakeredis.aioredis.FakeRedis()
     fastapi_app, _sio, _asgi = build_app(
         redis_client=fake,
         token_validator=lambda token: {"oid": "x", "tid": "y"},
@@ -41,17 +41,17 @@ def test_unknown_meet_returns_404(app_and_store):
     assert res.status_code == 404
 
 
-def test_open_meet_renders_through_router(app_and_store):
+async def test_open_meet_renders_through_router(app_and_store):
     client, store = app_and_store
     meet_id = "smoketest12345"
-    store.open_meet(
+    await store.open_meet(
         meet_id,
         host_team_name="Smoke Test",
         protocol_version=1,
         pi_account_id="oid",
     )
     bundle_id = "b1"
-    store.put_template(
+    await store.put_template(
         meet_id,
         {
             "bundle_id": bundle_id,
@@ -60,7 +60,7 @@ def test_open_meet_renders_through_router(app_and_store):
             "static_files": {},
         },
     )
-    store.put_context(meet_id, {"meet_title": "Smoke", "num_lanes": 6})
+    await store.put_context(meet_id, {"meet_title": "Smoke", "num_lanes": 6})
     res = client.get(f"/m/{meet_id}")
     assert res.status_code == 200
     assert "id='r'" in res.text or 'id="r"' in res.text

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import base64
 
-import fakeredis
+import fakeredis.aioredis
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -16,7 +16,7 @@ MEET = "abc123XYZ7890ab"
 
 @pytest.fixture
 def store():
-    return MeetStateStore(fakeredis.FakeRedis())
+    return MeetStateStore(fakeredis.aioredis.FakeRedis())
 
 
 @pytest.fixture
@@ -32,8 +32,8 @@ def client(app_with_store):
     return TestClient(app)
 
 
-def _seed_live_meet(store, *, meet_id=MEET, with_template=True, with_context=True):
-    store.open_meet(meet_id, host_team_name="HostU", protocol_version=1, pi_account_id="oid")
+async def _seed_live_meet(store, *, meet_id=MEET, with_template=True, with_context=True):
+    await store.open_meet(meet_id, host_team_name="HostU", protocol_version=1, pi_account_id="oid")
     if with_template:
         bundle = {
             "bundle_id": "bid1",
@@ -53,9 +53,9 @@ def _seed_live_meet(store, *, meet_id=MEET, with_template=True, with_context=Tru
             },
             "partial_files": {},
         }
-        store.put_template(meet_id, bundle)
+        await store.put_template(meet_id, bundle)
     if with_context:
-        store.put_context(meet_id, {"meet_title": "My Meet & Co"})
+        await store.put_context(meet_id, {"meet_title": "My Meet & Co"})
 
 
 def test_unknown_meet_returns_404(client):
@@ -74,9 +74,9 @@ def test_too_short_meet_id_format(client):
     assert r.status_code == 400
 
 
-def test_live_meet_renders_template(client, app_with_store):
+async def test_live_meet_renders_template(client, app_with_store):
     _, store = app_with_store
-    _seed_live_meet(store)
+    await _seed_live_meet(store)
     r = client.get(f"/m/{MEET}")
     assert r.status_code == 200
     assert "<title>My Meet &amp; Co</title>" in r.text
@@ -89,43 +89,43 @@ def test_live_meet_renders_template(client, app_with_store):
     assert "io.connect('http://'" not in r.text
 
 
-def test_closed_meet_returns_closed_page(client, app_with_store):
+async def test_closed_meet_returns_closed_page(client, app_with_store):
     _, store = app_with_store
-    _seed_live_meet(store)
-    store.close_meet(MEET)
+    await _seed_live_meet(store)
+    await store.close_meet(MEET)
     r = client.get(f"/m/{MEET}")
     assert r.status_code == 200
     assert "No meet in session" in r.text
     assert "HostU" in r.text
 
 
-def test_expired_id_rotated_returns_410(client, app_with_store):
+async def test_expired_id_rotated_returns_410(client, app_with_store):
     _, store = app_with_store
-    _seed_live_meet(store)
-    store.mark_status(MEET, "expired_id_rotated")
+    await _seed_live_meet(store)
+    await store.mark_status(MEET, "expired_id_rotated")
     r = client.get(f"/m/{MEET}")
     assert r.status_code == 410
     assert "Link expired" in r.text
 
 
-def test_meet_starting_up_when_no_template(client, app_with_store):
+async def test_meet_starting_up_when_no_template(client, app_with_store):
     _, store = app_with_store
-    _seed_live_meet(store, with_template=False)
+    await _seed_live_meet(store, with_template=False)
     r = client.get(f"/m/{MEET}")
     assert r.status_code == 503
     assert "Connecting" in r.text
 
 
-def test_meet_starting_up_when_no_context(client, app_with_store):
+async def test_meet_starting_up_when_no_context(client, app_with_store):
     _, store = app_with_store
-    _seed_live_meet(store, with_context=False)
+    await _seed_live_meet(store, with_context=False)
     r = client.get(f"/m/{MEET}")
     assert r.status_code == 503
 
 
-def test_static_asset_served_with_immutable_cache(client, app_with_store):
+async def test_static_asset_served_with_immutable_cache(client, app_with_store):
     _, store = app_with_store
-    _seed_live_meet(store)
+    await _seed_live_meet(store)
     r = client.get(f"/m/{MEET}/static/bid1/css/x.css")
     assert r.status_code == 200
     assert r.content == b"body{color:red}"
@@ -133,31 +133,31 @@ def test_static_asset_served_with_immutable_cache(client, app_with_store):
     assert "immutable" in r.headers["cache-control"]
 
 
-def test_static_asset_unknown_path(client, app_with_store):
+async def test_static_asset_unknown_path(client, app_with_store):
     _, store = app_with_store
-    _seed_live_meet(store)
+    await _seed_live_meet(store)
     r = client.get(f"/m/{MEET}/static/bid1/nope.css")
     assert r.status_code == 404
 
 
-def test_static_asset_unknown_bundle(client, app_with_store):
+async def test_static_asset_unknown_bundle(client, app_with_store):
     _, store = app_with_store
-    _seed_live_meet(store)
+    await _seed_live_meet(store)
     r = client.get(f"/m/{MEET}/static/wrongbid/css/x.css")
     assert r.status_code == 404
 
 
-def test_static_asset_rejects_path_traversal(client, app_with_store):
+async def test_static_asset_rejects_path_traversal(client, app_with_store):
     _, store = app_with_store
-    _seed_live_meet(store)
+    await _seed_live_meet(store)
     r = client.get(f"/m/{MEET}/static/bid1/../../etc/passwd")
     assert r.status_code in (400, 404)
 
 
-def test_old_bundle_id_still_serves_assets_after_template_rotation(client, app_with_store):
+async def test_old_bundle_id_still_serves_assets_after_template_rotation(client, app_with_store):
     """Browsers caching an old page must still load their pinned assets."""
     _, store = app_with_store
-    _seed_live_meet(store)
+    await _seed_live_meet(store)
     # Roll a new bundle.
     new_bundle = {
         "bundle_id": "bid2",
@@ -166,7 +166,7 @@ def test_old_bundle_id_still_serves_assets_after_template_rotation(client, app_w
         "static_files": {"css/x.css": base64.b64encode(b"body{color:blue}").decode("ascii")},
         "partial_files": {},
     }
-    store.put_template(MEET, new_bundle)
+    await store.put_template(MEET, new_bundle)
     # Old asset URL still works.
     old = client.get(f"/m/{MEET}/static/bid1/css/x.css")
     assert old.status_code == 200
@@ -213,9 +213,9 @@ def test_render_url_for_only_supports_static():
     "a" * 10,
     "z" * 20,
 ])
-def test_meet_page_accepts_valid_friendly_id(client, app_with_store, good):
+async def test_meet_page_accepts_valid_friendly_id(client, app_with_store, good):
     _, store = app_with_store
-    _seed_live_meet(store, meet_id=good)
+    await _seed_live_meet(store, meet_id=good)
     r = client.get(f"/m/{good}")
     assert r.status_code == 200
 
@@ -283,10 +283,10 @@ def test_availability_free_name_returns_available(client_with_validator):
     assert data == {"available": True, "owner": None}
 
 
-def test_availability_self_owned_is_available(client_with_validator):
+async def test_availability_self_owned_is_available(client_with_validator):
     client, store = client_with_validator
     name = "Midlakes-2026"
-    store.open_meet(name, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
+    await store.open_meet(name, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
     r = client.get(
         f"/internal/meet_id/{name}/availability",
         headers={"Authorization": "Bearer good-oid1"},
@@ -296,10 +296,10 @@ def test_availability_self_owned_is_available(client_with_validator):
     assert data == {"available": True, "owner": "self"}
 
 
-def test_availability_other_owned_is_unavailable(client_with_validator):
+async def test_availability_other_owned_is_unavailable(client_with_validator):
     client, store = client_with_validator
     name = "Midlakes-2026"
-    store.open_meet(name, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
+    await store.open_meet(name, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
     r = client.get(
         f"/internal/meet_id/{name}/availability",
         headers={"Authorization": "Bearer good-oid2"},
@@ -309,12 +309,12 @@ def test_availability_other_owned_is_unavailable(client_with_validator):
     assert data == {"available": False, "owner": "other"}
 
 
-def test_availability_rotated_id_is_self_for_original_owner(client_with_validator):
+async def test_availability_rotated_id_is_self_for_original_owner(client_with_validator):
     # The original owner can still reclaim a rotated name until TTL elapses.
     client, store = client_with_validator
     name = "Midlakes-2026"
-    store.open_meet(name, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
-    store.mark_status(name, "expired_id_rotated")
+    await store.open_meet(name, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
+    await store.mark_status(name, "expired_id_rotated")
     r = client.get(
         f"/internal/meet_id/{name}/availability",
         headers={"Authorization": "Bearer good-oid1"},
@@ -323,13 +323,13 @@ def test_availability_rotated_id_is_self_for_original_owner(client_with_validato
     assert r.json() == {"available": True, "owner": "self"}
 
 
-def test_availability_rotated_id_is_other_for_different_user(client_with_validator):
+async def test_availability_rotated_id_is_other_for_different_user(client_with_validator):
     # A different user must not be able to claim a name the original owner
     # rotated away from.
     client, store = client_with_validator
     name = "Midlakes-2026"
-    store.open_meet(name, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
-    store.mark_status(name, "expired_id_rotated")
+    await store.open_meet(name, host_team_name="A", protocol_version=1, pi_account_id="oid-1")
+    await store.mark_status(name, "expired_id_rotated")
     r = client.get(
         f"/internal/meet_id/{name}/availability",
         headers={"Authorization": "Bearer good-oid2"},

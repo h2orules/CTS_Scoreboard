@@ -1,7 +1,7 @@
 """Tests for the public marketing pages (homepage, terms, privacy)."""
 from __future__ import annotations
 
-import fakeredis
+import fakeredis.aioredis
 import pytest
 from fastapi.testclient import TestClient
 
@@ -12,7 +12,7 @@ from app.main import build_app
 def client():
     """Real composed app so the StaticFiles mount and Jinja templates are wired in."""
     fastapi_app, _sio, _asgi = build_app(
-        redis_client=fakeredis.FakeRedis(),
+        redis_client=fakeredis.aioredis.FakeRedis(),
         token_validator=lambda _t: (_ for _ in ()).throw(AssertionError("unused in these tests")),
     )
     return TestClient(fastapi_app)

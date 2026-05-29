@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import fakeredis
+import fakeredis.aioredis
 import pytest
 import socketio
 from fastapi.testclient import TestClient
@@ -54,7 +54,7 @@ async def test_pi_open_meet_then_browser_renders():
     """Pi opens a meet + pushes template/state, watchdog runs a tick,
     browser GET /m/<id> renders the meet."""
     reset_for_tests()
-    fake = fakeredis.FakeRedis()
+    fake = fakeredis.aioredis.FakeRedis()
     store = MeetStateStore(fake)
 
     # 1. Pi side: register handlers, simulate connect + meet_open + template push.
@@ -112,10 +112,10 @@ async def test_pi_open_meet_then_browser_renders():
         clock=get_clock,
     )
     # Push heartbeat into the past so age >= close_after_s.
-    store.heartbeat(MEET)
+    await store.heartbeat(MEET)
     clock[0] += 60.0
     await wd.tick()
-    assert store.get_metadata(MEET).get("status") == "closed"
+    assert (await store.get_metadata(MEET)).get("status") == "closed"
 
     # 4. Telemetry: meet_opened was recorded (stub mode) and at least one
     #    meet_closed counter increment happened.

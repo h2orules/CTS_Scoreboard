@@ -7,6 +7,7 @@ module renders that snapshot for any anonymous viewer who knows the meet ID.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import re
@@ -292,7 +293,7 @@ def build_router(
                 footer="Double-check the URL and try again.",
             )
 
-        meta = store.get_metadata(meet_id)
+        meta = await store.get_metadata(meet_id)
         if not meta:
             return _state_page(
                 title="No meet found",
@@ -326,8 +327,12 @@ def build_router(
                 footer="Check back at the next scheduled meet.",
             )
 
-        bundle = store.get_current_template(meet_id)
-        context = store.get_context(meet_id)
+        # Both fetches are independent; overlap them so the page-load TTFB
+        # absorbs one Redis RTT instead of two.
+        bundle, context = await asyncio.gather(
+            store.get_current_template(meet_id),
+            store.get_context(meet_id),
+        )
         if not bundle or not context:
             host = escape(meta.get("host_team_name", "")) or "the host"
             return _state_page(
@@ -368,17 +373,9 @@ def build_router(
         # Look up the cached bundle. Note: we honor the bundle_id from the URL
         # (not the current bundle), so old browsers with a cached page can keep
         # loading their pinned assets while a new bundle rolls out.
-        from app.state import MeetKeys
-
-        raw = store._r.get(MeetKeys(meet_id).template(bundle_id))
-        if not raw:
+        bundle = await store.get_template_blob(meet_id, bundle_id)
+        if not bundle:
             return Response(status_code=404)
-        import json
-
-        try:
-            bundle = json.loads(raw if isinstance(raw, str) else raw.decode("utf-8"))
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return Response(status_code=500)
 
         files = bundle.get("static_files") or {}
         b64 = files.get(path)
@@ -394,10 +391,10 @@ def build_router(
             headers={"Cache-Control": "public, max-age=31536000, immutable"},
         )
 
-    def _serve_fragment(meet_id: str, name: str, request: Request) -> Response:
+    async def _serve_fragment(meet_id: str, name: str, request: Request) -> Response:
         if not _is_valid_meet_id(meet_id):
             return Response(status_code=400)
-        got = store.get_fragment(meet_id, name)
+        got = await store.get_fragment(meet_id, name)
         if not got:
             # Match the Pi behavior: empty 200 (template treats this as "no
             # content yet" and renders nothing).
@@ -414,15 +411,15 @@ def build_router(
 
     @router.get("/m/{meet_id}/api/qualifying-info")
     async def meet_qualifying_info(meet_id: str, request: Request) -> Response:
-        return _serve_fragment(meet_id, "qualifying_info", request)
+        return await _serve_fragment(meet_id, "qualifying_info", request)
 
     @router.get("/m/{meet_id}/api/message-page/{index}")
     async def meet_message_page(meet_id: str, index: int, request: Request) -> Response:
-        return _serve_fragment(meet_id, f"message_page_{index}", request)
+        return await _serve_fragment(meet_id, f"message_page_{index}", request)
 
     @router.get("/m/{meet_id}/api/footer-message")
     async def meet_footer_message(meet_id: str, request: Request) -> Response:
-        return _serve_fragment(meet_id, "footer_message", request)
+        return await _serve_fragment(meet_id, "footer_message", request)
 
     @router.get("/internal/meet_id/{name}/availability")
     async def meet_id_availability(
@@ -456,7 +453,7 @@ def build_router(
                 },
                 status_code=400,
             )
-        taken = store.is_meet_id_taken(name, by_account_id=identity.account_id)
+        taken = await store.is_meet_id_taken(name, by_account_id=identity.account_id)
         return JSONResponse(
             {
                 "available": taken != "other",
