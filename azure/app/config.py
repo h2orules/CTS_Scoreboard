@@ -81,6 +81,9 @@ class Settings(BaseSettings):
 
     # ---- telemetry ----
     applicationinsights_connection_string: str = Field(default="")
+    # How often to poll Redis ``INFO`` for memory / clients / ops/sec stats
+    # that feed observable gauges. 0 disables the poller entirely.
+    redis_info_scrape_seconds: float = Field(default=30.0, ge=0.0, le=300.0)
 
 
 @lru_cache(maxsize=1)

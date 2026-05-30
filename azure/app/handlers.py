@@ -85,6 +85,7 @@ def register_handlers(
     # ============================================================
     _pending: dict[tuple[str, str], dict[str, Any]] = {}
     _pending_wrap: dict[tuple[str, str], str | None] = {}
+    _pending_count: dict[tuple[str, str], int] = {}
     _pending_tasks: dict[tuple[str, str], asyncio.Task[None]] = {}
 
     async def _put_state_and_emit_now(
@@ -111,9 +112,15 @@ def register_handlers(
         key = (meet_id, event)
         payload = _pending.pop(key, None)
         wrap_key = _pending_wrap.pop(key, None)
+        merged_count = _pending_count.pop(key, 0)
         _pending_tasks.pop(key, None)
         if not payload:
             return
+        metrics.coalescer_batches_flushed.add(1, {"event": event})
+        if merged_count > 0:
+            metrics.coalescer_batch_size.record(
+                float(merged_count), {"event": event}
+            )
         await _put_state_and_emit_now(
             meet_id, event, {wrap_key: payload} if wrap_key else payload, payload
         )
@@ -126,8 +133,11 @@ def register_handlers(
     ) -> None:
         """Either run put_state+emit immediately (window == 0) or merge
         into the pending buffer and ensure a flush task is scheduled."""
+        metrics.coalescer_events_in.add(1, {"event": event})
         if coalesce_window_s <= 0:
             state_field = {state_wrap_key: payload} if state_wrap_key else payload
+            metrics.coalescer_batches_flushed.add(1, {"event": event})
+            metrics.coalescer_batch_size.record(1.0, {"event": event})
             await _put_state_and_emit_now(meet_id, event, state_field, payload)
             return
         key = (meet_id, event)
@@ -135,8 +145,10 @@ def register_handlers(
         if pending is None:
             _pending[key] = dict(payload)
             _pending_wrap[key] = state_wrap_key
+            _pending_count[key] = 1
         else:
             pending.update(payload)
+            _pending_count[key] = _pending_count.get(key, 0) + 1
         if key not in _pending_tasks:
             _pending_tasks[key] = asyncio.create_task(
                 _flush_coalesced(meet_id, event)
@@ -151,6 +163,7 @@ def register_handlers(
             task = _pending_tasks.pop(key, None)
             _pending.pop(key, None)
             _pending_wrap.pop(key, None)
+            _pending_count.pop(key, None)
             if task is not None and not task.done():
                 task.cancel()
 

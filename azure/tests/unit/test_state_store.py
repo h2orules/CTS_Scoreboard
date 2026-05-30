@@ -347,3 +347,45 @@ async def test_close_meet_clears_caches():
     assert s._fragment_cache.get((mid, "footer", "k1")) is None
     assert s._current_template_cache.get(mid) is None
     assert s._template_blob_cache.get((mid, "b1")) is None
+
+
+# ============================================================
+# Cache hit/miss telemetry counters
+# ============================================================
+
+async def test_cache_hit_miss_counters_recorded():
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    r = fakeredis.aioredis.FakeRedis()
+    s = MeetStateStore(r, fragment_cache_ttl=5.0)
+    mid = "c" * 15
+    await s.put_fragment(mid, "footer", "k1", "<p>hi</p>")
+    # put_fragment seeds the cache, so clear it to exercise the miss path.
+    s._fragment_cache.clear()
+    # First read after clear: cache empty -> miss + uncached fetch fills cache.
+    await s.get_fragment(mid, "footer", "k1")
+    # Second read: hit.
+    await s.get_fragment(mid, "footer", "k1")
+    m = get_metrics()
+    hit_ops = [attrs["op"] for _, attrs in m.cache_hits.events if attrs]
+    miss_ops = [attrs["op"] for _, attrs in m.cache_misses.events if attrs]
+    assert hit_ops.count("get_fragment") == 1
+    assert miss_ops.count("get_fragment") == 1
+
+
+async def test_cache_miss_not_recorded_when_cache_disabled():
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+    r = fakeredis.aioredis.FakeRedis()
+    s = MeetStateStore(r, fragment_cache_ttl=0.0)  # disabled
+    mid = "d" * 15
+    await s.put_fragment(mid, "footer", "k1", "<p>hi</p>")
+    await s.get_fragment(mid, "footer", "k1")
+    m = get_metrics()
+    # Cache disabled: every read still goes through the "miss" path
+    # (cache.get -> None) so misses ARE counted; hits stay zero because
+    # the cache never serves a value.
+    miss_ops = [attrs["op"] for _, attrs in m.cache_misses.events if attrs]
+    hit_ops = [attrs["op"] for _, attrs in m.cache_hits.events if attrs]
+    assert miss_ops.count("get_fragment") == 1
+    assert hit_ops.count("get_fragment") == 0

@@ -101,9 +101,22 @@ def build_app(
         app.state.settings = settings
         app.state.redis = redis_handle
         app.state.store = store
+        scale_tel = None
+        if settings.redis_info_scrape_seconds > 0:
+            from app.scale_telemetry import ScaleTelemetry
+
+            scale_tel = ScaleTelemetry(
+                store=store,
+                redis=redis_handle,
+                poll_interval_s=settings.redis_info_scrape_seconds,
+            )
+            scale_tel.start()
+            app.state.scale_telemetry = scale_tel
         try:
             yield
         finally:
+            if scale_tel is not None:
+                await scale_tel.stop()
             # Close the async Redis pool on shutdown so connections aren't
             # leaked between hot reloads in development. No-op on fakeredis.
             close = getattr(redis_handle, "aclose", None) or getattr(
