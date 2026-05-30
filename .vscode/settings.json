@@ -4,5 +4,19 @@
     "python.testing.unittestEnabled": false,
     "python.testing.pytestArgs": [
         "tests"
-    ]
+    ],
+
+    // ---- Ruff (matches azure/pyproject.toml [tool.ruff] config) ----
+    // The Ruff extension auto-discovers the nearest pyproject.toml, so files
+    // under azure/ pick up that config and files in the repo root use the
+    // root pyproject.toml. Lint + import-sort run on save.
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.formatOnSave": true,
+        "editor.codeActionsOnSave": {
+            "source.fixAll.ruff": "explicit",
+            "source.organizeImports.ruff": "explicit"
+        }
+    },
+    "ruff.nativeServer": "on"
 }
