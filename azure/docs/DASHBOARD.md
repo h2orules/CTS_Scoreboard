@@ -90,8 +90,8 @@ Eviction & expiration counters (Stat tile, "delta since start"):
 customMetrics
 | where name == "redis_keys_lifecycle_total"
 | extend key_kind = tostring(customDimensions["kind"])
-| summarize last = max(value), first = min(value) by key_kind
-| extend delta = last - first
+| summarize last_v = max(value), first_v = min(value) by key_kind
+| extend delta = last_v - first_v
 | project key_kind, delta
 ```
 
@@ -166,34 +166,58 @@ is too long for responsive UI; consider halving it.
 
 **Batch size distribution** (stat or bar):
 
+> Azure Monitor stores OTel histograms pre-aggregated per export
+> interval. `value` is the **sum** of all observations in that
+> interval (not a single observation), so `percentile(value, ...)`
+> would give percentiles of per-interval totals, not per-batch sizes.
+> Use `valueSum / valueCount` for the true mean batch size and
+> `max(valueMax)` for the largest batch in the window.
+
 ```kusto
 customMetrics
 | where name == "coalescer_batch_size"
 | extend event = tostring(customDimensions["event"])
-| summarize p50 = percentile(value, 50),
-            p95 = percentile(value, 95),
-            p99 = percentile(value, 99),
-            mx  = max(value)
+| summarize avg_batch = sum(valueSum) / sum(valueCount),
+            max_batch = max(valueMax),
+            min_batch = min(valueMin),
+            batches   = sum(valueCount)
         by bin(timestamp, 1m), event
+| render timechart
 ```
 
 **Tuning rule of thumb during the reconnect storm:**
 
-- p95 batch_size < 3 → window is shorter than the natural inter-frame
+- avg_batch < 2 → window is shorter than the natural inter-frame
   gap; you're getting almost no compression. Increase
   `coalesce_window_seconds` (e.g. 0.1 → 0.2) and retest.
-- p95 batch_size 5–15 → ideal; ratio gives ~5–15× emit reduction.
-- p95 batch_size > 30 → too aggressive; UI feels laggy. Drop the
-  window (e.g. 0.1 → 0.05).
+- avg_batch 3–10 (max_batch 5–20) → ideal; compression ratio (panel
+  6 above) gives roughly the same factor in emit reduction.
+- max_batch > 50 sustained → too aggressive; UI feels laggy. Drop
+  the window (e.g. 0.1 → 0.05).
 
 ## 7. HTTP route latency (auto-instrumented, Workbook chart)
 
 FastAPI is auto-instrumented by `azure-monitor-opentelemetry`. These
 land in the `requests` table, not `customMetrics`.
 
+> If these queries return *no data*, first verify what's actually
+> arriving with:
+>
+> ```kusto
+> requests
+> | summarize cnt = count(), sample_name = any(name)
+>           by cloud_RoleName
+> ```
+>
+> Container Apps doesn't set `cloud_RoleName` from your code — it
+> defaults to the container app name (e.g. `cts-sb-prod-app`), not
+> "relay". Either drop the filter, switch the filter to match your
+> actual role name, or set `OTEL_SERVICE_NAME=cts-relay` as an env
+> var on the Container App so the role name matches the original
+> filter below.
+
 ```kusto
 requests
-| where cloud_RoleName has "relay"
 | summarize p50 = percentile(duration, 50),
             p95 = percentile(duration, 95),
             p99 = percentile(duration, 99),
@@ -202,14 +226,20 @@ requests
 | render timechart
 ```
 
-Filter to viewer page loads only (where C1/C2 matters most):
+Filter to viewer page loads and per-meet API fragments (where C1/C2
+matters most):
 
 ```kusto
 requests
-| where name has "fragment" or name has "template" or name has "/view/"
+| where name matches regex @"/m/\{meet_id\}(/|$)"
 | summarize p95 = percentile(duration, 95) by bin(timestamp, 30s), name
 | render timechart
 ```
+
+> The FastAPI OTel instrumentation uses the **route template** (with
+> path-parameter placeholders) as `requests.name`, e.g.
+> `GET /m/{meet_id}` or `GET /m/{meet_id}/api/qualifying-info/{key}`.
+> If you ever rename those routes, update this filter to match.
 
 ## 8. (Deferred) Socket.IO pub/sub depth
 
@@ -221,11 +251,19 @@ backing up:
 ```kusto
 customMetrics
 | where name == "emit_fanout_seconds"
-| summarize p50 = percentile(value, 50),
-            p95 = percentile(value, 95)
+| summarize avg_s = sum(valueSum) / sum(valueCount),
+            max_s = max(valueMax),
+            emits = sum(valueCount)
         by bin(timestamp, 30s)
 | render timechart
 ```
+
+> Same histogram caveat as panel 6: App Insights stores OTel
+> histograms pre-aggregated, so use `valueSum / valueCount` (mean
+> fan-out latency) and `max(valueMax)` (worst single fan-out in the
+> interval) instead of `percentile(value, ...)`. The `redis_op_seconds`
+> and `event_handler_seconds` histograms work the same way — apply the
+> same pattern if you add panels for them.
 
 A dedicated `pubsub_channels` / `pubsub_patterns` gauge already lands
 under `redis_pubsub` (item 4 source); a sustained increase there during
