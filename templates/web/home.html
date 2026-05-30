@@ -892,6 +892,16 @@
             raceState = s["race_state"];
             console.log("Race state:", prevState, "→", raceState);
 
+            // If the race has moved past Finished, drop any in-flight
+            // confetti particles. When the tab is in the background,
+            // requestAnimationFrame is paused, so particles spawned during
+            // a Finished state can sit in the DOM and only start animating
+            // when the tab becomes visible again — long after the race
+            // has actually moved on.
+            if (raceState !== "Finished") {
+                document.querySelectorAll('.confetti-particle').forEach(function (el) { el.remove(); });
+            }
+
             // All *PreRace states trigger the same reset
             if (raceState === "PreRace" || raceState === "ClearPreRace" ||
                 raceState === "BlankPreRace" || raceState === "TotalBlankPreRace") {
