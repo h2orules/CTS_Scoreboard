@@ -574,3 +574,40 @@ async def test_coalescer_separates_distinct_events():
     state = await store.get_state(MEET)
     assert state["clock"] == "00:01.0"
     assert state["event_info"] == {"event": 1, "heat": 3}
+
+
+@pytest.mark.asyncio
+async def test_coalescer_records_telemetry_counters():
+    """events_in counts every Pi frame; batches_flushed once per window;
+    batch_size records the merged-frame count for that batch."""
+    import asyncio
+
+    from app.telemetry import get_metrics, reset_for_tests
+    reset_for_tests()
+
+    sio, _, _, _ = _make_sio_with_spies()
+    store = _store()
+    register_handlers(
+        sio, store=store, tenant_id="tid", audience="api://aud",
+        token_validator=_ok_validator, coalesce_window_s=0.05,
+    )
+    await _handler(sio, "/pi", "connect")(
+        "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
+    )
+
+    # Three frames into one window -> 3 events_in, 1 flush, batch_size=3.
+    await _handler(sio, "/pi", "update_scoreboard")("sidPi", {"clock": "1"})
+    await _handler(sio, "/pi", "update_scoreboard")("sidPi", {"clock": "2"})
+    await _handler(sio, "/pi", "update_scoreboard")("sidPi", {"clock": "3"})
+    await asyncio.sleep(0.12)
+
+    m = get_metrics()
+    in_for_us = [v for v, attrs in m.coalescer_events_in.events
+                 if attrs and attrs.get("event") == "update_scoreboard"]
+    flushed_for_us = [v for v, attrs in m.coalescer_batches_flushed.events
+                      if attrs and attrs.get("event") == "update_scoreboard"]
+    size_for_us = [v for v, attrs in m.coalescer_batch_size.events
+                   if attrs and attrs.get("event") == "update_scoreboard"]
+    assert sum(in_for_us) == 3
+    assert sum(flushed_for_us) == 1
+    assert size_for_us == [3.0]

@@ -48,6 +48,10 @@ class Metrics:
     active_sockets: Any
     pi_connections: Any
     cache_hits: Any
+    cache_misses: Any
+    coalescer_events_in: Any
+    coalescer_batches_flushed: Any
+    coalescer_batch_size: Any
 
     @classmethod
     def stub(cls) -> Metrics:
@@ -64,6 +68,10 @@ class Metrics:
             active_sockets=_StubUpDownCounter(),
             pi_connections=_StubUpDownCounter(),
             cache_hits=_StubCounter(),
+            cache_misses=_StubCounter(),
+            coalescer_events_in=_StubCounter(),
+            coalescer_batches_flushed=_StubCounter(),
+            coalescer_batch_size=_StubHistogram(),
         )
 
 
@@ -201,6 +209,18 @@ def configure_telemetry(
                 active_sockets=meter.create_up_down_counter("active_sockets"),
                 pi_connections=meter.create_up_down_counter("pi_connections"),
                 cache_hits=meter.create_counter("cache_hits"),
+                cache_misses=meter.create_counter("cache_misses"),
+                coalescer_events_in=meter.create_counter(
+                    "coalescer_events_in"
+                ),
+                coalescer_batches_flushed=meter.create_counter(
+                    "coalescer_batches_flushed"
+                ),
+                coalescer_batch_size=meter.create_histogram(
+                    "coalescer_batch_size",
+                    unit="{events}",
+                    description="Number of Pi events merged into one coalesced flush.",
+                ),
             )
         except Exception:  # pragma: no cover - log + fall back to stub
             logging.exception("azure-monitor init failed; using stub metrics")

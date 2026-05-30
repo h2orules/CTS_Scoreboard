@@ -98,6 +98,11 @@ def test_configure_registers_new_metric_fields():
     assert isinstance(m.emit_fanout_seconds, _StubHistogram)
     assert isinstance(m.active_sockets, _StubUpDownCounter)
     assert isinstance(m.pi_connections, _StubUpDownCounter)
+    assert isinstance(m.cache_hits, _StubCounter)
+    assert isinstance(m.cache_misses, _StubCounter)
+    assert isinstance(m.coalescer_events_in, _StubCounter)
+    assert isinstance(m.coalescer_batches_flushed, _StubCounter)
+    assert isinstance(m.coalescer_batch_size, _StubHistogram)
 
 
 def test_record_latency_writes_one_observation():
