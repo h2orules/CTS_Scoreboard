@@ -1468,6 +1468,12 @@ def ws_scoreboard():
         
     send_event_info()
     send_scores_info()
+    # Replay snapshot to JUST this client so a fresh page load reflects the
+    # current race (e.g. finished lane times when reloading mid-Finished).
+    # send_event_info/send_scores_info above are broadcasts that updated the
+    # snapshot too; replaying it now adds the per-race fields they omit.
+    if _last_scoreboard_state:
+        flask_socketio.emit('update_scoreboard', dict(_last_scoreboard_state))
 
 @socketio.on('next_heat', namespace='/scoreboard')
 def ws_next_heat(d):
@@ -1682,6 +1688,29 @@ azure_relay_client = AzureRelayClient(
 # populated first. See the block near the bottom of this module.
 
 
+# Rolling snapshot of the most recent scoreboard fields, kept so that a
+# late-connecting (or reloading) client can be brought up to date without
+# waiting for the next serial broadcast. Per-race fields (lane_time/place/
+# running + running_time) are dropped when current_event or current_heat
+# changes so we never replay times from a prior race.
+_last_scoreboard_state: dict = {}
+_PER_RACE_KEY_PREFIXES = ('lane_time', 'lane_place', 'lane_running')
+
+
+def _update_scoreboard_snapshot(update):
+    new_event = update.get('current_event')
+    new_heat = update.get('current_heat')
+    drop_stale = (
+        (new_event is not None and new_event != _last_scoreboard_state.get('current_event'))
+        or (new_heat is not None and new_heat != _last_scoreboard_state.get('current_heat'))
+    )
+    if drop_stale:
+        for k in list(_last_scoreboard_state.keys()):
+            if k.startswith(_PER_RACE_KEY_PREFIXES) or k == 'running_time':
+                del _last_scoreboard_state[k]
+    _last_scoreboard_state.update(update)
+
+
 def broadcast_scoreboard(update):
     """Emit an update_scoreboard payload to local browsers AND forward to Azure.
 
@@ -1694,6 +1723,7 @@ def broadcast_scoreboard(update):
     relay's ``meet_open`` handshake is enough — no separate "enabled"
     toggle.
     """
+    _update_scoreboard_snapshot(update)
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
     # forward_event() is non-blocking and thread-safe; safe to call even
     # when the relay is in NEEDS_AUTH or DISCONNECTED.
