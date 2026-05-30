@@ -124,12 +124,11 @@ def test_update_ad_rotation_resets_when_none_enabled(clean_ad_state):
 
 
 def _png_bytes():
-    """Return a minimal valid 1x1 transparent PNG."""
-    return bytes.fromhex(
-        '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4'
-        '890000000d49444154789c6300010000000500010d0a2db40000000049454e44'
-        'ae426082'
-    )
+    """Return a small valid PNG (Pillow-decodable)."""
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new('RGBA', (2, 2), color=(255, 0, 0, 255)).save(buf, format='PNG')
+    return buf.getvalue()
 
 
 def test_upload_appends_to_ad_images(logged_in_client, clean_ad_state):

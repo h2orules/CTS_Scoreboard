@@ -24,6 +24,7 @@
         on_timer();
         window.setInterval(on_timer, 30000);
         initScoreboardAutoFit();
+        preloadAdImages();
     }
 
     // Auto-fit: if the scoreboard group would overflow the available
@@ -180,6 +181,7 @@
             <button type="button" onclick="socket.emit('sim_load_event', {});">Load Test Event</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'start'});">▶ Start</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'finish'});">🏁 Finish</button>
+            <button type="button" onclick="socket.emit('sim_step', {step:'reset'});">↺ Reset</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'clear'});">Clear</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'blank'});">Blank</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'total_blank'});">Total Blank</button>
@@ -263,6 +265,24 @@
     var activeAdIndex = {{ active_ad_index | tojson }};
     var _adActiveLayer = 'a';   // which layer ('a' or 'b') is currently shown
     var AD_STATIC_BASE = {{ url_for('static', filename='ad/') | tojson }};
+    var _adPreloaded = {};      // src -> Image (keeps the entry alive in the browser cache)
+
+    // Pre-fetch every enabled ad once so rotation later is purely an
+    // opacity swap with no network round-trips (the Pi serves these with
+    // Cache-Control: immutable). Safe to call repeatedly — entries already
+    // in _adPreloaded are skipped.
+    function preloadAdImages() {
+        if (!Array.isArray(adImages)) return;
+        for (var i = 0; i < adImages.length; i++) {
+            var entry = adImages[i];
+            if (!entry || !entry.enabled || !entry.filename) continue;
+            var src = AD_STATIC_BASE + entry.filename;
+            if (_adPreloaded[src]) continue;
+            var img = new Image();
+            img.src = src;
+            _adPreloaded[src] = img;
+        }
+    }
 
     function renderAdRotation() {
         var layerA = document.getElementById('ad_layer_a');
@@ -283,6 +303,16 @@
         var nextEl   = (_adActiveLayer === 'a') ? layerB : layerA;
         // If active layer already shows this image (e.g. first paint), nothing to do.
         if (activeEl.getAttribute('src') === newSrc && activeEl.style.opacity !== '0') {
+            return;
+        }
+        // If the inactive layer already has this src loaded from a prior
+        // rotation, just swap opacities. Re-setting src on the element
+        // re-fetches (best case a 304 revalidation), which is wasteful
+        // on every rotation step — particularly on the Azure relay.
+        if (nextEl.getAttribute('src') === newSrc && nextEl.complete && nextEl.naturalWidth > 0) {
+            nextEl.style.opacity = '1';
+            activeEl.style.opacity = '0';
+            _adActiveLayer = (_adActiveLayer === 'a') ? 'b' : 'a';
             return;
         }
         // Preload onto inactive layer, then swap opacities for a cross-fade.
@@ -355,6 +385,15 @@
         if (!showConfetti) return;
         if (isMessageOverlayActive()) return;
         if (raceState !== "Running" && raceState !== "Finished") return;
+        // requestAnimationFrame is paused while the tab is hidden, so any
+        // particles spawned now would just sit in the DOM and start
+        // animating when the user comes back — long after the race has
+        // moved on. Mark the lane as fired so we don't retroactively
+        // spawn when the tab becomes visible.
+        if (typeof document !== 'undefined' && document.hidden) {
+            confettiFired[lane] = true;
+            return;
+        }
         if (confettiFired[lane]) return;
         confettiFired[lane] = true;
         var rect = targetEl.getBoundingClientRect();
@@ -722,6 +761,16 @@
         resetLaneQualifications();
         confettiFired = {};
         laneTimes = {};
+        // Pull fresh seed times out of the same payload BEFORE rendering,
+        // so updateSeedTimeDisplay doesn't paint stale values from the
+        // previous event. The generic forEach below also assigns these,
+        // but it runs after the race_state branch, which is too late.
+        for (var key in s) {
+            if (Object.prototype.hasOwnProperty.call(s, key)) {
+                var m = key.match(/^lane_seed_time(\d+)$/);
+                if (m) laneSeedTimes[m[1]] = s[key];
+            }
+        }
         // Only re-render qualifying info when full event data is present
         // (send_event_info includes these; parse_line serial updates do not)
         if ("qualifying_times" in s || "record_sets" in s) {
@@ -783,6 +832,21 @@
         socket.emit('set_event_heat', { event: {{ test_event }}, heat: {{ test_heat or 1 }}});
     {% endif %}
     });
+
+    // On full page reload the server sends the same race_state ("PreRace"
+    // most often) that we already initialized from initial_race_state, so
+    // the WebSocket race_state branch never fires onPreRaceEntry / paints
+    // the seed-time column. Paint it now from the server-pre-populated
+    // laneSeedTimes so the column header + cells are correct on first paint.
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function () {
+                updateSeedTimeDisplay(raceState);
+            });
+        } else {
+            updateSeedTimeDisplay(raceState);
+        }
+    }
 
     var currentEvent = {{ test_event or 1 }};
     var currentHeat = {{ test_heat or 1 }};
@@ -956,9 +1020,19 @@
                 laneSeedTimes[seedMatch[1]] = s[k];
             }
 
-            // Check and update lane running
+            // Check and update lane running. Re-entering the running
+            // state for a lane means a new race attempt has begun, so
+            // clear the confetti latch so the next Finished frame can
+            // fire again (covers Start → Finish → Start → Finish in
+            // test mode, where the FSM may not transition through
+            // Running on the server).
             if (k.startsWith("lane_running")) {
-                lane_running[k.replace("lane_running", "")] = s[k];
+                var laneNum = k.replace("lane_running", "");
+                var wasRunning = lane_running[laneNum] || false;
+                lane_running[laneNum] = s[k];
+                if (s[k] && !wasRunning) {
+                    delete confettiFired[laneNum];
+                }
             }
 
         })
@@ -1031,7 +1105,7 @@
         }
 
         var adChanged = false;
-        if ("ad_images" in s) { adImages = s["ad_images"] || []; adChanged = true; }
+        if ("ad_images" in s) { adImages = s["ad_images"] || []; adChanged = true; preloadAdImages(); }
         if ("active_ad_index" in s) { activeAdIndex = s["active_ad_index"]; adChanged = true; }
         if (adChanged) {
             renderAdRotation();
@@ -1054,6 +1128,19 @@
     // Initialise QR overlay visibility on page load (race-state may already
     // dictate hidden, e.g. mid-race reload).
     updateQrOverlay();
+
+    // When the tab becomes visible again, drop any confetti that was
+    // spawned (or queued mid-animation) while it was hidden. Browsers
+    // pause requestAnimationFrame for hidden tabs, so otherwise the
+    // particles would start animating from scratch when the user comes
+    // back, even if the race has long since moved past Finished.
+    if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) {
+                document.querySelectorAll('.confetti-particle').forEach(function (el) { el.remove(); });
+            }
+        });
+    }
 
 </script>
 

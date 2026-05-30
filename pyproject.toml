@@ -17,6 +17,7 @@ dependencies = [
     "python-socketio[client]",
     "requests",
     "segno",
+    "pillow>=10.0",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
 ]
@@ -38,6 +39,7 @@ testpaths = ["tests"]
 packages = ["."]
 only-include = [
     "CTS_Scoreboard.py",
+    "ad_image.py",
     "ap.py",
     "hytek_event_loader.py",
     "hytek_rec_parser.py",

@@ -71,6 +71,8 @@ settings = {
     # Files live in static/ad/. Order in the list is rotation order.
     'ad_images': [],
     'ad_rotation_interval': 30,
+    # Max dimension (px) for the longer edge after upload-time resize.
+    'ad_max_dimension': 1920,
     'num_lanes': 6,
     'pool_course': 'SCY',
     'show_pr_tags': True,
@@ -146,7 +148,8 @@ app = flask.Flask(__name__)
 # config
 app.config.update(
     DEBUG = False,
-    SECRET_KEY = 'redacted-secret-key'
+    SECRET_KEY = 'redacted-secret-key',
+    MAX_CONTENT_LENGTH = 5 * 1024 * 1024,
 )
 socketio = flask_socketio.SocketIO(app)
 
@@ -1468,6 +1471,12 @@ def ws_scoreboard():
         
     send_event_info()
     send_scores_info()
+    # Replay snapshot to JUST this client so a fresh page load reflects the
+    # current race (e.g. finished lane times when reloading mid-Finished).
+    # send_event_info/send_scores_info above are broadcasts that updated the
+    # snapshot too; replaying it now adds the per-race fields they omit.
+    if _last_scoreboard_state:
+        flask_socketio.emit('update_scoreboard', dict(_last_scoreboard_state))
 
 @socketio.on('next_heat', namespace='/scoreboard')
 def ws_next_heat(d):
@@ -1682,6 +1691,29 @@ azure_relay_client = AzureRelayClient(
 # populated first. See the block near the bottom of this module.
 
 
+# Rolling snapshot of the most recent scoreboard fields, kept so that a
+# late-connecting (or reloading) client can be brought up to date without
+# waiting for the next serial broadcast. Per-race fields (lane_time/place/
+# running + running_time) are dropped when current_event or current_heat
+# changes so we never replay times from a prior race.
+_last_scoreboard_state: dict = {}
+_PER_RACE_KEY_PREFIXES = ('lane_time', 'lane_place', 'lane_running')
+
+
+def _update_scoreboard_snapshot(update):
+    new_event = update.get('current_event')
+    new_heat = update.get('current_heat')
+    drop_stale = (
+        (new_event is not None and new_event != _last_scoreboard_state.get('current_event'))
+        or (new_heat is not None and new_heat != _last_scoreboard_state.get('current_heat'))
+    )
+    if drop_stale:
+        for k in list(_last_scoreboard_state.keys()):
+            if k.startswith(_PER_RACE_KEY_PREFIXES) or k == 'running_time':
+                del _last_scoreboard_state[k]
+    _last_scoreboard_state.update(update)
+
+
 def broadcast_scoreboard(update):
     """Emit an update_scoreboard payload to local browsers AND forward to Azure.
 
@@ -1694,6 +1726,7 @@ def broadcast_scoreboard(update):
     relay's ``meet_open`` handshake is enough — no separate "enabled"
     toggle.
     """
+    _update_scoreboard_snapshot(update)
     socketio.emit('update_scoreboard', update, namespace='/scoreboard')
     # forward_event() is non-blocking and thread-safe; safe to call even
     # when the relay is in NEEDS_AUTH or DISCONNECTED.
@@ -1730,7 +1763,34 @@ def api_message_page(index, key):
 def api_footer_message(key):
     return _serve_cached_fragment('footer_message', key)
 
-        
+
+@app.after_request
+def _long_cache_ad_files(resp):
+    # Ad filenames are UUID-based on upload (settings_routes.py), so a
+    # given URL always maps to the same bytes for the life of the file.
+    # Mark them immutable so browsers don't keep revalidating each
+    # rotation step. The settings UI's delete path makes the URL go
+    # away rather than reusing it with new content.
+    path = flask.request.path or ''
+    if path.startswith('/static/ad/'):
+        resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    return resp
+
+
+@app.errorhandler(413)
+def _ad_upload_too_large(_e):
+    # Flask aborts large uploads before our route runs. Return a small
+    # message with a back link rather than the default HTML error page.
+    return (
+        '<!doctype html><meta charset="utf-8">'
+        '<title>Upload too large</title>'
+        '<h1>Upload too large</h1>'
+        '<p>Ad uploads are limited to 5 MB per file. '
+        '<a href="/settings">Back to Settings</a></p>',
+        413,
+    )
+
+
 @app.route("/test")
 @flask_login.login_required
 def route_test():

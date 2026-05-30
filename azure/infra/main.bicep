@@ -308,8 +308,10 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
               // all replicas (and both namespaces — /pi adds ≤ 1 per replica)
               // ≈ current concurrent WebSocket count. Target per-replica is
               // tuned for the asyncio event-loop ceiling we measured under
-              // load; do not raise above ~120 without re-running the stress
-              // test.
+              // load. Re-validate with the stress test before raising it
+              // further — the per-replica cache + coalescer-off path mean
+              // each replica can comfortably hold this many sticky sockets
+              // at <10% CPU.
               type: 'azure-monitor'
               metadata: {
                 tenantId: subscription().tenantId
@@ -324,7 +326,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
                 // desired replica count.
                 metricAggregationType: 'Total'
                 metricAggregationInterval: '0:1:0'
-                targetValue: '50'
+                targetValue: '120'
                 // No activation threshold — minReplicas owns the floor.
                 activationTargetValue: '0'
               }
@@ -352,7 +354,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
                 metricNamespace: 'azure.applicationinsights'
                 metricAggregationType: 'Average'
                 metricAggregationInterval: '0:1:0'
-                targetValue: '60'
+                targetValue: '100'
                 activationTargetValue: '0'
               }
               identity: uami.id
@@ -360,7 +362,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
           }
           {
             name: 'http-rule'
-            http: { metadata: { concurrentRequests: '50' } }
+            http: { metadata: { concurrentRequests: '200' } }
           }
         ]
       }
