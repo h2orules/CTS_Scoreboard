@@ -66,18 +66,24 @@ async def test_put_state_empty_payload_is_noop(store):
 async def test_fragments_round_trip(store):
     mid = "m" * 15
     await store.put_fragment(mid, "qualifying_info", "abc123", "<div>QT</div>")
-    got = await store.get_fragment(mid, "qualifying_info")
-    assert got == ("abc123", "<div>QT</div>")
+    got = await store.get_fragment(mid, "qualifying_info", "abc123")
+    assert got == "<div>QT</div>"
 
 
-async def test_invalidate_fragments_removes_them(store):
+async def test_get_fragment_unknown_key_returns_none(store):
     mid = "m" * 15
-    await store.put_fragment(mid, "f1", "k1", "<a/>")
-    await store.put_fragment(mid, "f2", "k2", "<b/>")
-    removed = await store.invalidate_fragments(mid, ["f1", "f2", "missing"])
-    assert removed == 2
-    assert await store.get_fragment(mid, "f1") is None
-    assert await store.get_fragment(mid, "f2") is None
+    await store.put_fragment(mid, "qualifying_info", "abc123", "<div>QT</div>")
+    assert await store.get_fragment(mid, "qualifying_info", "otherkey") is None
+
+
+async def test_put_fragment_distinct_keys_coexist(store):
+    """Two different content versions live under different Redis keys, so
+    older browsers holding a stale key can still serve."""
+    mid = "m" * 15
+    await store.put_fragment(mid, "qt", "k1", "<a>v1</a>")
+    await store.put_fragment(mid, "qt", "k2", "<a>v2</a>")
+    assert await store.get_fragment(mid, "qt", "k1") == "<a>v1</a>"
+    assert await store.get_fragment(mid, "qt", "k2") == "<a>v2</a>"
 
 
 async def test_template_storage_idempotent_on_bundle_id(store):
@@ -254,24 +260,23 @@ async def test_get_fragment_hits_cache_within_ttl():
     mid = "f" * 15
     await s.put_fragment(mid, "footer", "k1", "<p>hi</p>")
     # Tamper with Redis behind the store: if cache works, we never see this.
-    await r.delete(f"meet:{mid}:fragment:footer")
-    got = await s.get_fragment(mid, "footer")
-    assert got == ("k1", "<p>hi</p>")
+    await r.delete(f"meet:{mid}:fragment:footer:k1")
+    got = await s.get_fragment(mid, "footer", "k1")
+    assert got == "<p>hi</p>"
 
 
-async def test_get_fragment_invalidates_on_put_and_invalidate():
-    """put_fragment refreshes the local cache; invalidate_fragments drops it."""
+async def test_get_fragment_new_key_misses_old_cache_entry():
+    """A different key is a different cache entry — no risk of stale 304s
+    after the content-hash refactor."""
     r = fakeredis.aioredis.FakeRedis()
     s = MeetStateStore(r, fragment_cache_ttl=60.0)
     mid = "f" * 15
     await s.put_fragment(mid, "footer", "k1", "<p>a</p>")
-    assert (await s.get_fragment(mid, "footer")) == ("k1", "<p>a</p>")
-    # New write must be reflected immediately on this replica.
+    assert (await s.get_fragment(mid, "footer", "k1")) == "<p>a</p>"
     await s.put_fragment(mid, "footer", "k2", "<p>b</p>")
-    assert (await s.get_fragment(mid, "footer")) == ("k2", "<p>b</p>")
-    # invalidate drops it; underlying delete already happened.
-    await s.invalidate_fragments(mid, ["footer"])
-    assert await s.get_fragment(mid, "footer") is None
+    assert (await s.get_fragment(mid, "footer", "k2")) == "<p>b</p>"
+    # Both keys remain independently cacheable.
+    assert (await s.get_fragment(mid, "footer", "k1")) == "<p>a</p>"
 
 
 async def test_fragment_cache_disabled_with_ttl_zero():
@@ -281,8 +286,24 @@ async def test_fragment_cache_disabled_with_ttl_zero():
     mid = "f" * 15
     await s.put_fragment(mid, "footer", "k1", "<p>hi</p>")
     # Delete behind the store; with caching disabled, the read must miss.
-    await r.delete(f"meet:{mid}:fragment:footer")
-    assert await s.get_fragment(mid, "footer") is None
+    await r.delete(f"meet:{mid}:fragment:footer:k1")
+    assert await s.get_fragment(mid, "footer", "k1") is None
+
+
+async def test_fragment_cache_evicts_oldest_at_capacity():
+    """FIFO eviction when max_entries is reached."""
+    r = fakeredis.aioredis.FakeRedis()
+    s = MeetStateStore(r, fragment_cache_ttl=60.0, fragment_cache_max_entries=2)
+    mid = "f" * 15
+    await s.put_fragment(mid, "a", "k1", "A")
+    await s.put_fragment(mid, "b", "k2", "B")
+    await s.put_fragment(mid, "c", "k3", "C")  # evicts "a"
+    # "a" is gone from cache; deleting Redis behind it proves it has to refetch.
+    await r.delete(f"meet:{mid}:fragment:a:k1")
+    assert await s.get_fragment(mid, "a", "k1") is None
+    # "c" is fresh in cache; Redis-side delete doesn't matter.
+    await r.delete(f"meet:{mid}:fragment:c:k3")
+    assert await s.get_fragment(mid, "c", "k3") == "C"
 
 
 async def test_template_blob_cache_immutable_per_bundle_id():
@@ -323,6 +344,6 @@ async def test_close_meet_clears_caches():
     await s.put_template(mid, {"bundle_id": "b1", "template_text": "x"})
     await s.close_meet(mid)
     # Both caches must be empty for this meet.
-    assert s._fragment_cache.get((mid, "footer")) is None
+    assert s._fragment_cache.get((mid, "footer", "k1")) is None
     assert s._current_template_cache.get(mid) is None
     assert s._template_blob_cache.get((mid, "b1")) is None

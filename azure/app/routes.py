@@ -49,6 +49,10 @@ _VALID_PATH_RE = re.compile(r"^[A-Za-z0-9._/+-]+$")
 # JS helper in static/js/meet_id.js: 10-20 chars, [A-Za-z0-9_-] only.
 MEET_ID_RE = re.compile(r"^[A-Za-z0-9_-]{10,20}$")
 
+# Content-addressed fragment keys are SHA-256 first 12 hex chars (see
+# CTS_Scoreboard._cache_put). Lock the route down to that shape.
+_FRAGMENT_KEY_RE = re.compile(r"^[0-9a-f]{12}$")
+
 
 def _is_valid_meet_id(meet_id: str) -> bool:
     return bool(MEET_ID_RE.match(meet_id))
@@ -391,35 +395,41 @@ def build_router(
             headers={"Cache-Control": "public, max-age=31536000, immutable"},
         )
 
-    async def _serve_fragment(meet_id: str, name: str, request: Request) -> Response:
+    async def _serve_fragment(meet_id: str, name: str, key: str) -> Response:
         if not _is_valid_meet_id(meet_id):
             return Response(status_code=400)
-        got = await store.get_fragment(meet_id, name)
-        if not got:
-            # Match the Pi behavior: empty 200 (template treats this as "no
-            # content yet" and renders nothing).
-            return Response(b"", media_type="text/html; charset=utf-8")
-        key, html = got
-        etag = f'"{key}"'
-        if request.headers.get("if-none-match") == etag:
-            return Response(status_code=304)
+        if not _FRAGMENT_KEY_RE.match(key):
+            return Response(status_code=400)
+        html = await store.get_fragment(meet_id, name, key)
+        if html is None:
+            # Browser is asking for a key this replica doesn't have yet (or
+            # one that has expired). Returning 404 lets the browser fall
+            # back to its inline initial render and try again on the next
+            # update_scoreboard event, which carries the current key.
+            return Response(status_code=404)
         return Response(
             html.encode("utf-8"),
             media_type="text/html; charset=utf-8",
-            headers={"ETag": etag, "Cache-Control": "public, max-age=60"},
+            headers={
+                # Content-addressed URL → response can never go stale, so we
+                # mark it immutable for a year. ETag is retained for any
+                # well-behaved proxy that revalidates anyway.
+                "Cache-Control": "public, max-age=31536000, immutable",
+                "ETag": f'"{key}"',
+            },
         )
 
-    @router.get("/m/{meet_id}/api/qualifying-info")
-    async def meet_qualifying_info(meet_id: str, request: Request) -> Response:
-        return await _serve_fragment(meet_id, "qualifying_info", request)
+    @router.get("/m/{meet_id}/api/qualifying-info/{key}")
+    async def meet_qualifying_info(meet_id: str, key: str) -> Response:
+        return await _serve_fragment(meet_id, "qualifying_info", key)
 
-    @router.get("/m/{meet_id}/api/message-page/{index}")
-    async def meet_message_page(meet_id: str, index: int, request: Request) -> Response:
-        return await _serve_fragment(meet_id, f"message_page_{index}", request)
+    @router.get("/m/{meet_id}/api/message-page/{index}/{key}")
+    async def meet_message_page(meet_id: str, index: int, key: str) -> Response:
+        return await _serve_fragment(meet_id, f"message_page_{index}", key)
 
-    @router.get("/m/{meet_id}/api/footer-message")
-    async def meet_footer_message(meet_id: str, request: Request) -> Response:
-        return await _serve_fragment(meet_id, "footer_message", request)
+    @router.get("/m/{meet_id}/api/footer-message/{key}")
+    async def meet_footer_message(meet_id: str, key: str) -> Response:
+        return await _serve_fragment(meet_id, "footer_message", key)
 
     @router.get("/internal/meet_id/{name}/availability")
     async def meet_id_availability(

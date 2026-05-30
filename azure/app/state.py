@@ -38,11 +38,14 @@ MeetStatus = Literal["live", "degraded", "closed", "expired_id_rotated"]
 STATE_TTL = 24 * 3600
 METADATA_TTL = 14 * 24 * 3600  # keep metadata 2 weeks for "no live meet" pages
 TEMPLATE_TTL = 24 * 3600
-FRAGMENT_TTL = 24 * 3600
+# Fragments are immutable per (name, key); a 6 h backstop covers most meets
+# while letting Redis reclaim stale keys quickly after a meet ends.
+FRAGMENT_TTL = 6 * 3600
 
 # Defaults for per-replica read caches (overridable via Settings + store ctor).
 # A non-zero value enables that cache; 0 disables it entirely.
-DEFAULT_FRAGMENT_CACHE_TTL = 1.0
+DEFAULT_FRAGMENT_CACHE_TTL = 3600.0
+DEFAULT_FRAGMENT_CACHE_MAX = 1024
 DEFAULT_CURRENT_TEMPLATE_CACHE_TTL = 2.0
 DEFAULT_TEMPLATE_BLOB_CACHE_MAX = 16  # bundles are immutable per bundle_id
 
@@ -60,7 +63,7 @@ class _TTLCache:
       (FIFO; good enough for our small keyspaces).
     """
 
-    __slots__ = ("_data", "_ttl", "_max", "_clock", "_enabled")
+    __slots__ = ("_clock", "_data", "_enabled", "_max", "_ttl")
 
     def __init__(
         self,
@@ -139,8 +142,8 @@ class MeetKeys:
     def context(self) -> str:
         return f"meet:{self.meet_id}:context"
 
-    def fragment(self, name: str) -> str:
-        return f"meet:{self.meet_id}:fragment:{name}"
+    def fragment(self, name: str, key: str) -> str:
+        return f"meet:{self.meet_id}:fragment:{name}:{key}"
 
     def template(self, bundle_id: str) -> str:
         return f"meet:{self.meet_id}:template:{bundle_id}"
@@ -204,16 +207,19 @@ class MeetStateStore:
         *,
         clock: Callable[[], float] = time.time,
         fragment_cache_ttl: float = DEFAULT_FRAGMENT_CACHE_TTL,
+        fragment_cache_max_entries: int = DEFAULT_FRAGMENT_CACHE_MAX,
         current_template_cache_ttl: float = DEFAULT_CURRENT_TEMPLATE_CACHE_TTL,
         template_blob_cache_max: int = DEFAULT_TEMPLATE_BLOB_CACHE_MAX,
     ) -> None:
         self._r = redis
         self._clock = clock
         # Per-replica read caches. Keys are tuples so we can scope by meet_id.
+        # Fragments are content-addressed (immutable per key), so a long TTL
+        # is safe — the primary bound is max_entries (FIFO eviction).
         self._fragment_cache = _TTLCache(
             ttl=fragment_cache_ttl,
-            max_entries=2048,
-            enabled=fragment_cache_ttl > 0,
+            max_entries=fragment_cache_max_entries,
+            enabled=fragment_cache_ttl > 0 and fragment_cache_max_entries > 0,
         )
         self._current_template_cache = _TTLCache(
             ttl=current_template_cache_ttl,
@@ -383,51 +389,42 @@ class MeetStateStore:
                 out[key_str] = _maybe_str(v)
         return out
 
-    # ---------- fragments (HTML chunks with ETag-style keys) ----------
+    # ---------- fragments (immutable, content-addressed by key) ----------
 
     @_timed("put_fragment")
     async def put_fragment(self, meet_id: str, name: str, key: str, html: str) -> None:
+        # Plain SET (not NX) so re-emits from the Pi refresh the TTL — a meet
+        # whose fragment hasn't changed in 6 h still keeps its cell alive
+        # whenever the Pi re-publishes state on reconnect / event change.
         await self._r.set(
-            MeetKeys(meet_id).fragment(name),
-            orjson.dumps({"key": key, "html": html}),
+            MeetKeys(meet_id).fragment(name, key),
+            html.encode("utf-8") if isinstance(html, str) else html,
             ex=FRAGMENT_TTL,
         )
-        # Refresh the local cache so this replica serves the new value
-        # immediately. Other replicas pick it up once their TTL elapses.
-        self._fragment_cache.set((meet_id, name), (key, html))
+        self._fragment_cache.set((meet_id, name, key), html)
 
-    async def get_fragment(self, meet_id: str, name: str) -> tuple[str, str] | None:
-        cached = self._fragment_cache.get((meet_id, name))
+    async def get_fragment(
+        self, meet_id: str, name: str, key: str
+    ) -> str | None:
+        cached = self._fragment_cache.get((meet_id, name, key))
         if cached is not None:
             self._record_cache_hit("get_fragment")
             return cached
-        value = await self._get_fragment_uncached(meet_id, name)
+        value = await self._get_fragment_uncached(meet_id, name, key)
         if value is not None:
-            self._fragment_cache.set((meet_id, name), value)
+            self._fragment_cache.set((meet_id, name, key), value)
         return value
 
     @_timed("get_fragment")
     async def _get_fragment_uncached(
-        self, meet_id: str, name: str
-    ) -> tuple[str, str] | None:
-        raw = await self._r.get(MeetKeys(meet_id).fragment(name))
+        self, meet_id: str, name: str, key: str
+    ) -> str | None:
+        raw = await self._r.get(MeetKeys(meet_id).fragment(name, key))
         if not raw:
             return None
-        try:
-            d = orjson.loads(raw)
-            return d["key"], d["html"]
-        except (orjson.JSONDecodeError, KeyError):
-            return None
-
-    @_timed("invalidate_fragments")
-    async def invalidate_fragments(self, meet_id: str, names: list[str]) -> int:
-        """Delete the named fragments. Returns number of keys removed."""
-        if not names:
-            return 0
-        keys = [MeetKeys(meet_id).fragment(n) for n in names]
-        for n in names:
-            self._fragment_cache.evict((meet_id, n))
-        return int(await self._r.delete(*keys))
+        if isinstance(raw, bytes):
+            return raw.decode("utf-8")
+        return raw  # type: ignore[no-any-return]
 
     # ---------- templates ----------
 

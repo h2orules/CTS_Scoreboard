@@ -91,6 +91,7 @@ def build_app(
     store = MeetStateStore(
         redis_handle,
         fragment_cache_ttl=settings.fragment_cache_ttl_seconds,
+        fragment_cache_max_entries=settings.fragment_cache_max_entries,
         current_template_cache_ttl=settings.current_template_cache_ttl_seconds,
         template_blob_cache_max=settings.template_blob_cache_max,
     )
