@@ -113,6 +113,14 @@
     }
     .wifi-list-header label { margin: 0; font-weight: bold; }
 
+    .wifi-network-expando { margin-top: 4px; }
+    .wifi-network-summary {
+        cursor: pointer; font-weight: bold; padding: 6px 0;
+        user-select: none;
+    }
+    .wifi-network-summary:hover { color: #337ab7; }
+    .wifi-network-expando[open] > .wifi-network-summary { margin-bottom: 8px; }
+
     .wifi-refresh-btn {
         background: none; border: 1px solid #ccc; border-radius: 50%;
         width: 30px; height: 30px; padding: 0; cursor: pointer;
@@ -2023,24 +2031,27 @@
                     </div>
                 </div>
 
-                <!-- Network list -->
-                <div class="wifi-list-header">
-                    <label>Available Networks</label>
-                    <button class="wifi-refresh-btn" id="wifi-refresh-btn" title="Refresh" onclick="wifiScan()">
-                        <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M13.65 2.35A7.96 7.96 0 0 0 8 0a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L10 6h6V0l-2.35 2.35z"/></svg>
-                    </button>
-                </div>
-                <div class="wifi-network-list" id="wifi-network-list">
-                    <div class="wifi-spinner-row" id="wifi-scan-spinner">
-                        <span class="wifi-spinner"></span> Scanning&hellip;
+                <!-- Network list (expando: scan only runs on first open) -->
+                <details id="wifi-network-expando" class="wifi-network-expando">
+                    <summary class="wifi-network-summary">Available networks</summary>
+                    <div class="wifi-list-header">
+                        <label>Networks in range</label>
+                        <button class="wifi-refresh-btn" id="wifi-refresh-btn" title="Refresh" onclick="wifiScan()">
+                            <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M13.65 2.35A7.96 7.96 0 0 0 8 0a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L10 6h6V0l-2.35 2.35z"/></svg>
+                        </button>
                     </div>
-                </div>
-                <div class="wifi-hidden-btn">
-                    <button type="button" onclick="wifiShowManualOverlay()">
-                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1 9l2 2a12.73 12.73 0 0 1 18 0l2-2A15.57 15.57 0 0 0 1 9zm4 4l2 2a8.5 8.5 0 0 1 10 0l2-2a11.36 11.36 0 0 0-14 0zm4 4l3 3 3-3a4.24 4.24 0 0 0-6 0z"/><line x1="19" y1="1" x2="23" y2="5" stroke="currentColor" stroke-width="2"/><line x1="23" y1="1" x2="19" y2="5" stroke="currentColor" stroke-width="2"/></svg>
-                        Connect to hidden network&hellip;
-                    </button>
-                </div>
+                    <div class="wifi-network-list" id="wifi-network-list">
+                        <div class="wifi-spinner-row" id="wifi-scan-spinner" style="color:#999;">
+                            Open this section to scan for networks.
+                        </div>
+                    </div>
+                    <div class="wifi-hidden-btn">
+                        <button type="button" onclick="wifiShowManualOverlay()">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M1 9l2 2a12.73 12.73 0 0 1 18 0l2-2A15.57 15.57 0 0 0 1 9zm4 4l2 2a8.5 8.5 0 0 1 10 0l2-2a11.36 11.36 0 0 0-14 0zm4 4l3 3 3-3a4.24 4.24 0 0 0-6 0z"/><line x1="19" y1="1" x2="23" y2="5" stroke="currentColor" stroke-width="2"/><line x1="23" y1="1" x2="19" y2="5" stroke="currentColor" stroke-width="2"/></svg>
+                            Connect to hidden network&hellip;
+                        </button>
+                    </div>
+                </details>
             </div>
         </div>
         {% else %}
@@ -2953,7 +2964,6 @@
     {% if wifi_available %}
     <script>
     (function() {
-        var _statusTimer = null;
         var _pwOverlaySSID = '';
         var _pwOverlayMode = ''; // 'connect' or 'edit'
 
@@ -3230,9 +3240,26 @@
 
         // ── Init ─────────────────────────────────────────────
 
+        // WiFi status is a cheap nmcli call (no radio scan) and is loaded
+        // once on page open so the user can see whether WiFi/ethernet are
+        // up. The expensive `wifiScan()` is deferred until the user opens
+        // the "Available networks" expando, and only runs the first time
+        // (or when the user clicks the refresh button). This keeps the
+        // settings page free of network scans that would otherwise stall
+        // the Pi's serial-read loop and cause the simulated clock to
+        // stutter during a race.
         wifiLoadStatus();
-        wifiScan();
-        _statusTimer = setInterval(wifiLoadStatus, 30000);
+
+        var _wifiScanDone = false;
+        var expando = document.getElementById('wifi-network-expando');
+        if (expando) {
+            expando.addEventListener('toggle', function() {
+                if (expando.open && !_wifiScanDone) {
+                    _wifiScanDone = true;
+                    wifiScan();
+                }
+            });
+        }
     })();
     </script>
     {% endif %}
