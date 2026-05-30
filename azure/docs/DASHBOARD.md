@@ -60,8 +60,8 @@ let writes = dynamic(["put_state","put_fragment","put_template",
 customMetrics
 | where name == "redis_op_seconds"
 | extend op = tostring(customDimensions["op"])
-| extend kind = iff(op in (writes), "write", "read")
-| summarize ops = sum(valueCount) by bin(timestamp, 10s), kind
+| extend op_kind = iff(op in (writes), "write", "read")
+| summarize ops = sum(valueCount) by bin(timestamp, 10s), op_kind
 | render timechart
 ```
 
@@ -79,8 +79,8 @@ whether any keys are being evicted (which would silently corrupt state).
 ```kusto
 customMetrics
 | where name == "redis_memory_bytes"
-| extend kind = tostring(customDimensions["kind"])
-| summarize bytes = avg(value) by bin(timestamp, 30s), kind
+| extend mem_kind = tostring(customDimensions["kind"])
+| summarize bytes = avg(value) by bin(timestamp, 30s), mem_kind
 | render timechart
 ```
 
@@ -89,13 +89,13 @@ Eviction & expiration counters (Stat tile, "delta since start"):
 ```kusto
 customMetrics
 | where name == "redis_keys_lifecycle_total"
-| extend kind = tostring(customDimensions["kind"])
-| summarize last = max(value), first = min(value) by kind
+| extend key_kind = tostring(customDimensions["kind"])
+| summarize last = max(value), first = min(value) by key_kind
 | extend delta = last - first
-| project kind, delta
+| project key_kind, delta
 ```
 
-> `delta > 0` for `kind == "evicted"` is **always bad** — it means
+> `delta > 0` for `key_kind == "evicted"` is **always bad** — it means
 > Redis dropped state for a live meet. Bump the SKU or shrink TTLs.
 
 ## 4. Redis clients & ops/sec (time chart)
