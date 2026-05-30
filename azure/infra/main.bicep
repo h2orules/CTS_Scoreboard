@@ -31,7 +31,7 @@ param minReplicas int = environmentName == 'preprod' ? 0 : 2
 // need sticky sessions on the ingress: each connection lives on
 // whichever worker accepts the upgrade for its lifetime, and broadcasts
 // to rooms reach clients on every other worker/replica via Redis.
-param maxReplicas int = environmentName == 'prod' ? 20 : 2
+param maxReplicas int = environmentName == 'prod' ? 10 : 2
 
 @description('Entra tenant ID used to validate Pi access tokens.')
 param entraTenantId string
@@ -112,7 +112,10 @@ resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   properties: {
     principalId: uami.properties.principalId
     principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
+    roleDefinitionId: subscriptionResourceId(
+      'Microsoft.Authorization/roleDefinitions',
+      '7f951dda-4ed3-4680-a7ca-43fe172d538d'
+    )
   }
 }
 
@@ -216,7 +219,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
     type: 'UserAssigned'
     userAssignedIdentities: { '${uami.id}': {} }
   }
-  dependsOn: [ acrPull ]
+  dependsOn: [acrPull]
   properties: {
     managedEnvironmentId: caEnv.id
     configuration: {
@@ -252,8 +255,14 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
       secrets: [
         // redis-py expects a URL like rediss://:<key>@<host>:<sslPort>/0.
         // The raw password is URL-encoded (it can contain '+', '/', '=').
-        { name: 'redis-conn', value: 'rediss://:${uriComponent(redis.listKeys().primaryKey)}@${redis.properties.hostName}:${redis.properties.sslPort}/0' }
-        { name: 'storage-conn', value: 'DefaultEndpointsProtocol=https;AccountName=${storage.name};AccountKey=${storage.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}' }
+        {
+          name: 'redis-conn'
+          value: 'rediss://:${uriComponent(redis.listKeys().primaryKey)}@${redis.properties.hostName}:${redis.properties.sslPort}/0'
+        }
+        {
+          name: 'storage-conn'
+          value: 'DefaultEndpointsProtocol=https;AccountName=${storage.name};AccountKey=${storage.listKeys().keys[0].value};EndpointSuffix=${environment().suffixes.storage}'
+        }
         { name: 'appinsights-conn', value: ai.properties.ConnectionString }
       ]
     }

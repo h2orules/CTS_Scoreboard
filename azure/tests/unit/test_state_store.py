@@ -241,3 +241,88 @@ async def test_is_meet_id_taken_records_redis_op_latency(store):
     ops = [attrs.get("op") for _, attrs in metrics.redis_op_seconds.events if attrs]
     assert "is_meet_id_taken" in ops
     reset_for_tests()
+
+
+# ============================================================
+# C1/C2: per-replica TTL caches
+# ============================================================
+
+async def test_get_fragment_hits_cache_within_ttl():
+    """A second get_fragment within the TTL must not hit Redis."""
+    r = fakeredis.aioredis.FakeRedis()
+    s = MeetStateStore(r, fragment_cache_ttl=5.0)
+    mid = "f" * 15
+    await s.put_fragment(mid, "footer", "k1", "<p>hi</p>")
+    # Tamper with Redis behind the store: if cache works, we never see this.
+    await r.delete(f"meet:{mid}:fragment:footer")
+    got = await s.get_fragment(mid, "footer")
+    assert got == ("k1", "<p>hi</p>")
+
+
+async def test_get_fragment_invalidates_on_put_and_invalidate():
+    """put_fragment refreshes the local cache; invalidate_fragments drops it."""
+    r = fakeredis.aioredis.FakeRedis()
+    s = MeetStateStore(r, fragment_cache_ttl=60.0)
+    mid = "f" * 15
+    await s.put_fragment(mid, "footer", "k1", "<p>a</p>")
+    assert (await s.get_fragment(mid, "footer")) == ("k1", "<p>a</p>")
+    # New write must be reflected immediately on this replica.
+    await s.put_fragment(mid, "footer", "k2", "<p>b</p>")
+    assert (await s.get_fragment(mid, "footer")) == ("k2", "<p>b</p>")
+    # invalidate drops it; underlying delete already happened.
+    await s.invalidate_fragments(mid, ["footer"])
+    assert await s.get_fragment(mid, "footer") is None
+
+
+async def test_fragment_cache_disabled_with_ttl_zero():
+    """ttl=0 means every read hits Redis."""
+    r = fakeredis.aioredis.FakeRedis()
+    s = MeetStateStore(r, fragment_cache_ttl=0.0)
+    mid = "f" * 15
+    await s.put_fragment(mid, "footer", "k1", "<p>hi</p>")
+    # Delete behind the store; with caching disabled, the read must miss.
+    await r.delete(f"meet:{mid}:fragment:footer")
+    assert await s.get_fragment(mid, "footer") is None
+
+
+async def test_template_blob_cache_immutable_per_bundle_id():
+    """get_template_blob caches forever per (meet_id, bundle_id)."""
+    r = fakeredis.aioredis.FakeRedis()
+    s = MeetStateStore(r)
+    mid = "t" * 15
+    bundle = {"bundle_id": "abc1", "template_text": "hi"}
+    bid = await s.put_template(mid, bundle)
+    assert bid == "abc1"
+    # Wipe Redis; the cached blob still answers.
+    await r.delete(f"meet:{mid}:template:abc1")
+    got = await s.get_template_blob(mid, "abc1")
+    assert got == bundle
+
+
+async def test_get_current_template_uses_cache():
+    """get_current_template short-circuits within its TTL."""
+    r = fakeredis.aioredis.FakeRedis()
+    s = MeetStateStore(r, current_template_cache_ttl=5.0)
+    mid = "t" * 15
+    bundle = {"bundle_id": "abc1", "template_text": "hi"}
+    await s.put_template(mid, bundle)
+    assert (await s.get_current_template(mid)) == bundle
+    # Wipe Redis: cache hit serves stale-but-correct data.
+    await r.delete(f"meet:{mid}:current_template")
+    await r.delete(f"meet:{mid}:template:abc1")
+    assert (await s.get_current_template(mid)) == bundle
+
+
+async def test_close_meet_clears_caches():
+    """close_meet must drop every cached entry for that meet."""
+    r = fakeredis.aioredis.FakeRedis()
+    s = MeetStateStore(r, fragment_cache_ttl=60.0, current_template_cache_ttl=60.0)
+    mid = "c" * 15
+    await s.open_meet(mid, host_team_name="H", protocol_version=1, pi_account_id="oid")
+    await s.put_fragment(mid, "footer", "k1", "<p/>")
+    await s.put_template(mid, {"bundle_id": "b1", "template_text": "x"})
+    await s.close_meet(mid)
+    # Both caches must be empty for this meet.
+    assert s._fragment_cache.get((mid, "footer")) is None
+    assert s._current_template_cache.get(mid) is None
+    assert s._template_blob_cache.get((mid, "b1")) is None

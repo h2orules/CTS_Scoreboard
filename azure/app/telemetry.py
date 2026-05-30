@@ -47,6 +47,7 @@ class Metrics:
     emit_fanout_seconds: Any
     active_sockets: Any
     pi_connections: Any
+    cache_hits: Any
 
     @classmethod
     def stub(cls) -> Metrics:
@@ -62,6 +63,7 @@ class Metrics:
             emit_fanout_seconds=_StubHistogram(),
             active_sockets=_StubUpDownCounter(),
             pi_connections=_StubUpDownCounter(),
+            cache_hits=_StubCounter(),
         )
 
 
@@ -198,6 +200,7 @@ def configure_telemetry(
                 ),
                 active_sockets=meter.create_up_down_counter("active_sockets"),
                 pi_connections=meter.create_up_down_counter("pi_connections"),
+                cache_hits=meter.create_counter("cache_hits"),
             )
         except Exception:  # pragma: no cover - log + fall back to stub
             logging.exception("azure-monitor init failed; using stub metrics")
