@@ -1914,7 +1914,7 @@
                                 <button class="btn btn-default" type="submit">Upload</button>
                             </span>
                         </div>
-                        <small class="text-muted">JPG, PNG, GIF, or WebP. Select multiple files at once if you like.</small>
+                        <small class="text-muted">JPG, PNG, GIF, or WebP. Select multiple files at once if you like. Max upload size: 5 MB per file.</small>
                     </div>
                 </form>
             </div>
@@ -1936,6 +1936,20 @@
                             <button class="btn btn-default" type="submit">Save</button>
                         </div>
                         <small class="text-muted">Rotation only runs when at least 2 images are enabled.</small>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="input-group">
+                        <label for="ad_max_dimension">Max Image Dimension</label>
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <select id="ad_max_dimension" name="ad_max_dimension" class="form-control"
+                                style="width:auto;display:inline-block;">
+                                {% for px in [640, 960, 1280, 1600, 1920, 2560, 3840] %}
+                                <option value="{{ px }}" {% if ad_max_dimension == px %}selected{% endif %}>{{ px }} px</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <small class="text-muted">Uploaded images are downscaled so the longer edge is at most this many pixels. Saved alongside the rotation interval.</small>
                     </div>
                 </div>
             </div>
@@ -1979,6 +1993,7 @@
                         <thead>
                             <tr>
                                 <th>Preview</th>
+                                <th>Size</th>
                                 <th>Enabled</th>
                                 <th>Order</th>
                                 <th>&nbsp;</th>
@@ -1991,6 +2006,7 @@
                                     <img src="{{ url_for('static', filename='ad/' + ad.filename) }}"
                                         style="max-width:150px;max-height:150px;width:auto;height:auto;object-fit:contain;border-radius:4px;display:block;" />
                                 </td>
+                                <td style="white-space:nowrap;font-variant-numeric:tabular-nums;">{{ ad.size_human }}</td>
                                 <td style="text-align:center;">
                                     <input type="checkbox" name="ad_enabled_{{ loop.index0 }}"
                                         {% if ad.enabled %}checked{% endif %}>

@@ -17,6 +17,7 @@ import serial
 import serial.tools.list_ports
 
 import wifi_manager
+import ad_image
 from hytek_st2_parser import parse_st2_file
 from hytek_rec_parser import parse_rec_file
 
@@ -160,6 +161,8 @@ def register(flask_app, app_module):
                 ad_list = list(settings.get('ad_images') or [])
                 uploaded = flask.request.files.getlist('ad_images')
                 ad_errors = []
+                ad_infos = []
+                max_dim = int(settings.get('ad_max_dimension', 1920) or 1920)
                 for upload in uploaded:
                     if not upload or not upload.filename:
                         continue
@@ -172,21 +175,43 @@ def register(flask_app, app_module):
                         os.makedirs(AD_DIR, exist_ok=True)
                     except Exception:
                         pass
+                    try:
+                        raw = upload.stream.read()
+                        out_bytes, out_ext, info = ad_image.process_upload(raw, ext, max_dim)
+                    except ad_image.AdImageError as e:
+                        ad_errors.append('Rejected %s (%s)' % (upload.filename, e))
+                        continue
+                    except Exception as e:
+                        ad_errors.append('Failed to process %s: %s' % (upload.filename, e))
+                        continue
                     # Use a UUID-based filename so uploads never collide with
                     # existing files (regardless of the user's original name).
-                    final_name = 'ad_%s%s' % (uuid.uuid4().hex, ext)
+                    final_name = 'ad_%s%s' % (uuid.uuid4().hex, out_ext)
                     try:
-                        upload.save(os.path.join(AD_DIR, final_name))
+                        with open(os.path.join(AD_DIR, final_name), 'wb') as fh:
+                            fh.write(out_bytes)
                     except Exception as e:
                         ad_errors.append('Failed to save %s: %s' % (upload.filename, e))
                         continue
                     ad_list.append({'filename': final_name, 'enabled': True})
                     ad_changed = True
+                    if info.get('resized'):
+                        ow, oh = info['original_size']
+                        nw, nh = info['new_size']
+                        ad_infos.append('%s: resized %d\u00d7%d \u2192 %d\u00d7%d (%s \u2192 %s)' % (
+                            upload.filename, ow, oh, nw, nh,
+                            ad_image.format_size(info['original_bytes']),
+                            ad_image.format_size(info['new_bytes']),
+                        ))
                 if ad_changed:
                     settings['ad_images'] = ad_list
                     modified = True
                 if ad_errors:
                     ad_error = '; '.join(ad_errors)
+                if ad_infos:
+                    # Combine with any prior error so the user sees both.
+                    note = '; '.join(ad_infos)
+                    ad_error = (ad_error + ' | ' + note) if ad_error else note
 
             if ad_form_submitted:
                 ad_list = list(settings.get('ad_images') or [])
@@ -235,6 +260,17 @@ def register(flask_app, app_module):
                     new_interval = 30
                 if settings.get('ad_rotation_interval', 30) != new_interval:
                     settings['ad_rotation_interval'] = new_interval
+                    ad_changed = True
+
+                # Max dimension dropdown.
+                try:
+                    new_max = int(flask.request.form.get('ad_max_dimension', '1920'))
+                except (TypeError, ValueError):
+                    new_max = 1920
+                if new_max not in (640, 960, 1280, 1600, 1920, 2560, 3840):
+                    new_max = 1920
+                if int(settings.get('ad_max_dimension', 1920) or 1920) != new_max:
+                    settings['ad_max_dimension'] = new_max
                     ad_changed = True
 
                 if ad_changed:
@@ -520,15 +556,22 @@ def register(flask_app, app_module):
         # only entries that still have a backing file on disk so a stale
         # settings.json doesn't show broken previews.
         ad_images = []
+        AD_DIR_RENDER = os.path.join(os.path.dirname(os.path.abspath(_app.__file__)), 'static', 'ad')
         for entry in (settings.get('ad_images') or []):
             if not isinstance(entry, dict):
                 continue
             fname = entry.get('filename', '')
             if not fname:
                 continue
+            try:
+                size_bytes = os.path.getsize(os.path.join(AD_DIR_RENDER, fname))
+            except OSError:
+                size_bytes = None
             ad_images.append({
                 'filename': fname,
                 'enabled': bool(entry.get('enabled', True)),
+                'size_bytes': size_bytes,
+                'size_human': ad_image.format_size(size_bytes) if size_bytes is not None else '',
             })
 
         schedule_loaded = bool(_app.event_info.event_names)
@@ -594,6 +637,7 @@ def register(flask_app, app_module):
                     user_name=settings['username'],
                     ad_images=ad_images,
                     ad_rotation_interval=settings.get('ad_rotation_interval', 30),
+                    ad_max_dimension=int(settings.get('ad_max_dimension', 1920) or 1920),
                     ad_error=ad_error,
                     num_lanes=settings['num_lanes'],
                     pool_course=settings.get('pool_course', 'SCY'),

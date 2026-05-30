@@ -71,6 +71,8 @@ settings = {
     # Files live in static/ad/. Order in the list is rotation order.
     'ad_images': [],
     'ad_rotation_interval': 30,
+    # Max dimension (px) for the longer edge after upload-time resize.
+    'ad_max_dimension': 1920,
     'num_lanes': 6,
     'pool_course': 'SCY',
     'show_pr_tags': True,
@@ -146,7 +148,8 @@ app = flask.Flask(__name__)
 # config
 app.config.update(
     DEBUG = False,
-    SECRET_KEY = 'redacted-secret-key'
+    SECRET_KEY = 'redacted-secret-key',
+    MAX_CONTENT_LENGTH = 5 * 1024 * 1024,
 )
 socketio = flask_socketio.SocketIO(app)
 
@@ -1773,7 +1776,21 @@ def _long_cache_ad_files(resp):
         resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     return resp
 
-        
+
+@app.errorhandler(413)
+def _ad_upload_too_large(_e):
+    # Flask aborts large uploads before our route runs. Return a small
+    # message with a back link rather than the default HTML error page.
+    return (
+        '<!doctype html><meta charset="utf-8">'
+        '<title>Upload too large</title>'
+        '<h1>Upload too large</h1>'
+        '<p>Ad uploads are limited to 5 MB per file. '
+        '<a href="/settings">Back to Settings</a></p>',
+        413,
+    )
+
+
 @app.route("/test")
 @flask_login.login_required
 def route_test():
