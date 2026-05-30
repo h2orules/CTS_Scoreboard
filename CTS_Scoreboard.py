@@ -1704,46 +1704,31 @@ def broadcast_scoreboard(update):
 settings_routes.register(app, sys.modules[__name__])
 
 
-# REST API endpoints for cached HTML fragments
-@app.route('/api/qualifying-info')
-def api_qualifying_info():
-    key, html = _cache_get('qualifying_info')
-    if key is None:
-        return flask.Response('', status=200, content_type='text/html; charset=utf-8')
-    etag = '"' + key + '"'
-    if flask.request.headers.get('If-None-Match') == etag:
-        return flask.Response('', status=304)
+# REST API endpoints for cached HTML fragments. URLs are content-addressed:
+# the 12-hex SHA-256 key from _cache_put is part of the path, so responses
+# are immutable and any mismatch (Pi has moved on to a newer key) returns
+# 404 \u2014 the browser falls back to its inline initial render and re-fetches
+# on the next update_scoreboard event.
+def _serve_cached_fragment(resource, key):
+    cur_key, html = _cache_get(resource)
+    if cur_key is None or cur_key != key:
+        return flask.Response('', status=404)
     resp = flask.Response(html, status=200, content_type='text/html; charset=utf-8')
-    resp.headers['ETag'] = etag
-    resp.headers['Cache-Control'] = 'public, max-age=60'
+    resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    resp.headers['ETag'] = '"' + key + '"'
     return resp
 
-@app.route('/api/message-page/<int:index>')
-def api_message_page(index):
-    resource = 'message_page_%d' % index
-    key, html = _cache_get(resource)
-    if key is None:
-        return flask.Response('', status=200, content_type='text/html; charset=utf-8')
-    etag = '"' + key + '"'
-    if flask.request.headers.get('If-None-Match') == etag:
-        return flask.Response('', status=304)
-    resp = flask.Response(html, status=200, content_type='text/html; charset=utf-8')
-    resp.headers['ETag'] = etag
-    resp.headers['Cache-Control'] = 'public, max-age=60'
-    return resp
+@app.route('/api/qualifying-info/<key>')
+def api_qualifying_info(key):
+    return _serve_cached_fragment('qualifying_info', key)
 
-@app.route('/api/footer-message')
-def api_footer_message():
-    key, html = _cache_get('footer_message')
-    if key is None:
-        return flask.Response('', status=200, content_type='text/html; charset=utf-8')
-    etag = '"' + key + '"'
-    if flask.request.headers.get('If-None-Match') == etag:
-        return flask.Response('', status=304)
-    resp = flask.Response(html, status=200, content_type='text/html; charset=utf-8')
-    resp.headers['ETag'] = etag
-    resp.headers['Cache-Control'] = 'public, max-age=60'
-    return resp
+@app.route('/api/message-page/<int:index>/<key>')
+def api_message_page(index, key):
+    return _serve_cached_fragment('message_page_%d' % index, key)
+
+@app.route('/api/footer-message/<key>')
+def api_footer_message(key):
+    return _serve_cached_fragment('footer_message', key)
 
         
 @app.route("/test")

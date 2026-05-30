@@ -159,21 +159,19 @@ async def test_template_push_stores_bundle_and_emits_template_changed():
 
 
 @pytest.mark.asyncio
-async def test_invalidate_removes_fragments_and_fanout():
-    sio, _, _, emits = _make_sio_with_spies()
+async def test_fragment_event_stores_keyed_html():
+    sio, _, _, _ = _make_sio_with_spies()
     store = _store()
     await store.open_meet(MEET, host_team_name="X", protocol_version=1, pi_account_id="oid")
-    await store.put_fragment(MEET, "qt", "k1", "<a/>")
     register_handlers(sio, store=store, tenant_id="tid", audience="api://aud",
                       token_validator=_ok_validator)
     await _handler(sio, "/pi", "connect")(
         "sidPi", {}, {"access_token": "ok", "meet_id": MEET, "protocol_version": 1}
     )
-    res = await _handler(sio, "/pi", "invalidate")("sidPi", {"fragments": ["qt"]})
-    assert res["ok"] and res["removed"] == 1
-    assert await store.get_fragment(MEET, "qt") is None
-    invalidates = [e for e in emits if e["event"] == "invalidate"]
-    assert invalidates
+    await _handler(sio, "/pi", "fragment")(
+        "sidPi", {"name": "qt", "key": "abc123", "html": "<a/>"}
+    )
+    assert await store.get_fragment(MEET, "qt", "abc123") == "<a/>"
 
 
 @pytest.mark.asyncio
