@@ -239,18 +239,21 @@ class TestRenderAndCacheFooterMessage:
 
 class TestFooterMessageRoute:
     def test_empty_returns_200(self, clean_footer_state):
-        cts._render_and_cache_footer_message()
+        key = cts._render_and_cache_footer_message()
         with cts.app.test_client() as c:
-            resp = c.get('/api/footer-message')
+            resp = c.get('/api/footer-message/' + key)
             assert resp.status_code == 200
 
-    def test_etag_round_trip(self, clean_footer_state):
+    def test_key_round_trip(self, clean_footer_state):
         settings['footer_messages'] = [_make_msg(text='hi', is_default=True)]
         key = cts._render_and_cache_footer_message()
         etag = '"' + key + '"'
         with cts.app.test_client() as c:
-            r1 = c.get('/api/footer-message')
+            r1 = c.get('/api/footer-message/' + key)
             assert r1.status_code == 200
             assert r1.headers.get('ETag') == etag
-            r2 = c.get('/api/footer-message', headers={'If-None-Match': etag})
-            assert r2.status_code == 304
+            assert b'hi' in r1.data
+            # Stale key (key changed) returns 404; client re-fetches via the
+            # next update_scoreboard event with the new key.
+            r2 = c.get('/api/footer-message/deadbeefdead')
+            assert r2.status_code == 404
