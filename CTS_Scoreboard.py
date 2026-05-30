@@ -1760,6 +1760,19 @@ def api_message_page(index, key):
 def api_footer_message(key):
     return _serve_cached_fragment('footer_message', key)
 
+
+@app.after_request
+def _long_cache_ad_files(resp):
+    # Ad filenames are UUID-based on upload (settings_routes.py), so a
+    # given URL always maps to the same bytes for the life of the file.
+    # Mark them immutable so browsers don't keep revalidating each
+    # rotation step. The settings UI's delete path makes the URL go
+    # away rather than reusing it with new content.
+    path = flask.request.path or ''
+    if path.startswith('/static/ad/'):
+        resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    return resp
+
         
 @app.route("/test")
 @flask_login.login_required
