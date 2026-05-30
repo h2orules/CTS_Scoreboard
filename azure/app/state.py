@@ -60,7 +60,7 @@ class _TTLCache:
       (FIFO; good enough for our small keyspaces).
     """
 
-    __slots__ = ("_data", "_ttl", "_max", "_clock", "_enabled")
+    __slots__ = ("_clock", "_data", "_enabled", "_max", "_ttl")
 
     def __init__(
         self,

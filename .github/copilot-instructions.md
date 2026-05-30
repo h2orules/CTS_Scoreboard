@@ -32,6 +32,25 @@ npx vitest run tests/js/scoreboard.test.js
 ./start.sh
 ```
 
+## Pre-commit checks (always run before committing)
+
+When you change anything under `azure/`, run the same lint + type + test
+commands CI runs (see `.github/workflows/azure-ci.yml`):
+
+```bash
+cd azure
+uv run ruff check app tests   # lint + import-order; CI fails on any finding
+uv run mypy app               # strict type-check
+uv run pytest tests/unit -q   # full unit suite
+```
+
+The Ruff config lives in `azure/pyproject.toml` under `[tool.ruff]`. The
+VS Code Ruff extension (recommended in `.vscode/extensions.json`) reads
+that same config, so format-on-save and quick-fixes match CI exactly —
+but still run the CLI before committing, because CI runs ruff in
+check-mode and any auto-fixable warning that the extension didn't apply
+will still fail the build.
+
 ## Architecture
 
 ### Backend (Python)
