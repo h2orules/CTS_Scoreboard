@@ -304,32 +304,26 @@
     }
     var qualifyingTimesKey = {{ initial_qt_key | tojson }};
     var footerMessageKey = {{ initial_footer_key | tojson }};
-    var _fragmentCache = {};       // { url: { key, html } }
+    var _fragmentCache = {};       // { url: html }
 
-    // Fetch a server-rendered HTML fragment with ETag caching.
-    // Compares incoming key against cached key; skips fetch if same.
-    function fetchFragment(url, newKey, callback) {
+    // Fetch a server-rendered HTML fragment. URLs are content-addressed
+    // (the SHA-256 fragment key is in the path), so the response is
+    // immutable and we can cache forever by URL with no revalidation.
+    function fetchFragment(url, callback) {
         var cached = _fragmentCache[url];
-        if (cached && cached.key === newKey) {
-            callback(cached.html);
+        if (cached !== undefined) {
+            callback(cached);
             return;
         }
-        var headers = {};
-        if (cached && cached.key) {
-            headers['If-None-Match'] = '"' + cached.key + '"';
-        }
-        fetch(url, { headers: headers }).then(function (resp) {
-            if (resp.status === 304 && cached) {
-                cached.key = newKey;
-                callback(cached.html);
-                return;
-            }
+        fetch(url).then(function (resp) {
             if (resp.ok) {
                 return resp.text().then(function (html) {
-                    _fragmentCache[url] = { key: newKey, html: html };
+                    _fragmentCache[url] = html;
                     callback(html);
                 });
             }
+            // 404 / 5xx: leave current display untouched and try again on
+            // the next update_scoreboard frame.
         }).catch(function () { /* keep current display on error */ });
     }
 
@@ -451,7 +445,7 @@
             return;
         }
         footerMessageKey = newKey;
-        fetchFragment('/api/footer-message', newKey, function(html) {
+        fetchFragment('/api/footer-message/' + newKey, function(html) {
             cell.innerHTML = html || '';
             tbody.style.display = (html && html.trim()) ? '' : 'none';
         });
@@ -489,7 +483,7 @@
         var qtBody = document.getElementById("qualifying_times_body");
         if (qtKey) {
             qualifyingTimesKey = qtKey;
-            fetchFragment('/api/qualifying-info', qtKey, function (html) {
+            fetchFragment('/api/qualifying-info/' + qtKey, function (html) {
                 qtBody.innerHTML = html;
             });
         } else {
@@ -675,7 +669,7 @@
         // Set content (with crossfade only when switching pages)
         var pageKey = page.key;
         if (pageKey) {
-            fetchFragment('/api/message-page/' + pageIdx, pageKey, function (html) {
+            fetchFragment('/api/message-page/' + pageIdx + '/' + pageKey, function (html) {
                 if (needsCrossfade) {
                     // Fade out active text
                     _activeTxt.style.opacity = '0';
