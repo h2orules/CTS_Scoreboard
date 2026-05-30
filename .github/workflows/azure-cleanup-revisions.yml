@@ -1,0 +1,215 @@
+name: azure-cleanup-revisions
+
+# Periodically prune old Container App revisions and unreferenced ACR
+# images so we don't accumulate cost / clutter from every CI build.
+#
+# Keep counts (most recent active revisions, by createdTime):
+#   - prod:    4
+#   - preprod: 1
+#
+# After deactivating excess revisions, any image manifest in the
+# environment's ACR that is no longer referenced by an *active* revision
+# is deleted. Inactive revisions are not considered references — that's
+# the whole point of the cleanup.
+#
+# Container Apps reserves revision NAMES permanently even after
+# deactivation, so we don't try to delete them; deactivation is enough
+# to release the underlying replica resources.
+#
+# Approval model:
+#   - preprod: scheduled runs apply changes directly (no gate).
+#   - prod:    scheduled runs are forced to dry-run and email a
+#              notification if anything would be cleaned up; the actual
+#              apply is a separate manual job that goes through the
+#              `production` environment's required-reviewers gate.
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Print actions without executing (overridable on manual runs)'
+        required: false
+        type: boolean
+        default: false
+      environment:
+        description: 'Which environment to clean'
+        required: false
+        type: choice
+        default: both
+        options:
+          - both
+          - preprod
+          - prod
+  schedule:
+    # Weekly, Sunday 03:00 UTC.
+    - cron: '0 3 * * 0'
+
+permissions:
+  id-token: write
+  contents: read
+  issues: write
+
+env:
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  REPO: cts-relay
+
+jobs:
+  preprod:
+    # Scheduled runs always include preprod. Manual dispatch can opt out.
+    if: ${{ github.event_name == 'schedule' || inputs.environment == 'both' || inputs.environment == 'preprod' }}
+    runs-on: ubuntu-latest
+    environment: preprod
+    env:
+      RG: ${{ secrets.RG_PREPROD }}
+      ACR: ctssbpreprodacr
+      APP: cts-sb-preprod-app
+      KEEP: '1'
+      DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+      - id: prune
+        run: bash .github/scripts/cleanup-revisions.sh
+
+  # -----------------------------------------------------------------------
+  # PROD: scheduled dry-run. No environment gate, runs unattended.
+  # If anything would be deactivated/deleted, sends an email so an operator
+  # knows to dispatch the apply job manually.
+  # -----------------------------------------------------------------------
+  prod_dry_run:
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.environment == 'both' || inputs.environment == 'prod') && inputs.dry_run) }}
+    runs-on: ubuntu-latest
+    env:
+      RG: ${{ secrets.RG_PROD }}
+      ACR: ctssbprodacr
+      APP: cts-sb-prod-app
+      KEEP: '4'
+      DRY_RUN: 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+      - id: prune
+        run: bash .github/scripts/cleanup-revisions.sh
+
+      - name: Open or update notification issue
+        if: ${{ steps.prune.outputs.pending != '0' && steps.prune.outputs.pending != '' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pending     = `${{ steps.prune.outputs.pending }}`;
+            const deactivate  = `${{ steps.prune.outputs.deactivate_count }}`;
+            const del         = `${{ steps.prune.outputs.delete_count }}`;
+            const runUrl      = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const title = 'Prod revision cleanup pending';
+            const body =
+              `The weekly scheduled cleanup ran in **dry-run** mode against prod ` +
+              `and found work to do:\n\n` +
+              `- revisions to deactivate: **${deactivate}**\n` +
+              `- ACR manifests to delete: **${del}**\n` +
+              `- total pending actions: **${pending}**\n\n` +
+              `To apply, dispatch the \`azure-cleanup-revisions\` workflow with ` +
+              `\`environment=prod\` and \`dry_run=false\`. That run goes through ` +
+              `the \`production\` environment's required-reviewer gate before ` +
+              `executing.\n\n` +
+              `Run logs: ${runUrl}\n\n` +
+              `_This issue will be closed automatically by the next clean dry-run._`;
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              state: 'open',
+              labels: 'cleanup-pending',
+            });
+            if (issues.length > 0) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                issue_number: issues[0].number,
+                body,
+              });
+              core.notice(`Updated existing issue #${issues[0].number}`);
+            } else {
+              const { data: created } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                title,
+                body,
+                labels: ['cleanup-pending'],
+              });
+              core.notice(`Opened issue #${created.number}`);
+            }
+
+      - name: Close notification issue when nothing pending
+        if: ${{ steps.prune.outputs.pending == '0' }}
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              state: 'open',
+              labels: 'cleanup-pending',
+            });
+            for (const issue of issues) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                issue_number: issue.number,
+                body: 'Resolved: dry-run found nothing to clean up.',
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo:  context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+              });
+              core.notice(`Closed issue #${issue.number}`);
+            }
+
+      - name: Summary
+        if: ${{ always() }}
+        run: |
+          {
+            echo "## Prod cleanup (dry-run)"
+            echo "- Pending actions: **${{ steps.prune.outputs.pending }}**"
+            echo "- Revisions to deactivate: ${{ steps.prune.outputs.deactivate_count }}"
+            echo "- ACR manifests to delete: ${{ steps.prune.outputs.delete_count }}"
+            if [[ "${{ steps.prune.outputs.pending }}" != "0" && -n "${{ steps.prune.outputs.pending }}" ]]; then
+              echo ""
+              echo "Re-run this workflow with \`environment=prod\` and \`dry_run=false\` to apply."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # -----------------------------------------------------------------------
+  # PROD: manual apply. Requires the `production` environment approval.
+  # Only runs on workflow_dispatch with dry_run=false explicitly chosen.
+  # -----------------------------------------------------------------------
+  prod_apply:
+    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.environment == 'both' || inputs.environment == 'prod') && !inputs.dry_run }}
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      RG: ${{ secrets.RG_PROD }}
+      ACR: ctssbprodacr
+      APP: cts-sb-prod-app
+      KEEP: '4'
+      DRY_RUN: 'false'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ env.AZURE_CLIENT_ID }}
+          tenant-id: ${{ env.AZURE_TENANT_ID }}
+          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
+      - id: prune
+        run: bash .github/scripts/cleanup-revisions.sh
