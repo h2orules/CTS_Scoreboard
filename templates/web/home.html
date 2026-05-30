@@ -355,6 +355,15 @@
         if (!showConfetti) return;
         if (isMessageOverlayActive()) return;
         if (raceState !== "Running" && raceState !== "Finished") return;
+        // requestAnimationFrame is paused while the tab is hidden, so any
+        // particles spawned now would just sit in the DOM and start
+        // animating when the user comes back — long after the race has
+        // moved on. Mark the lane as fired so we don't retroactively
+        // spawn when the tab becomes visible.
+        if (typeof document !== 'undefined' && document.hidden) {
+            confettiFired[lane] = true;
+            return;
+        }
         if (confettiFired[lane]) return;
         confettiFired[lane] = true;
         var rect = targetEl.getBoundingClientRect();
@@ -892,14 +901,11 @@
             raceState = s["race_state"];
             console.log("Race state:", prevState, "→", raceState);
 
-            // If the race has moved past Finished, drop any in-flight
-            // confetti particles. When the tab is in the background,
-            // requestAnimationFrame is paused, so particles spawned during
-            // a Finished state can sit in the DOM and only start animating
-            // when the tab becomes visible again — long after the race
-            // has actually moved on.
-            if (raceState !== "Finished") {
-                document.querySelectorAll('.confetti-particle').forEach(function (el) { el.remove(); });
+            // Entering Running resets the per-lane confetti latch so a
+            // re-run of the same heat (e.g. test mode Start → Finish
+            // twice) can fire confetti again on the next Finished frame.
+            if (raceState === "Running") {
+                confettiFired = {};
             }
 
             // All *PreRace states trigger the same reset
@@ -1089,6 +1095,19 @@
     // Initialise QR overlay visibility on page load (race-state may already
     // dictate hidden, e.g. mid-race reload).
     updateQrOverlay();
+
+    // When the tab becomes visible again, drop any confetti that was
+    // spawned (or queued mid-animation) while it was hidden. Browsers
+    // pause requestAnimationFrame for hidden tabs, so otherwise the
+    // particles would start animating from scratch when the user comes
+    // back, even if the race has long since moved past Finished.
+    if (typeof document !== 'undefined') {
+        document.addEventListener('visibilitychange', function () {
+            if (!document.hidden) {
+                document.querySelectorAll('.confetti-particle').forEach(function (el) { el.remove(); });
+            }
+        });
+    }
 
 </script>
 
