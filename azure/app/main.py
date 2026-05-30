@@ -88,7 +88,12 @@ def build_app(
         environment=settings.environment,
     )
     redis_handle = redis_client or _build_state_redis(settings.redis_url)
-    store = MeetStateStore(redis_handle)
+    store = MeetStateStore(
+        redis_handle,
+        fragment_cache_ttl=settings.fragment_cache_ttl_seconds,
+        current_template_cache_ttl=settings.current_template_cache_ttl_seconds,
+        template_blob_cache_max=settings.template_blob_cache_max,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

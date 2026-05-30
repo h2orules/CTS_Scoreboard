@@ -68,6 +68,15 @@ class Settings(BaseSettings):
     # capping Redis writes and Socket.IO fan-out rate. 0 disables.
     coalesce_window_seconds: float = Field(default=0.1, ge=0.0, le=2.0)
 
+    # Per-replica read caches for HTML fragments and template bundles.
+    # 0 disables the respective cache. Template bundles are immutable per
+    # bundle_id so the cache is invalidation-free; current_template / fragment
+    # caches use a short TTL because they can change at any time and we
+    # tolerate brief staleness in exchange for cutting Redis read traffic.
+    fragment_cache_ttl_seconds: float = Field(default=1.0, ge=0.0, le=60.0)
+    current_template_cache_ttl_seconds: float = Field(default=2.0, ge=0.0, le=60.0)
+    template_blob_cache_max: int = Field(default=16, ge=0, le=512)
+
     # ---- telemetry ----
     applicationinsights_connection_string: str = Field(default="")
 
