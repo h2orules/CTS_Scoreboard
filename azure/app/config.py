@@ -69,11 +69,13 @@ class Settings(BaseSettings):
     coalesce_window_seconds: float = Field(default=0.1, ge=0.0, le=2.0)
 
     # Per-replica read caches for HTML fragments and template bundles.
-    # 0 disables the respective cache. Template bundles are immutable per
-    # bundle_id so the cache is invalidation-free; current_template / fragment
-    # caches use a short TTL because they can change at any time and we
-    # tolerate brief staleness in exchange for cutting Redis read traffic.
-    fragment_cache_ttl_seconds: float = Field(default=1.0, ge=0.0, le=60.0)
+    # 0 disables the respective cache. Template bundles and fragments are
+    # both immutable per content-addressed key, so a long TTL backstop is
+    # safe — the primary bound for fragments is max_entries (FIFO).
+    # current_template uses a short TTL because the active bundle pointer
+    # can change at any time and we tolerate brief staleness for read relief.
+    fragment_cache_ttl_seconds: float = Field(default=3600.0, ge=0.0, le=86400.0)
+    fragment_cache_max_entries: int = Field(default=1024, ge=0, le=16384)
     current_template_cache_ttl_seconds: float = Field(default=2.0, ge=0.0, le=60.0)
     template_blob_cache_max: int = Field(default=16, ge=0, le=512)
 

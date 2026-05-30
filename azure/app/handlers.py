@@ -341,24 +341,6 @@ def register_handlers(
                 )
             return {"ok": True}
 
-    @sio.on("invalidate", namespace="/pi")
-    async def on_invalidate(sid: str, payload: dict[str, Any]) -> dict[str, Any]:
-        with _handler_timer("invalidate"):
-            sess = await sio.get_session(sid, namespace="/pi")
-            meet_id = sess.get(_SESSION_PI_MEET)
-            if not meet_id:
-                return {"ok": False, "error": "no meet"}
-            names = payload.get("fragments") or []
-            removed = await store.invalidate_fragments(meet_id, list(names))
-            with _emit_timer("invalidate"):
-                await sio.emit(
-                    "invalidate",
-                    {"fragments": list(names)},
-                    room=meet_id,
-                    namespace="/scoreboard",
-                )
-            return {"ok": True, "removed": removed}
-
     @sio.on("fragment", namespace="/pi")
     async def on_fragment(sid: str, payload: dict[str, Any]) -> None:
         """Pi pushed a rendered HTML fragment (e.g. message_page_0).
