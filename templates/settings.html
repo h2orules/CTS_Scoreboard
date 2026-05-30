@@ -117,8 +117,24 @@
     .wifi-network-summary {
         cursor: pointer; font-weight: bold; padding: 6px 0;
         user-select: none;
+        display: flex; align-items: center; gap: 6px;
+        list-style: none;
+    }
+    .wifi-network-summary::-webkit-details-marker { display: none; }
+    .wifi-network-summary::before {
+        content: '';
+        display: inline-block;
+        width: 0; height: 0;
+        border-top: 5px solid transparent;
+        border-bottom: 5px solid transparent;
+        border-left: 6px solid #555;
+        transition: transform 0.15s ease;
+    }
+    .wifi-network-expando[open] > .wifi-network-summary::before {
+        transform: rotate(90deg);
     }
     .wifi-network-summary:hover { color: #337ab7; }
+    .wifi-network-summary:hover::before { border-left-color: #337ab7; }
     .wifi-network-expando[open] > .wifi-network-summary { margin-bottom: 8px; }
 
     .wifi-refresh-btn {
