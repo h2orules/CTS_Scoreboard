@@ -119,6 +119,9 @@ class _TTLCache:
     def clear(self) -> None:
         self._data.clear()
 
+    def __len__(self) -> int:
+        return len(self._data)
+
 
 @dataclass(frozen=True)
 class MeetKeys:
@@ -238,6 +241,11 @@ class MeetStateStore:
         from app.telemetry import get_metrics
 
         get_metrics().cache_hits.add(1, {"op": op})
+
+    def _record_cache_miss(self, op: str) -> None:
+        from app.telemetry import get_metrics
+
+        get_metrics().cache_misses.add(1, {"op": op})
 
     # ---------- meet lifecycle ----------
 
@@ -410,6 +418,7 @@ class MeetStateStore:
         if cached is not None:
             self._record_cache_hit("get_fragment")
             return cached
+        self._record_cache_miss("get_fragment")
         value = await self._get_fragment_uncached(meet_id, name, key)
         if value is not None:
             self._fragment_cache.set((meet_id, name, key), value)
@@ -449,6 +458,7 @@ class MeetStateStore:
         if cached is not None:
             self._record_cache_hit("get_current_template")
             return cached
+        self._record_cache_miss("get_current_template")
         value = await self._get_current_template_uncached(meet_id)
         if value is not None:
             self._current_template_cache.set(meet_id, value)
@@ -487,6 +497,7 @@ class MeetStateStore:
         if cached is not None:
             self._record_cache_hit("get_template_blob")
             return cached
+        self._record_cache_miss("get_template_blob")
         value = await self._get_template_blob_uncached(meet_id, bundle_id)
         if value is not None:
             self._template_blob_cache.set((meet_id, bundle_id), value)
