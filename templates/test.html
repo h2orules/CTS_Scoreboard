@@ -79,6 +79,7 @@
         <button type="button" onclick="socket.emit('sim_load_event', {});">Load Test Event</button>
         <button type="button" onclick="socket.emit('sim_step', {step:'start'});">&#9654; Start</button>
         <button type="button" onclick="socket.emit('sim_step', {step:'finish'});">&#127937; Finish</button>
+        <button type="button" onclick="socket.emit('sim_step', {step:'reset'});">&#8634; Reset</button>
         <button type="button" onclick="socket.emit('sim_step', {step:'clear'});">Clear</button>
         <button type="button" onclick="socket.emit('sim_step', {step:'blank'});">Blank</button>
         <button type="button" onclick="socket.emit('sim_step', {step:'total_blank'});">Total Blank</button>

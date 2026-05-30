@@ -143,6 +143,37 @@ trim what's being cached.
 
 > Use this during the reconnect-storm stress test. This is the most
 > important panel for tuning `coalesce_window_seconds`.
+>
+> **Coalescer is disabled by default** (`coalesce_window_seconds=0`).
+> When disabled, every event flushes immediately so batch_size is
+> always 1 and compression is always 1.0 — that's expected. Re-enable
+> only if write rate / fan-out becomes the bottleneck again. To turn
+> it back on without redeploying:
+>
+> ```bash
+> # Prod — 100ms window:
+> az containerapp update \
+>     --name cts-sb-prod-app \
+>     --resource-group cts-sb-prod-rg \
+>     --set-env-vars COALESCE_WINDOW_SECONDS=0.1
+>
+> # Preprod — same syntax with the preprod names:
+> az containerapp update \
+>     --name cts-sb-preprod-app \
+>     --resource-group cts-sb-preprod-rg \
+>     --set-env-vars COALESCE_WINDOW_SECONDS=0.1
+>
+> # To turn it back off, set the value to 0 (do not --remove-env-vars,
+> # which would leave the var defaulted on the next redeploy anyway):
+> az containerapp update \
+>     --name cts-sb-prod-app \
+>     --resource-group cts-sb-prod-rg \
+>     --set-env-vars COALESCE_WINDOW_SECONDS=0
+> ```
+>
+> Each `--set-env-vars` triggers a new revision; traffic shifts to it
+> once it reports healthy.
+
 
 **Compression ratio** (events per flushed batch, line chart):
 
@@ -277,8 +308,9 @@ Before kicking off a reconnect-storm run, open the workbook with these
 panels and confirm:
 
 1. **Cache hit rate** ≥ 0.7 for `get_fragment` (warmed up).
-2. **Coalescer compression** ≥ 3 on `update_scoreboard` (steady state
-   with a single Pi connected and live race data flowing).
+2. **Coalescer compression** = 1.0 on `update_scoreboard` (expected
+   with coalescer disabled). If you've manually enabled it via
+   `COALESCE_WINDOW_SECONDS`, target ≥ 3 instead.
 3. **Redis evictions delta** = 0.
 4. **HTTP p95** on viewer routes < 300 ms.
 
