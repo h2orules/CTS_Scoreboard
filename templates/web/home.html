@@ -180,6 +180,7 @@
             <button type="button" onclick="socket.emit('sim_load_event', {});">Load Test Event</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'start'});">▶ Start</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'finish'});">🏁 Finish</button>
+            <button type="button" onclick="socket.emit('sim_step', {step:'reset'});">↺ Reset</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'clear'});">Clear</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'blank'});">Blank</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'total_blank'});">Total Blank</button>
@@ -901,13 +902,6 @@
             raceState = s["race_state"];
             console.log("Race state:", prevState, "→", raceState);
 
-            // Entering Running resets the per-lane confetti latch so a
-            // re-run of the same heat (e.g. test mode Start → Finish
-            // twice) can fire confetti again on the next Finished frame.
-            if (raceState === "Running") {
-                confettiFired = {};
-            }
-
             // All *PreRace states trigger the same reset
             if (raceState === "PreRace" || raceState === "ClearPreRace" ||
                 raceState === "BlankPreRace" || raceState === "TotalBlankPreRace") {
@@ -997,9 +991,19 @@
                 laneSeedTimes[seedMatch[1]] = s[k];
             }
 
-            // Check and update lane running
+            // Check and update lane running. Re-entering the running
+            // state for a lane means a new race attempt has begun, so
+            // clear the confetti latch so the next Finished frame can
+            // fire again (covers Start → Finish → Start → Finish in
+            // test mode, where the FSM may not transition through
+            // Running on the server).
             if (k.startsWith("lane_running")) {
-                lane_running[k.replace("lane_running", "")] = s[k];
+                var laneNum = k.replace("lane_running", "");
+                var wasRunning = lane_running[laneNum] || false;
+                lane_running[laneNum] = s[k];
+                if (s[k] && !wasRunning) {
+                    delete confettiFired[laneNum];
+                }
             }
 
         })

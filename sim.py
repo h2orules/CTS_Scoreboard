@@ -247,6 +247,34 @@ def register(socketio, app_module):
             # Re-send scores in case we were previously in a blank state
             _app.send_scores_info()
 
+        elif step == 'reset':
+            # Mimic the CTS console RESET key: stop the running clock and
+            # blank every lane (time/place/running) while keeping the
+            # event/heat selection so the same heat can be re-run after a
+            # false start. Drive the FSM straight to PreRace via
+            # change_event so we land in the ready-to-run state rather
+            # than passing through Clear.
+            #
+            # Intentionally do NOT include lane_time*/lane_place* in this
+            # broadcast: on the client, onPreRaceEntry() paints seed
+            # times into the lane_time cells, and the generic field
+            # loop that runs right after would overwrite them with the
+            # blanks we sent. The follow-up send_event_info() reasserts
+            # any data the scoreboard needs.
+            _sim_running = False
+            update['current_event'] = str(_app.last_event_sent[0])
+            update['current_heat'] = str(_app.last_event_sent[1])
+            for i in range(1, num_lanes + 1):
+                _app.channel_running[i - 1] = False
+                update['lane_running%d' % i] = False
+
+            _app.race_fsm.notify_event_change()
+            update['race_state'] = _app.race_fsm.state_name
+            _app.broadcast_scoreboard(update)
+            # Re-send event info so names/teams/seed times are populated
+            _app.send_event_info()
+            _app.send_scores_info()
+
         elif step == 'clear':
             update['current_event'] = str(_app.last_event_sent[0])
             update['current_heat'] = str(_app.last_event_sent[1])
