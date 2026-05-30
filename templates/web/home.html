@@ -722,6 +722,16 @@
         resetLaneQualifications();
         confettiFired = {};
         laneTimes = {};
+        // Pull fresh seed times out of the same payload BEFORE rendering,
+        // so updateSeedTimeDisplay doesn't paint stale values from the
+        // previous event. The generic forEach below also assigns these,
+        // but it runs after the race_state branch, which is too late.
+        for (var key in s) {
+            if (Object.prototype.hasOwnProperty.call(s, key)) {
+                var m = key.match(/^lane_seed_time(\d+)$/);
+                if (m) laneSeedTimes[m[1]] = s[key];
+            }
+        }
         // Only re-render qualifying info when full event data is present
         // (send_event_info includes these; parse_line serial updates do not)
         if ("qualifying_times" in s || "record_sets" in s) {
@@ -783,6 +793,21 @@
         socket.emit('set_event_heat', { event: {{ test_event }}, heat: {{ test_heat or 1 }}});
     {% endif %}
     });
+
+    // On full page reload the server sends the same race_state ("PreRace"
+    // most often) that we already initialized from initial_race_state, so
+    // the WebSocket race_state branch never fires onPreRaceEntry / paints
+    // the seed-time column. Paint it now from the server-pre-populated
+    // laneSeedTimes so the column header + cells are correct on first paint.
+    if (typeof document !== 'undefined') {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function () {
+                updateSeedTimeDisplay(raceState);
+            });
+        } else {
+            updateSeedTimeDisplay(raceState);
+        }
+    }
 
     var currentEvent = {{ test_event or 1 }};
     var currentHeat = {{ test_heat or 1 }};
