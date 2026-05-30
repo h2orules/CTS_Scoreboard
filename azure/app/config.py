@@ -66,7 +66,13 @@ class Settings(BaseSettings):
     # update_scoreboard / event_info / scores_info / message_overlay_state
     # payloads merge into a pending buffer and flush once per window,
     # capping Redis writes and Socket.IO fan-out rate. 0 disables.
-    coalesce_window_seconds: float = Field(default=0.1, ge=0.0, le=2.0)
+    #
+    # Disabled by default: at observed Pi cadence the buffer rarely
+    # holds more than 1-2 frames, so compression is ~1.5x while the
+    # added latency causes visible counting-clock skips during a race.
+    # Re-enable per-environment via COALESCE_WINDOW_SECONDS env var if a
+    # future fan-out spike makes write rate the bottleneck again.
+    coalesce_window_seconds: float = Field(default=0.0, ge=0.0, le=2.0)
 
     # Per-replica read caches for HTML fragments and template bundles.
     # 0 disables the respective cache. Template bundles and fragments are
