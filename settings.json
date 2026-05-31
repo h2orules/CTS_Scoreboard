@@ -18,7 +18,7 @@
         }
     ],
     "ad_max_dimension": "1920",
-    "ad_rotation_interval": 5,
+    "ad_rotation_interval": 30,
     "blank_message": "## Warmups\n**High Woodlands**: 4:30pm-5:00pm\n**Kingsgate**:      5:00pm-5:30pm\n## Meet Start\nPromptly at 6:00pm\n## Volunteer Meetings\n***Timers*** 5:30pm, ***Officials*** 5:45pm, ***Coaches*** 5:30pm",
     "blank_message_align": "center",
     "blank_message_visible": false,
@@ -26,16 +26,14 @@
     "footer_messages": [
         {
             "age_groups": [],
-            "align": "center",
-            "created_at": 1779861884.3764791,
-            "distances": [
-                25
-            ],
+            "align": "left",
+            "created_at": 1780214796.9085622,
+            "distances": [],
             "genders": [],
-            "id": "3baf0536fab6",
+            "id": "d71140686f9c",
             "is_default": false,
             "strokes": [],
-            "text": "Finish times are not available for 25yd events\nSee *Meet Mobile* for results in a few minutes"
+            "text": "Scoreboard finish times are not available for 25yd events.\nSee *Meet Mobile* for results in a few minutes."
         }
     ],
     "meet_title": "Kingsgate Invitational",
@@ -62,14 +60,14 @@
             "text": "# View the scoreboard live\nScan with your mobile device\n[[QR]]\nResults will update during the meet!\n"
         }
     ],
-    "message_rotation_interval": 5,
+    "message_rotation_interval": 15,
     "num_lanes": 4,
     "password": "password",
     "pool_course": "SCY",
     "qr_message_page_injected": true,
     "qr_overlay_corner": "bottom-left",
     "qr_overlay_enabled": false,
-    "qr_overlay_visibility": "off",
+    "qr_overlay_visibility": "between_races",
     "seed_time_label": "Entry Time",
     "serial_port": "/dev/ttyAMA0",
     "show_confetti": true,
