@@ -95,6 +95,16 @@
         background: #eee;
         color: #c00;
     }
+    .icon-btn {
+        padding: 4px 8px;
+        line-height: 1;
+    }
+    .icon-btn svg {
+        width: 16px;
+        height: 16px;
+        display: block;
+        fill: currentColor;
+    }
 
     /* ── WiFi section ──────────────────────────── */
     .wifi-status-bar {
@@ -899,7 +909,7 @@
                         color: #555;
                     }
                 </style>
-                    <form id="message_pages_form" action="/settings" method="POST">
+                    <form id="message_pages_form" action="/settings" method="POST" data-autosave="1">
                         <input type="hidden" name="message_pages_form" value="1">
                         <input type="hidden" name="page_count" id="page_count" value="{{ message_pages | length }}">
                         <div class="form-group" style="margin-bottom:10px;display:flex;align-items:center;gap:8px;">
@@ -1065,7 +1075,7 @@
                             {% endfor %}
                         </div>
                         <div class="form-group" style="margin-top:8px;">
-                            <button class="btn btn-default" type="submit">Update</button>
+                            <button class="btn btn-default autosave-hide" type="submit">Update</button>
                         </div>
                     </form>
                 <script src="/static/js/msg_formatting.js"></script>
@@ -1289,6 +1299,7 @@
                             '</div>';
                         container.appendChild(panel);
                         msgSelectTab(idx);
+                        if (window.SettingsAutosave) window.SettingsAutosave.save('message_pages_form');
                     };
                     window.msgRemovePage = function (idx) {
                         if (pageCount <= 1) return;
@@ -1367,6 +1378,7 @@
                         }
                         document.getElementById('msg_add_page').disabled = (pageCount >= 5);
                         msgSelectTab(Math.min(idx, pageCount - 1));
+                        if (window.SettingsAutosave) window.SettingsAutosave.save('message_pages_form');
                     }
                             }) ();
                 </script>
@@ -1940,8 +1952,11 @@
                                 accept=".st2"></input>
                             <span class="input-group-btn">
                                 <button class="btn btn-default" type="submit" id="time_standards_submit">Upload</button>
-                                <button class="btn btn-default" type="button"
-                                    onclick="location.href = '/standards_clear';">Clear</button>
+                                <button class="btn btn-danger icon-btn" type="button"
+                                    title="Clear loaded time standards"
+                                    onclick="if(confirm('Clear loaded time standards?')) location.href='/standards_clear';">
+                                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2h6l1 1h3v2H1V3h3l1-1zm-2 4h10l-1 9H4L3 6z"/></svg>
+                                </button>
                             </span>
                         </div>
                     </div>
@@ -1965,8 +1980,11 @@
                                     class="form-control" style="width: 20ch; display: inline-block;">
                             </td>
                             <td>
-                                <button type="button" class="btn btn-default btn-xs"
-                                    onclick="var inp=this.closest('tr').querySelector('input');inp.value=inp.dataset.original;inp.dispatchEvent(new Event('input',{bubbles:true}));">Clear</button>
+                                <button type="button" class="btn btn-default icon-btn"
+                                    title="Reset to default"
+                                    onclick="var inp=this.closest('tr').querySelector('input');inp.value=inp.dataset.original;inp.dispatchEvent(new Event('input',{bubbles:true}));">
+                                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3a5 5 0 1 1-3.535 1.464L2.5 6.43V2h4.43L5.464 3.464A5 5 0 0 1 8 3z"/></svg>
+                                </button>
                             </td>
                         </tr>
                         {% endfor %}
@@ -2026,8 +2044,11 @@
                                 </form>
                             </td>
                             <td>
-                                <button class="btn btn-default btn-sm" type="button"
-                                    onclick="location.href = '/records_remove/{{ rs.set_id }}';">Remove</button>
+                                <button class="btn btn-danger icon-btn" type="button"
+                                    title="Remove this record set"
+                                    onclick="if(confirm('Remove this record set?')) location.href='/records_remove/{{ rs.set_id }}';">
+                                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2h6l1 1h3v2H1V3h3l1-1zm-2 4h10l-1 9H4L3 6z"/></svg>
+                                </button>
                             </td>
                         </tr>
                         {% endfor %}
