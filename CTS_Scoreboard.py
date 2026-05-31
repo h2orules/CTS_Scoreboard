@@ -31,11 +31,15 @@ from qr_utils import build_meet_url, render_overlay_svg, substitute_qr_tokens, Q
 
 DEBUG = False
 #DEBUG = True
-settings_file = './settings.json'
+# Resolve settings paths against the script directory so that running the
+# command from any cwd (e.g. `cts-scoreboard` from $HOME) still finds and
+# writes the same files the systemd unit uses.
+_REPO_DIR = os.path.dirname(os.path.abspath(__file__))
+settings_file = os.path.join(_REPO_DIR, 'settings.json')
 # Azure-related settings live in a separate file that is git-ignored. Operator
 # values (tenant ID, relay URLs, etc.) are environment-specific and should
 # never be committed alongside the rest of the scoreboard configuration.
-azure_settings_file = './azure_settings.json'
+azure_settings_file = os.path.join(_REPO_DIR, 'azure_settings.json')
 AZURE_SETTINGS_KEYS = (
     'azure_enabled',
     'azure_environment',
