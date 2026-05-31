@@ -4,7 +4,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>{{ meet_title or 'Swimming Scoreboard' }}</title>
     <link href="https://fonts.googleapis.com/css?family=Overpass+Mono" rel="stylesheet">
+    {% if initial_settings and initial_settings.ui_style and initial_settings.ui_style.startswith('Modern') %}
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" type="text/css" href="{{url_for('static', filename='css/scoreboard_style_modern.css')}}">
+    {% else %}
     <link rel="stylesheet" type="text/css" href="{{url_for('static', filename='css/scoreboard_style_web.css')}}">
+    {% endif %}
 </head>
 
 <script>
@@ -94,7 +99,7 @@
     }
 </script>
 
-<body style="margin:0px" {% if initial_settings and not initial_settings.show_time_decorations %}class="hide-time-decorations"{% endif %} onload="init();">
+<body style="margin:0px" data-ui-style="{{ initial_settings.ui_style|default('Classic') }}" {% if initial_settings and not initial_settings.show_time_decorations %}class="hide-time-decorations"{% endif %} onload="init();">
     <div class="content_outer">
         <div class="scoreboard_group">
         <div class="content_title_block">
