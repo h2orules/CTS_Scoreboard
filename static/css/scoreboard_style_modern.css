@@ -21,10 +21,10 @@
     --surface-1: #16202f;
     --surface-2: #1c2738;
     --surface-3: #233045;
-    --row-odd: #18243a;
-    --row-eve: #1d2a44;
+    --row-odd: #131d30;
+    --row-eve: #233252;
     --ink: #e6eefb;
-    --ink-dim: #9fb1cc;
+    --ink-dim: #b6c6df;
     --ink-strong: #ffffff;
     --accent: #5ab8ff;
     --accent-strong: #7ec8ff;
@@ -45,44 +45,44 @@
    when "Modern Auto" detects a light system theme. Re-defines the
    palette tokens on <body> so the rules below pick them up via var().*/
 body[data-ui-style="Modern Light"] {
-    --bg: #eef2f8;
+    --bg: #dbe3ef;
     --surface-1: #ffffff;
-    --surface-2: #f6f8fc;
-    --surface-3: #e6ecf4;
-    --row-odd: #f3f6fb;
-    --row-eve: #e6ecf4;
-    --ink: #1a2436;
-    --ink-dim: #5a6b85;
-    --ink-strong: #0a1322;
-    --accent: #1f7ad1;
-    --accent-strong: #0e5fa8;
-    --accent-warm: #b86b0f;
-    --divider: rgba(15, 30, 55, 0.10);
-    --divider-strong: rgba(15, 30, 55, 0.22);
-    --pop-pink: #c8267e;
-    --shadow-sm: 0 1px 2px rgba(15, 30, 55, 0.10);
-    --shadow-md: 0 8px 28px rgba(15, 30, 55, 0.18);
+    --surface-2: #eef2f8;
+    --surface-3: #d4dcea;
+    --row-odd: #eef2f8;
+    --row-eve: #c9d4e6;
+    --ink: #0c1426;
+    --ink-dim: #2f3e5a;
+    --ink-strong: #000814;
+    --accent: #0d5fb0;
+    --accent-strong: #08467f;
+    --accent-warm: #8e4f08;
+    --divider: rgba(15, 30, 55, 0.18);
+    --divider-strong: rgba(15, 30, 55, 0.36);
+    --pop-pink: #a51c66;
+    --shadow-sm: 0 1px 2px rgba(15, 30, 55, 0.16);
+    --shadow-md: 0 8px 28px rgba(15, 30, 55, 0.24);
 }
 
 @media (prefers-color-scheme: light) {
     body[data-ui-style="Modern Auto"] {
-        --bg: #eef2f8;
+        --bg: #dbe3ef;
         --surface-1: #ffffff;
-        --surface-2: #f6f8fc;
-        --surface-3: #e6ecf4;
-        --row-odd: #f3f6fb;
-        --row-eve: #e6ecf4;
-        --ink: #1a2436;
-        --ink-dim: #5a6b85;
-        --ink-strong: #0a1322;
-        --accent: #1f7ad1;
-        --accent-strong: #0e5fa8;
-        --accent-warm: #b86b0f;
-        --divider: rgba(15, 30, 55, 0.10);
-        --divider-strong: rgba(15, 30, 55, 0.22);
-        --pop-pink: #c8267e;
-        --shadow-sm: 0 1px 2px rgba(15, 30, 55, 0.10);
-        --shadow-md: 0 8px 28px rgba(15, 30, 55, 0.18);
+        --surface-2: #eef2f8;
+        --surface-3: #d4dcea;
+        --row-odd: #eef2f8;
+        --row-eve: #c9d4e6;
+        --ink: #0c1426;
+        --ink-dim: #2f3e5a;
+        --ink-strong: #000814;
+        --accent: #0d5fb0;
+        --accent-strong: #08467f;
+        --accent-warm: #8e4f08;
+        --divider: rgba(15, 30, 55, 0.18);
+        --divider-strong: rgba(15, 30, 55, 0.36);
+        --pop-pink: #a51c66;
+        --shadow-sm: 0 1px 2px rgba(15, 30, 55, 0.16);
+        --shadow-md: 0 8px 28px rgba(15, 30, 55, 0.24);
     }
 }
 
