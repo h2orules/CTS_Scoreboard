@@ -81,3 +81,26 @@ Real-time data flows from serial port → Python parser → Flask-SocketIO → b
 - **JS dual-export IIFE**: Frontend JS files that need testing use `(function(exports) { ... })(typeof module !== 'undefined' ? module.exports : window)` so they work both as browser globals and Node.js modules.
 - **Test fixtures**: Python tests use a shared `conftest.py` with `samples_dir` and `hytek_dir` fixtures pointing to `samples/` and `samples/HyTek/`.
 - **Content caching**: Server-rendered HTML fragments are cached with SHA-256-based keys (`_cache_put` / `_cache_get` in `CTS_Scoreboard.py`).
+
+## Diagnosing layout / CSS issues
+
+When the user reports a visual layout bug (overflow, panel sizing, alignment),
+do **not** iterate blindly on CSS. The dev Pi is reachable from the agent host
+at `http://192.168.22.36:5000`. Drive a real headless Chromium at it via the
+Playwright browser tools and measure the DOM directly:
+
+1. `open_browser_page` (or reuse one) and `setViewportSize` to the target
+   device — e.g. iPhone 16 is 393×852 portrait, 852×393 landscape.
+2. `page.goto('http://192.168.22.36:5000/web/home')`.
+3. `page.evaluate(...)` to read `getBoundingClientRect()`, `scrollWidth`,
+   and `getComputedStyle()` (`width`, `boxSizing`, `minWidth`, `maxWidth`,
+   `display`, `padding`, `margin`) for the suspect elements and their
+   ancestors. Compare measured widths against the viewport and against
+   each sibling — that's how overflow root-causes (wrong `box-sizing`,
+   intrinsic `min-width: auto` on flex/grid items, missing
+   `grid-template-columns: minmax(0, 1fr)`) become obvious in one pass.
+4. Patch the CSS, reload, re-measure. Confirm with numbers, not screenshots.
+
+This loop takes seconds and is far more reliable than guessing from a phone
+screenshot.
+

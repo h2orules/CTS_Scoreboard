@@ -31,11 +31,15 @@ from qr_utils import build_meet_url, render_overlay_svg, substitute_qr_tokens, Q
 
 DEBUG = False
 #DEBUG = True
-settings_file = './settings.json'
+# Resolve settings paths against the script directory so that running the
+# command from any cwd (e.g. `cts-scoreboard` from $HOME) still finds and
+# writes the same files the systemd unit uses.
+_REPO_DIR = os.path.dirname(os.path.abspath(__file__))
+settings_file = os.path.join(_REPO_DIR, 'settings.json')
 # Azure-related settings live in a separate file that is git-ignored. Operator
 # values (tenant ID, relay URLs, etc.) are environment-specific and should
 # never be committed alongside the rest of the scoreboard configuration.
-azure_settings_file = './azure_settings.json'
+azure_settings_file = os.path.join(_REPO_DIR, 'azure_settings.json')
 AZURE_SETTINGS_KEYS = (
     'azure_enabled',
     'azure_environment',
@@ -79,6 +83,9 @@ settings = {
     'show_confetti': True,
     'show_time_decorations': False,
     'seed_time_label': 'Seed Time',
+    # Visual style for the public scoreboard. 'Classic' is the original
+    # look; 'Modern' uses a contemporary CSS theme. Same template/JS.
+    'ui_style': 'Classic',
     'message_pages': [{'text': '', 'align': 'left', 'enabled': False}],
     'message_overlay_enabled': False,
     'message_rotation_interval': 30,
@@ -275,6 +282,10 @@ def load_settings():
                 'always' if _raw_settings_on_disk.get('qr_overlay_enabled')
                 else 'off'
             )
+        # Legacy ui_style "Modern" → "Modern Dark" (the original Modern
+        # theme was always dark; we now offer Light/Dark/Auto variants).
+        if settings.get('ui_style') == 'Modern':
+            settings['ui_style'] = 'Modern Dark'
     except: pass
     # Azure settings live in their own (git-ignored) file. Load it on top of
     # whatever defaults / migrated values are already in `settings`.
@@ -1592,6 +1603,7 @@ def _build_render_context():
             'show_confetti': settings.get('show_confetti', True),
             'show_time_decorations': settings.get('show_time_decorations', False),
             'seed_time_label': settings.get('seed_time_label', 'Seed Time'),
+            'ui_style': settings.get('ui_style', 'Classic'),
             'message_overlay_enabled': settings.get('message_overlay_enabled', False),
             'message_rotation_interval': settings.get('message_rotation_interval', 30),
         },
