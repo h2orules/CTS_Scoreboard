@@ -299,55 +299,126 @@ body.hide-time-decorations .qt-highlight {
 /* Light-mode QT/REC palette: darker, saturated variants so the colored
    tag/time text stays readable on the light --surface-3 band. */
 body[data-ui-style="Modern Light"] .qt-color-0,
-body[data-ui-style="Modern Light"] .rec-color-0 { color: #b8351a; }
+body[data-ui-style="Modern Light"] .rec-color-0 {
+    color: #b8351a;
+}
+
 body[data-ui-style="Modern Light"] .qt-color-1,
-body[data-ui-style="Modern Light"] .rec-color-1 { color: #0d5fb0; }
+body[data-ui-style="Modern Light"] .rec-color-1 {
+    color: #0d5fb0;
+}
+
 body[data-ui-style="Modern Light"] .qt-color-2,
-body[data-ui-style="Modern Light"] .rec-color-2 { color: #1f7a1f; }
+body[data-ui-style="Modern Light"] .rec-color-2 {
+    color: #1f7a1f;
+}
+
 body[data-ui-style="Modern Light"] .qt-color-3,
-body[data-ui-style="Modern Light"] .rec-color-3 { color: #a8226d; }
+body[data-ui-style="Modern Light"] .rec-color-3 {
+    color: #a8226d;
+}
+
 body[data-ui-style="Modern Light"] .qt-color-4,
-body[data-ui-style="Modern Light"] .rec-color-4 { color: #8a4d00; }
+body[data-ui-style="Modern Light"] .rec-color-4 {
+    color: #8a4d00;
+}
+
 body[data-ui-style="Modern Light"] .qt-color-5,
-body[data-ui-style="Modern Light"] .rec-color-5 { color: #4d27a8; }
+body[data-ui-style="Modern Light"] .rec-color-5 {
+    color: #4d27a8;
+}
+
 body[data-ui-style="Modern Light"] .qt-color-6,
-body[data-ui-style="Modern Light"] .rec-color-6 { color: #a8254e; }
+body[data-ui-style="Modern Light"] .rec-color-6 {
+    color: #a8254e;
+}
+
 body[data-ui-style="Modern Light"] .qt-color-7,
-body[data-ui-style="Modern Light"] .rec-color-7 { color: #0f6856; }
+body[data-ui-style="Modern Light"] .rec-color-7 {
+    color: #0f6856;
+}
+
 body[data-ui-style="Modern Light"] .qt-color-8,
-body[data-ui-style="Modern Light"] .rec-color-8 { color: #6e1f99; }
+body[data-ui-style="Modern Light"] .rec-color-8 {
+    color: #6e1f99;
+}
+
 body[data-ui-style="Modern Light"] .qt-color-9,
-body[data-ui-style="Modern Light"] .rec-color-9 { color: #7a4400; }
+body[data-ui-style="Modern Light"] .rec-color-9 {
+    color: #7a4400;
+}
+
 body[data-ui-style="Modern Light"] .qt-color-10,
-body[data-ui-style="Modern Light"] .rec-color-10 { color: #2841ab; }
+body[data-ui-style="Modern Light"] .rec-color-10 {
+    color: #2841ab;
+}
+
 body[data-ui-style="Modern Light"] .qt-color-11,
-body[data-ui-style="Modern Light"] .rec-color-11 { color: #5a6612; }
+body[data-ui-style="Modern Light"] .rec-color-11 {
+    color: #5a6612;
+}
 
 @media (prefers-color-scheme: light) {
+
     body[data-ui-style="Modern Auto"] .qt-color-0,
-    body[data-ui-style="Modern Auto"] .rec-color-0 { color: #b8351a; }
+    body[data-ui-style="Modern Auto"] .rec-color-0 {
+        color: #b8351a;
+    }
+
     body[data-ui-style="Modern Auto"] .qt-color-1,
-    body[data-ui-style="Modern Auto"] .rec-color-1 { color: #0d5fb0; }
+    body[data-ui-style="Modern Auto"] .rec-color-1 {
+        color: #0d5fb0;
+    }
+
     body[data-ui-style="Modern Auto"] .qt-color-2,
-    body[data-ui-style="Modern Auto"] .rec-color-2 { color: #1f7a1f; }
+    body[data-ui-style="Modern Auto"] .rec-color-2 {
+        color: #1f7a1f;
+    }
+
     body[data-ui-style="Modern Auto"] .qt-color-3,
-    body[data-ui-style="Modern Auto"] .rec-color-3 { color: #a8226d; }
+    body[data-ui-style="Modern Auto"] .rec-color-3 {
+        color: #a8226d;
+    }
+
     body[data-ui-style="Modern Auto"] .qt-color-4,
-    body[data-ui-style="Modern Auto"] .rec-color-4 { color: #8a4d00; }
+    body[data-ui-style="Modern Auto"] .rec-color-4 {
+        color: #8a4d00;
+    }
+
     body[data-ui-style="Modern Auto"] .qt-color-5,
-    body[data-ui-style="Modern Auto"] .rec-color-5 { color: #4d27a8; }
+    body[data-ui-style="Modern Auto"] .rec-color-5 {
+        color: #4d27a8;
+    }
+
     body[data-ui-style="Modern Auto"] .qt-color-6,
-    body[data-ui-style="Modern Auto"] .rec-color-6 { color: #a8254e; }
+    body[data-ui-style="Modern Auto"] .rec-color-6 {
+        color: #a8254e;
+    }
+
     body[data-ui-style="Modern Auto"] .qt-color-7,
-    body[data-ui-style="Modern Auto"] .rec-color-7 { color: #0f6856; }
+    body[data-ui-style="Modern Auto"] .rec-color-7 {
+        color: #0f6856;
+    }
+
     body[data-ui-style="Modern Auto"] .qt-color-8,
-    body[data-ui-style="Modern Auto"] .rec-color-8 { color: #6e1f99; }
+    body[data-ui-style="Modern Auto"] .rec-color-8 {
+        color: #6e1f99;
+    }
+
     body[data-ui-style="Modern Auto"] .qt-color-9,
-    body[data-ui-style="Modern Auto"] .rec-color-9 { color: #7a4400; }
+    body[data-ui-style="Modern Auto"] .rec-color-9 {
+        color: #7a4400;
+    }
+
     body[data-ui-style="Modern Auto"] .qt-color-10,
-    body[data-ui-style="Modern Auto"] .rec-color-10 { color: #2841ab; }
+    body[data-ui-style="Modern Auto"] .rec-color-10 {
+        color: #2841ab;
+    }
+
     body[data-ui-style="Modern Auto"] .qt-color-11,
-    body[data-ui-style="Modern Auto"] .rec-color-11 { color: #5a6612; }
+    body[data-ui-style="Modern Auto"] .rec-color-11 {
+        color: #5a6612;
+    }
 }
 
 .standards-records-container {
