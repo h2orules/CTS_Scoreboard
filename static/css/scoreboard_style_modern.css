@@ -48,7 +48,7 @@ body[data-ui-style="Modern Light"] {
     --bg: #dbe3ef;
     --surface-1: #ffffff;
     --surface-2: #eef2f8;
-    --surface-3: #d4dcea;
+    --surface-3: #becbe1;
     --row-odd: #eef2f8;
     --row-eve: #c9d4e6;
     --ink: #0c1426;
@@ -60,8 +60,8 @@ body[data-ui-style="Modern Light"] {
     --divider: rgba(15, 30, 55, 0.18);
     --divider-strong: rgba(15, 30, 55, 0.36);
     --pop-pink: #a51c66;
-    --shadow-sm: 0 1px 2px rgba(15, 30, 55, 0.16);
-    --shadow-md: 0 8px 28px rgba(15, 30, 55, 0.24);
+    --shadow-sm: 0 1px 2px rgba(15, 30, 55, 0.22);
+    --shadow-md: 0 10px 28px rgba(15, 30, 55, 0.34);
 }
 
 @media (prefers-color-scheme: light) {
@@ -69,7 +69,7 @@ body[data-ui-style="Modern Light"] {
         --bg: #dbe3ef;
         --surface-1: #ffffff;
         --surface-2: #eef2f8;
-        --surface-3: #d4dcea;
+        --surface-3: #becbe1;
         --row-odd: #eef2f8;
         --row-eve: #c9d4e6;
         --ink: #0c1426;
@@ -81,8 +81,8 @@ body[data-ui-style="Modern Light"] {
         --divider: rgba(15, 30, 55, 0.18);
         --divider-strong: rgba(15, 30, 55, 0.36);
         --pop-pink: #a51c66;
-        --shadow-sm: 0 1px 2px rgba(15, 30, 55, 0.16);
-        --shadow-md: 0 8px 28px rgba(15, 30, 55, 0.24);
+        --shadow-sm: 0 1px 2px rgba(15, 30, 55, 0.22);
+        --shadow-md: 0 10px 28px rgba(15, 30, 55, 0.34);
     }
 }
 
@@ -162,7 +162,7 @@ table.scoreboard_table .qualifying_time_row td {
     font-family: var(--font-display);
     color: var(--ink-dim);
     font-size: 22px;
-    background: var(--surface-2);
+    background: var(--surface-3);
     padding: 8px 12px;
     text-align: left;
     white-space: nowrap;
@@ -294,6 +294,60 @@ body.hide-time-decorations .qt-highlight {
 
 .rec-color-11 {
     color: #b8c870;
+}
+
+/* Light-mode QT/REC palette: darker, saturated variants so the colored
+   tag/time text stays readable on the light --surface-3 band. */
+body[data-ui-style="Modern Light"] .qt-color-0,
+body[data-ui-style="Modern Light"] .rec-color-0 { color: #b8351a; }
+body[data-ui-style="Modern Light"] .qt-color-1,
+body[data-ui-style="Modern Light"] .rec-color-1 { color: #0d5fb0; }
+body[data-ui-style="Modern Light"] .qt-color-2,
+body[data-ui-style="Modern Light"] .rec-color-2 { color: #1f7a1f; }
+body[data-ui-style="Modern Light"] .qt-color-3,
+body[data-ui-style="Modern Light"] .rec-color-3 { color: #a8226d; }
+body[data-ui-style="Modern Light"] .qt-color-4,
+body[data-ui-style="Modern Light"] .rec-color-4 { color: #8a4d00; }
+body[data-ui-style="Modern Light"] .qt-color-5,
+body[data-ui-style="Modern Light"] .rec-color-5 { color: #4d27a8; }
+body[data-ui-style="Modern Light"] .qt-color-6,
+body[data-ui-style="Modern Light"] .rec-color-6 { color: #a8254e; }
+body[data-ui-style="Modern Light"] .qt-color-7,
+body[data-ui-style="Modern Light"] .rec-color-7 { color: #0f6856; }
+body[data-ui-style="Modern Light"] .qt-color-8,
+body[data-ui-style="Modern Light"] .rec-color-8 { color: #6e1f99; }
+body[data-ui-style="Modern Light"] .qt-color-9,
+body[data-ui-style="Modern Light"] .rec-color-9 { color: #7a4400; }
+body[data-ui-style="Modern Light"] .qt-color-10,
+body[data-ui-style="Modern Light"] .rec-color-10 { color: #2841ab; }
+body[data-ui-style="Modern Light"] .qt-color-11,
+body[data-ui-style="Modern Light"] .rec-color-11 { color: #5a6612; }
+
+@media (prefers-color-scheme: light) {
+    body[data-ui-style="Modern Auto"] .qt-color-0,
+    body[data-ui-style="Modern Auto"] .rec-color-0 { color: #b8351a; }
+    body[data-ui-style="Modern Auto"] .qt-color-1,
+    body[data-ui-style="Modern Auto"] .rec-color-1 { color: #0d5fb0; }
+    body[data-ui-style="Modern Auto"] .qt-color-2,
+    body[data-ui-style="Modern Auto"] .rec-color-2 { color: #1f7a1f; }
+    body[data-ui-style="Modern Auto"] .qt-color-3,
+    body[data-ui-style="Modern Auto"] .rec-color-3 { color: #a8226d; }
+    body[data-ui-style="Modern Auto"] .qt-color-4,
+    body[data-ui-style="Modern Auto"] .rec-color-4 { color: #8a4d00; }
+    body[data-ui-style="Modern Auto"] .qt-color-5,
+    body[data-ui-style="Modern Auto"] .rec-color-5 { color: #4d27a8; }
+    body[data-ui-style="Modern Auto"] .qt-color-6,
+    body[data-ui-style="Modern Auto"] .rec-color-6 { color: #a8254e; }
+    body[data-ui-style="Modern Auto"] .qt-color-7,
+    body[data-ui-style="Modern Auto"] .rec-color-7 { color: #0f6856; }
+    body[data-ui-style="Modern Auto"] .qt-color-8,
+    body[data-ui-style="Modern Auto"] .rec-color-8 { color: #6e1f99; }
+    body[data-ui-style="Modern Auto"] .qt-color-9,
+    body[data-ui-style="Modern Auto"] .rec-color-9 { color: #7a4400; }
+    body[data-ui-style="Modern Auto"] .qt-color-10,
+    body[data-ui-style="Modern Auto"] .rec-color-10 { color: #2841ab; }
+    body[data-ui-style="Modern Auto"] .qt-color-11,
+    body[data-ui-style="Modern Auto"] .rec-color-11 { color: #5a6612; }
 }
 
 .standards-records-container {
@@ -786,7 +840,7 @@ table.scoreboard_table th {
     font-weight: 700;
     color: var(--ink-strong);
     font-size: 38px;
-    background: linear-gradient(180deg, var(--surface-3) 0%, var(--surface-2) 100%);
+    background: var(--surface-3);
     width: 100%;
     text-align: center;
     padding: 8px 0;
