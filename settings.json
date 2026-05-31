@@ -26,11 +26,11 @@
     "footer_messages": [
         {
             "age_groups": [],
-            "align": "left",
-            "created_at": 1780214796.9085622,
+            "align": "center",
+            "created_at": 1780215212.4249349,
             "distances": [],
             "genders": [],
-            "id": "d71140686f9c",
+            "id": "11fa19956bb6",
             "is_default": false,
             "strokes": [],
             "text": "Scoreboard finish times are not available for 25yd events.\nSee *Meet Mobile* for results in a few minutes."
@@ -42,7 +42,7 @@
         {
             "align": "center",
             "enabled": true,
-            "text": "# Kingsgate Invitational 2026\nThe first meet of the year!\n\n## Warmups\n**High Woodlands:** 4:30-5:30pm\n**Kingsgate:** 5:00-5:30pm\n\n## Pre-meet Meetings\n***Timers:*** 5:30pm, ***Officials:*** 5:30pm, ***Coaches:*** 5:45pm"
+            "text": "# Kingsgate Invitational 2026!!!\nThe first meet of the year!\n\n## Warmups\n**High Woodlands:** 4:30-5:30pm\n**Kingsgate:** 5:00-5:30pm\n\n## Pre-meet Meetings\n***Timers:*** 5:30pm, ***Officials:*** 5:30pm, ***Coaches:*** 5:45pm"
         },
         {
             "align": "left",
@@ -67,7 +67,7 @@
     "qr_message_page_injected": true,
     "qr_overlay_corner": "bottom-left",
     "qr_overlay_enabled": false,
-    "qr_overlay_visibility": "between_races",
+    "qr_overlay_visibility": "always",
     "seed_time_label": "Entry Time",
     "serial_port": "/dev/ttyAMA0",
     "show_confetti": true,

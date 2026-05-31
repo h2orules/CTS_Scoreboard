@@ -172,7 +172,20 @@
             }
             doSave(fd);
         });
+
+        // Public hook so other inline scripts (e.g. message-pages add/remove)
+        // can request an immediate save after DOM-only mutations.
+        form._autosaveBump = function () { doSave(); };
     }
+
+    // Public helper: trigger autosave for a form (by element or id).
+    window.SettingsAutosave = {
+        save: function (formOrId) {
+            var f = (typeof formOrId === 'string')
+                ? document.getElementById(formOrId) : formOrId;
+            if (f && typeof f._autosaveBump === 'function') f._autosaveBump();
+        }
+    };
 
     function init() {
         document.body.classList.add('autosave-ready');
