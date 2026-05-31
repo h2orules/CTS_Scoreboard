@@ -68,7 +68,7 @@ body {
     flex-direction: column;
     align-items: stretch;
     width: fit-content;
-    min-width: 1000px;
+    min-width: 720px;
     max-width: 100%;
     gap: 14px;
 }
@@ -81,6 +81,8 @@ body {
     padding: 18px 24px 14px;
     box-shadow: var(--shadow-md);
     border: 1px solid var(--divider);
+    min-width: 0;
+    box-sizing: border-box;
 }
 
 .content_meet_title {
@@ -146,31 +148,101 @@ body.hide-time-decorations .qt-highlight {
 }
 
 /* Brighter QT colour palette tuned for contrast on dark surfaces. */
-.qt-color-0  { color: #ff6b6b; }
-.qt-color-1  { color: #5ab8ff; }
-.qt-color-2  { color: #76d976; }
-.qt-color-3  { color: #ff8ad8; }
-.qt-color-4  { color: #ffb454; }
-.qt-color-5  { color: #b18bff; }
-.qt-color-6  { color: #ff8aa8; }
-.qt-color-7  { color: #5fd4d4; }
-.qt-color-8  { color: #d68aff; }
-.qt-color-9  { color: #d9a060; }
-.qt-color-10 { color: #d97ad9; }
-.qt-color-11 { color: #8fa8ff; }
+.qt-color-0 {
+    color: #ff6b6b;
+}
 
-.rec-color-0  { color: #ff8a5a; }
-.rec-color-1  { color: #7ec8ff; }
-.rec-color-2  { color: #8be58b; }
-.rec-color-3  { color: #c49aff; }
-.rec-color-4  { color: #ffc870; }
-.rec-color-5  { color: #ab8aff; }
-.rec-color-6  { color: #ff7aa8; }
-.rec-color-7  { color: #66d6b6; }
-.rec-color-8  { color: #d27ab8; }
-.rec-color-9  { color: #d9a070; }
-.rec-color-10 { color: #8fa0ff; }
-.rec-color-11 { color: #b8c870; }
+.qt-color-1 {
+    color: #5ab8ff;
+}
+
+.qt-color-2 {
+    color: #76d976;
+}
+
+.qt-color-3 {
+    color: #ff8ad8;
+}
+
+.qt-color-4 {
+    color: #ffb454;
+}
+
+.qt-color-5 {
+    color: #b18bff;
+}
+
+.qt-color-6 {
+    color: #ff8aa8;
+}
+
+.qt-color-7 {
+    color: #5fd4d4;
+}
+
+.qt-color-8 {
+    color: #d68aff;
+}
+
+.qt-color-9 {
+    color: #d9a060;
+}
+
+.qt-color-10 {
+    color: #d97ad9;
+}
+
+.qt-color-11 {
+    color: #8fa8ff;
+}
+
+.rec-color-0 {
+    color: #ff8a5a;
+}
+
+.rec-color-1 {
+    color: #7ec8ff;
+}
+
+.rec-color-2 {
+    color: #8be58b;
+}
+
+.rec-color-3 {
+    color: #c49aff;
+}
+
+.rec-color-4 {
+    color: #ffc870;
+}
+
+.rec-color-5 {
+    color: #ab8aff;
+}
+
+.rec-color-6 {
+    color: #ff7aa8;
+}
+
+.rec-color-7 {
+    color: #66d6b6;
+}
+
+.rec-color-8 {
+    color: #d27ab8;
+}
+
+.rec-color-9 {
+    color: #d9a070;
+}
+
+.rec-color-10 {
+    color: #8fa0ff;
+}
+
+.rec-color-11 {
+    color: #b8c870;
+}
 
 .standards-records-container {
     display: flex;
@@ -321,6 +393,7 @@ body.hide-time-decorations .qt-highlight {
     border-radius: var(--radius-md);
     padding: 6px 14px;
     box-shadow: var(--shadow-sm);
+    min-width: 0;
 }
 
 .score_team_name {
@@ -328,11 +401,11 @@ body.hide-time-decorations .qt-highlight {
     font-weight: 500;
     font-size: 22px;
     color: var(--ink-dim);
-    flex: 1;
+    flex: 1 1 0;
+    min-width: 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    min-width: 0;
 }
 
 .score_value {
@@ -371,7 +444,8 @@ body.hide-time-decorations .qt-highlight {
     text-align: right;
     line-height: 1.2;
     vertical-align: top;
-    margin-left: -4px; /* collapse whitespace between inline-blocks */
+    margin-left: -4px;
+    /* collapse whitespace between inline-blocks */
 }
 
 .content_scoreboard {
@@ -381,6 +455,9 @@ body.hide-time-decorations .qt-highlight {
     opacity: 1 !important;
     display: block !important;
     text-align: center;
+    width: 100%;
+    box-sizing: border-box;
+    align-self: stretch;
 }
 
 .content_scoreboard_ad {
@@ -464,7 +541,7 @@ body.hide-time-decorations .qt-highlight {
     transition: max-height 0.5s ease, min-height 0.5s ease, opacity 0.5s;
 }
 
-.scoreboard-stack > * {
+.scoreboard-stack>* {
     grid-area: 1 / 1;
 }
 
@@ -538,7 +615,7 @@ body.hide-time-decorations .qt-highlight {
     width: 100%;
 }
 
-.blank-message-text-stack > * {
+.blank-message-text-stack>* {
     grid-area: 1 / 1;
 }
 
@@ -576,10 +653,21 @@ body.hide-time-decorations .qt-highlight {
     margin-top: 0;
 }
 
-.blank-message-body h1 { font-size: 1.4em; }
-.blank-message-body h2 { font-size: 1.25em; }
-.blank-message-body h3 { font-size: 1.1em; }
-.blank-message-body h4 { font-size: 1em; }
+.blank-message-body h1 {
+    font-size: 1.4em;
+}
+
+.blank-message-body h2 {
+    font-size: 1.25em;
+}
+
+.blank-message-body h3 {
+    font-size: 1.1em;
+}
+
+.blank-message-body h4 {
+    font-size: 1em;
+}
 
 .blank-message-body ul,
 .blank-message-body ol {
@@ -601,10 +689,22 @@ body.hide-time-decorations .qt-highlight {
     color: var(--accent-strong);
 }
 
-.blank-message-body strong { font-weight: 700; color: var(--ink-strong); }
-.blank-message-body em { font-style: italic; }
-.blank-message-body u { text-decoration: underline; }
-.blank-message-body s { text-decoration: line-through; }
+.blank-message-body strong {
+    font-weight: 700;
+    color: var(--ink-strong);
+}
+
+.blank-message-body em {
+    font-style: italic;
+}
+
+.blank-message-body u {
+    text-decoration: underline;
+}
+
+.blank-message-body s {
+    text-decoration: line-through;
+}
 
 .seed-time-italic {
     font-style: italic;
@@ -693,9 +793,17 @@ table.scoreboard_table th {
     overflow: hidden;
 }
 
-.scoreboard-footer-message.align-left { text-align: left; }
-.scoreboard-footer-message.align-center { text-align: center; }
-.scoreboard-footer-message.align-right { text-align: right; }
+.scoreboard-footer-message.align-left {
+    text-align: left;
+}
+
+.scoreboard-footer-message.align-center {
+    text-align: center;
+}
+
+.scoreboard-footer-message.align-right {
+    text-align: right;
+}
 
 .scoreboard-footer-message h1,
 .scoreboard-footer-message h2,
@@ -864,8 +972,13 @@ table.scoreboard_table td[id^="lane_place"] {
         table-layout: auto;
     }
 
-    .header-full { display: none; }
-    .header-short { display: inline; }
+    .header-full {
+        display: none;
+    }
+
+    .header-short {
+        display: inline;
+    }
 
     #scoreboard_lane_col {
         width: 1px !important;
@@ -905,8 +1018,8 @@ table.scoreboard_table td[id^="lane_place"] {
         font-size: min(24px, 3.5vw);
     }
 
-    table.scoreboard_table tr:not(.scoreboard_footer_row) > td:first-child,
-    table.scoreboard_table tr:not(.scoreboard_footer_row) > td:nth-child(2) {
+    table.scoreboard_table tr:not(.scoreboard_footer_row)>td:first-child,
+    table.scoreboard_table tr:not(.scoreboard_footer_row)>td:nth-child(2) {
         width: 1px;
         padding: 0 4px;
     }
@@ -1036,10 +1149,21 @@ table.scoreboard_table td[id^="lane_place"] {
         font-size: min(22px, 3.4vw) !important;
     }
 
-    .blank-message-body h1 { font-size: 1.4em; }
-    .blank-message-body h2 { font-size: 1.25em; }
-    .blank-message-body h3 { font-size: 1.1em; }
-    .blank-message-body h4 { font-size: 1em; }
+    .blank-message-body h1 {
+        font-size: 1.4em;
+    }
+
+    .blank-message-body h2 {
+        font-size: 1.25em;
+    }
+
+    .blank-message-body h3 {
+        font-size: 1.1em;
+    }
+
+    .blank-message-body h4 {
+        font-size: 1em;
+    }
 
     .scoreboard_footer_cell {
         font-size: 3vw !important;
@@ -1050,7 +1174,8 @@ table.scoreboard_table td[id^="lane_place"] {
 /* Landscape phones */
 @media (orientation: landscape) and (max-height: 600px) {
 
-    html, body {
+    html,
+    body {
         overflow: visible;
         height: auto;
     }
@@ -1088,8 +1213,13 @@ table.scoreboard_table td[id^="lane_place"] {
         table-layout: auto;
     }
 
-    .header-full { display: none; }
-    .header-short { display: inline; }
+    .header-full {
+        display: none;
+    }
+
+    .header-short {
+        display: inline;
+    }
 
     #scoreboard_lane_col {
         width: 1px !important;
@@ -1128,8 +1258,8 @@ table.scoreboard_table td[id^="lane_place"] {
         white-space: nowrap;
     }
 
-    table.scoreboard_table tr:not(.scoreboard_footer_row) > td:first-child,
-    table.scoreboard_table tr:not(.scoreboard_footer_row) > td:nth-child(2) {
+    table.scoreboard_table tr:not(.scoreboard_footer_row)>td:first-child,
+    table.scoreboard_table tr:not(.scoreboard_footer_row)>td:nth-child(2) {
         width: 1px;
         padding: 0 4px;
     }
@@ -1138,9 +1268,18 @@ table.scoreboard_table td[id^="lane_place"] {
         white-space: nowrap;
     }
 
-    .content_meet_title { font-size: min(28px, 4.2vw); }
-    .content_meet_date { font-size: min(16px, 3vw); }
-    .score_team_name, .score_value { font-size: min(22px, 3.4vw); }
+    .content_meet_title {
+        font-size: min(28px, 4.2vw);
+    }
+
+    .content_meet_date {
+        font-size: min(16px, 3vw);
+    }
+
+    .score_team_name,
+    .score_value {
+        font-size: min(22px, 3.4vw);
+    }
 
     /* Plenty of horizontal room in landscape — let scores span the full width. */
     .content_scores {
@@ -1158,11 +1297,14 @@ table.scoreboard_table td[id^="lane_place"] {
         gap: 0;
     }
 
-    .standards-column, .records-column {
+    .standards-column,
+    .records-column {
         flex: 1 1 0;
     }
 
-    .standards-column { padding-right: 12px; }
+    .standards-column {
+        padding-right: 12px;
+    }
 
     .records-column {
         border-left: 1px solid var(--divider-strong);
@@ -1172,12 +1314,25 @@ table.scoreboard_table td[id^="lane_place"] {
         margin-bottom: 0;
     }
 
-    .records-grid .set-subheader { grid-column: auto; }
-    .records-grid .set-subheader-spacer { display: block; }
-    .records-grid .record-start { grid-column: auto; }
-    .records-grid .qual-subheader { padding-left: 0; }
+    .records-grid .set-subheader {
+        grid-column: auto;
+    }
 
-    .scoreboard_disclaimer { padding: 12px 0; }
+    .records-grid .set-subheader-spacer {
+        display: block;
+    }
+
+    .records-grid .record-start {
+        grid-column: auto;
+    }
+
+    .records-grid .qual-subheader {
+        padding-left: 0;
+    }
+
+    .scoreboard_disclaimer {
+        padding: 12px 0;
+    }
 }
 
 /* Confetti particles */
@@ -1211,7 +1366,9 @@ table.scoreboard_table td[id^="lane_place"] {
     }
 }
 
-.qr-overlay.qr-hidden { display: none; }
+.qr-overlay.qr-hidden {
+    display: none;
+}
 
 .qr-overlay svg {
     display: block;
@@ -1221,10 +1378,25 @@ table.scoreboard_table td[id^="lane_place"] {
     max-height: 100%;
 }
 
-.qr-overlay-top-left { top: 12px; left: 12px; }
-.qr-overlay-top-right { top: 12px; right: 12px; }
-.qr-overlay-bottom-left { bottom: 12px; left: 12px; }
-.qr-overlay-bottom-right { bottom: 12px; right: 12px; }
+.qr-overlay-top-left {
+    top: 12px;
+    left: 12px;
+}
+
+.qr-overlay-top-right {
+    top: 12px;
+    right: 12px;
+}
+
+.qr-overlay-bottom-left {
+    bottom: 12px;
+    left: 12px;
+}
+
+.qr-overlay-bottom-right {
+    bottom: 12px;
+    right: 12px;
+}
 
 .qr-inline {
     display: inline-block;
