@@ -399,6 +399,132 @@
         </div>
         </div>
 
+        <div class="settings-section" id="section-display-style">
+            <h3>Display Style</h3>
+            <form action="/settings" method="POST">
+                <input type="hidden" name="ui_style_form" value="1">
+                <style>
+                    .style-picker {
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 18px;
+                        margin-top: 8px;
+                    }
+
+                    .style-picker input[type="radio"] {
+                        position: absolute;
+                        opacity: 0;
+                        pointer-events: none;
+                    }
+
+                    .style-picker label {
+                        display: block;
+                        flex: 0 0 320px;
+                        cursor: pointer;
+                        border: 2px solid #ddd;
+                        border-radius: 12px;
+                        padding: 12px;
+                        background: #fff;
+                        transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
+                        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+                    }
+
+                    .style-picker label:hover {
+                        border-color: #87bdd8;
+                    }
+
+                    .style-picker label:active {
+                        transform: translateY(1px);
+                    }
+
+                    .style-picker input[type="radio"]:checked+.style-card {
+                        border-color: #2f7ab8;
+                        box-shadow: 0 0 0 3px rgba(47, 122, 184, 0.25);
+                    }
+
+                    .style-card {
+                        display: block;
+                        border-radius: 8px;
+                        margin: -12px;
+                        padding: 12px;
+                        border: 2px solid transparent;
+                        transition: border-color 0.15s ease, box-shadow 0.15s ease;
+                    }
+
+                    .style-card .style-preview {
+                        width: 100%;
+                        aspect-ratio: 16 / 9;
+                        background: #f4f6fa;
+                        border-radius: 6px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        overflow: hidden;
+                        margin-bottom: 10px;
+                        border: 1px solid #e5e9f0;
+                    }
+
+                    .style-card .style-preview img {
+                        width: 100%;
+                        height: 100%;
+                        object-fit: cover;
+                        display: block;
+                    }
+
+                    .style-card .style-name {
+                        font-size: 18px;
+                        font-weight: 600;
+                        color: #222;
+                        display: flex;
+                        align-items: center;
+                        gap: 6px;
+                    }
+
+                    .style-card .style-name .check {
+                        color: #2f7ab8;
+                        opacity: 0;
+                        transition: opacity 0.15s ease;
+                        font-size: 16px;
+                    }
+
+                    .style-picker input[type="radio"]:checked+.style-card .style-name .check {
+                        opacity: 1;
+                    }
+
+                    .style-card .style-tagline {
+                        font-size: 14px;
+                        color: #666;
+                        margin-top: 2px;
+                    }
+                </style>
+                <div class="style-picker">
+                    {% set _style = ui_style|default('Classic') %}
+                    {% for opt in [
+                    {'value': 'Classic', 'name': 'Classic', 'tagline': 'The original scoreboard look — high-contrast bands,
+                    monospace throughout.'},
+                    {'value': 'Modern', 'name': 'Modern', 'tagline': 'Clean dark theme with rounded panels and soft accents.'}
+                    ] %}
+                    <label>
+                        <input type="radio" name="ui_style" value="{{ opt.value }}" {% if _style==opt.value %}checked{% endif %}
+                            onchange="this.form.submit();">
+                        <span class="style-card">
+                            <span class="style-preview">
+                                <img src="{{ url_for('static', filename='img/preview-' + opt.value|lower + '.png') }}"
+                                    alt="{{ opt.name }} preview"
+                                    onerror="this.style.display='none';this.parentElement.textContent='Preview unavailable';this.parentElement.style.color='#999';this.parentElement.style.fontSize='14px';">
+                            </span>
+                            <span class="style-name">{{ opt.name }} <span class="check">&#x2714;</span></span>
+                            <span class="style-tagline">{{ opt.tagline }}</span>
+                        </span>
+                    </label>
+                    {% endfor %}
+                </div>
+                <small class="text-muted" style="display:block;margin-top:8px;">
+                    Changes apply immediately. All connected viewers reload.
+                </small>
+            </form>
+        </div>
+
         <div class="settings-section" id="section-message-board">
         <h3>Message Board</h3>
         <div class="row">

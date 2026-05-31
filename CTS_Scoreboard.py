@@ -79,6 +79,9 @@ settings = {
     'show_confetti': True,
     'show_time_decorations': False,
     'seed_time_label': 'Seed Time',
+    # Visual style for the public scoreboard. 'Classic' is the original
+    # look; 'Modern' uses a contemporary CSS theme. Same template/JS.
+    'ui_style': 'Classic',
     'message_pages': [{'text': '', 'align': 'left', 'enabled': False}],
     'message_overlay_enabled': False,
     'message_rotation_interval': 30,
@@ -1592,6 +1595,7 @@ def _build_render_context():
             'show_confetti': settings.get('show_confetti', True),
             'show_time_decorations': settings.get('show_time_decorations', False),
             'seed_time_label': settings.get('seed_time_label', 'Seed Time'),
+            'ui_style': settings.get('ui_style', 'Classic'),
             'message_overlay_enabled': settings.get('message_overlay_enabled', False),
             'message_rotation_interval': settings.get('message_rotation_interval', 30),
         },

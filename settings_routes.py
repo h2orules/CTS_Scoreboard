@@ -279,6 +279,15 @@ def register(flask_app, app_module):
 
             ad_needs_update = ad_changed
 
+            # --- UI style picker (Display Style section) --------------------
+            if 'ui_style_form' in flask.request.form:
+                new_style = (flask.request.form.get('ui_style') or '').strip()
+                if new_style not in ('Classic', 'Modern'):
+                    new_style = 'Classic'
+                if settings.get('ui_style', 'Classic') != new_style:
+                    settings['ui_style'] = new_style
+                    modified = True
+
             # --- Record set team tag dropdowns -------------------------------
 
             for rec_set in _app.swim_record_sets:
@@ -333,6 +342,8 @@ def register(flask_app, app_module):
                         pass  # Already handled above
                     elif k in ('ad_images', 'ad_rotation_interval'):
                         pass  # Handled by the ad form block above
+                    elif k == 'ui_style':
+                        pass  # Handled by the ui_style_form block above (validates value).
                     else:
                         val = flask.request.form.get(k)
                         if k.startswith('team_') and not k.endswith('_tag'):
@@ -639,6 +650,7 @@ def register(flask_app, app_module):
                     ad_rotation_interval=settings.get('ad_rotation_interval', 30),
                     ad_max_dimension=int(settings.get('ad_max_dimension', 1920) or 1920),
                     ad_error=ad_error,
+                    ui_style=settings.get('ui_style', 'Classic'),
                     num_lanes=settings['num_lanes'],
                     pool_course=settings.get('pool_course', 'SCY'),
                     seed_time_label=settings.get('seed_time_label', 'Seed Time'),
