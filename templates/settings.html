@@ -407,7 +407,7 @@
                     .style-picker {
                         display: flex;
                         flex-wrap: wrap;
-                        gap: 18px;
+                        gap: 12px;
                         margin-top: 8px;
                     }
 
@@ -419,11 +419,12 @@
 
                     .style-picker label {
                         display: block;
-                        flex: 0 0 320px;
+                        flex: 1 1 200px;
+                        max-width: 230px;
                         cursor: pointer;
                         border: 2px solid #ddd;
-                        border-radius: 12px;
-                        padding: 12px;
+                        border-radius: 10px;
+                        padding: 8px;
                         background: #fff;
                         transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.05s ease;
                         box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -444,9 +445,9 @@
 
                     .style-card {
                         display: block;
-                        border-radius: 8px;
-                        margin: -12px;
-                        padding: 12px;
+                        border-radius: 6px;
+                        margin: -8px;
+                        padding: 8px;
                         border: 2px solid transparent;
                         transition: border-color 0.15s ease, box-shadow 0.15s ease;
                     }
@@ -455,12 +456,12 @@
                         width: 100%;
                         aspect-ratio: 16 / 9;
                         background: #f4f6fa;
-                        border-radius: 6px;
+                        border-radius: 5px;
                         display: flex;
                         align-items: center;
                         justify-content: center;
                         overflow: hidden;
-                        margin-bottom: 10px;
+                        margin-bottom: 6px;
                         border: 1px solid #e5e9f0;
                     }
 
@@ -472,7 +473,7 @@
                     }
 
                     .style-card .style-name {
-                        font-size: 18px;
+                        font-size: 15px;
                         font-weight: 600;
                         color: #222;
                         display: flex;
@@ -484,7 +485,7 @@
                         color: #2f7ab8;
                         opacity: 0;
                         transition: opacity 0.15s ease;
-                        font-size: 16px;
+                        font-size: 14px;
                     }
 
                     .style-picker input[type="radio"]:checked+.style-card .style-name .check {
@@ -492,26 +493,32 @@
                     }
 
                     .style-card .style-tagline {
-                        font-size: 14px;
+                        font-size: 12px;
                         color: #666;
                         margin-top: 2px;
+                        line-height: 1.3;
                     }
                 </style>
                 <div class="style-picker">
                     {% set _style = ui_style|default('Classic') %}
                     {% for opt in [
-                    {'value': 'Classic', 'name': 'Classic', 'tagline': 'The original scoreboard look — high-contrast bands,
-                    monospace throughout.'},
-                    {'value': 'Modern', 'name': 'Modern', 'tagline': 'Clean dark theme with rounded panels and soft accents.'}
+                    {'value': 'Classic', 'name': 'Classic', 'slug': 'classic',
+                        'tagline': 'Original look — high-contrast bands, monospace.'},
+                    {'value': 'Modern Light', 'name': 'Modern Light', 'slug': 'modern-light',
+                        'tagline': 'Clean light theme, rounded panels.'},
+                    {'value': 'Modern Dark', 'name': 'Modern Dark', 'slug': 'modern-dark',
+                        'tagline': 'Clean dark theme, rounded panels.'},
+                    {'value': 'Modern Auto', 'name': 'Modern (Auto)', 'slug': 'modern-auto',
+                        'tagline': 'Follows browser light/dark setting.'}
                     ] %}
                     <label>
                         <input type="radio" name="ui_style" value="{{ opt.value }}" {% if _style==opt.value %}checked{% endif %}
                             onchange="this.form.submit();">
                         <span class="style-card">
                             <span class="style-preview">
-                                <img src="{{ url_for('static', filename='img/preview-' + opt.value|lower + '.png') }}"
+                                <img src="{{ url_for('static', filename='img/preview-' + opt.slug + '.png') }}"
                                     alt="{{ opt.name }} preview"
-                                    onerror="this.style.display='none';this.parentElement.textContent='Preview unavailable';this.parentElement.style.color='#999';this.parentElement.style.fontSize='14px';">
+                                    onerror="this.style.display='none';this.parentElement.textContent='Preview unavailable';this.parentElement.style.color='#999';this.parentElement.style.fontSize='12px';">
                             </span>
                             <span class="style-name">{{ opt.name }} <span class="check">&#x2714;</span></span>
                             <span class="style-tagline">{{ opt.tagline }}</span>

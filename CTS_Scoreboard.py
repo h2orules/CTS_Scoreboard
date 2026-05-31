@@ -282,6 +282,10 @@ def load_settings():
                 'always' if _raw_settings_on_disk.get('qr_overlay_enabled')
                 else 'off'
             )
+        # Legacy ui_style "Modern" → "Modern Dark" (the original Modern
+        # theme was always dark; we now offer Light/Dark/Auto variants).
+        if settings.get('ui_style') == 'Modern':
+            settings['ui_style'] = 'Modern Dark'
     except: pass
     # Azure settings live in their own (git-ignored) file. Load it on top of
     # whatever defaults / migrated values are already in `settings`.

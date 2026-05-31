@@ -282,7 +282,11 @@ def register(flask_app, app_module):
             # --- UI style picker (Display Style section) --------------------
             if 'ui_style_form' in flask.request.form:
                 new_style = (flask.request.form.get('ui_style') or '').strip()
-                if new_style not in ('Classic', 'Modern'):
+                # Migrate legacy "Modern" → "Modern Dark" if posted by an
+                # older client.
+                if new_style == 'Modern':
+                    new_style = 'Modern Dark'
+                if new_style not in ('Classic', 'Modern Dark', 'Modern Light', 'Modern Auto'):
                     new_style = 'Classic'
                 if settings.get('ui_style', 'Classic') != new_style:
                     settings['ui_style'] = new_style

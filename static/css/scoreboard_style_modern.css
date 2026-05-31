@@ -4,10 +4,17 @@
    (the "Classic" style); only the visual rules differ. Selected via
    the `ui_style` setting; see templates/web/home.html.
 
-   Design language: dark muted surface with rounded panels, soft
-   elevation, monospace digits (Overpass Mono) for race data + Inter /
-   system-ui for prose. Keeps every layout invariant the JS auto-fit
-   logic depends on. */
+   Design language: muted surfaces with rounded panels, soft elevation,
+   monospace digits (Overpass Mono) for race data + Inter / system-ui
+   for prose. Keeps every layout invariant the JS auto-fit logic
+   depends on.
+
+   Three variants, distinguished by `body[data-ui-style]`:
+     - "Modern Dark"  — dark palette (default :root values).
+     - "Modern Light" — light palette (overridden on body).
+     - "Modern Auto"  — dark by default, light when the user agent's
+                       prefers-color-scheme is light.
+*/
 
 :root {
     --bg: #0f1722;
@@ -32,6 +39,51 @@
     --shadow-md: 0 8px 28px rgba(0, 0, 0, 0.45);
     --font-display: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
     --font-mono: 'Overpass Mono', ui-monospace, 'Menlo', monospace;
+}
+
+/* Light palette — applied for the explicit "Modern Light" choice and
+   when "Modern Auto" detects a light system theme. Re-defines the
+   palette tokens on <body> so the rules below pick them up via var().*/
+body[data-ui-style="Modern Light"] {
+    --bg: #eef2f8;
+    --surface-1: #ffffff;
+    --surface-2: #f6f8fc;
+    --surface-3: #e6ecf4;
+    --row-odd: #f3f6fb;
+    --row-eve: #e6ecf4;
+    --ink: #1a2436;
+    --ink-dim: #5a6b85;
+    --ink-strong: #0a1322;
+    --accent: #1f7ad1;
+    --accent-strong: #0e5fa8;
+    --accent-warm: #b86b0f;
+    --divider: rgba(15, 30, 55, 0.10);
+    --divider-strong: rgba(15, 30, 55, 0.22);
+    --pop-pink: #c8267e;
+    --shadow-sm: 0 1px 2px rgba(15, 30, 55, 0.10);
+    --shadow-md: 0 8px 28px rgba(15, 30, 55, 0.18);
+}
+
+@media (prefers-color-scheme: light) {
+    body[data-ui-style="Modern Auto"] {
+        --bg: #eef2f8;
+        --surface-1: #ffffff;
+        --surface-2: #f6f8fc;
+        --surface-3: #e6ecf4;
+        --row-odd: #f3f6fb;
+        --row-eve: #e6ecf4;
+        --ink: #1a2436;
+        --ink-dim: #5a6b85;
+        --ink-strong: #0a1322;
+        --accent: #1f7ad1;
+        --accent-strong: #0e5fa8;
+        --accent-warm: #b86b0f;
+        --divider: rgba(15, 30, 55, 0.10);
+        --divider-strong: rgba(15, 30, 55, 0.22);
+        --pop-pink: #c8267e;
+        --shadow-sm: 0 1px 2px rgba(15, 30, 55, 0.10);
+        --shadow-md: 0 8px 28px rgba(15, 30, 55, 0.18);
+    }
 }
 
 html,
