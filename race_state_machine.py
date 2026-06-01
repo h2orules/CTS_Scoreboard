@@ -68,8 +68,12 @@ TRANSITIONS = [
     ["clear_lanes", "TotalBlankPreRace", "ClearPreRace"],
     ["go_blank", "TotalBlankPreRace", "Blank"],
     ["go_total_blank", "TotalBlankPreRace", "TotalBlank"],
-    # Running -> PreRace on event/heat change (unusual but possible)
-    ["change_event", "Running", "PreRace"],
+    # Running -> Running on event/heat change. Operators rarely change
+    # the heat mid-race, but Blank -> Running often sees the event/heat
+    # bytes arrive a frame after the running-lane bytes; we must not let
+    # that metadata churn yank us back to PreRace and flip the lane
+    # display to seed-times while the race is actually running.
+    ["change_event", "Running", "Running"],
     # PreRace -> PreRace on event/heat change (reflexive, resets context)
     ["change_event", "PreRace", "PreRace"],
     # ClearPreRace -> ClearPreRace on another event change
@@ -158,6 +162,11 @@ class RaceStateMachine:
         new_eh = board.get("event_heat")
         if new_eh is not None and new_eh != self._prev_event_heat:
             self._prev_event_heat = new_eh
+            # A new event/heat means any "running" flag from the previous
+            # race is stale. Clear it before firing change_event so a
+            # later running -> empty transition in the same cycle doesn't
+            # synthesize a spurious `finish` trigger from PreRace.
+            self._prev_running_lanes = set()
             self.trigger("change_event")
 
         # ------ 2. Running lane edge detection ------

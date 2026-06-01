@@ -502,8 +502,12 @@ def parse_line(l, out=None):
             running_time = hex_to_digit(time_info[2]) + hex_to_digit(time_info[3])
             running_time += ":" if running_time.strip() else " "
             running_time += hex_to_digit(time_info[4]) + hex_to_digit(time_info[5])
-            running_time += "." if running_time.strip() else " "
-            running_time += hex_to_digit(time_info[6]) + hex_to_digit(time_info[7])
+            _ss = hex_to_digit(time_info[6]) + hex_to_digit(time_info[7])
+            # Only show the seconds separator when seconds digits exist;
+            # the TOD clock CTS shows in Blank/idle sends only HH:MM and
+            # would otherwise render as "HH:MM.  ".
+            running_time += "." if (running_time.strip() and _ss.strip()) else " "
+            running_time += _ss
             update["running_time"] = running_time
 
             s = "Running Time: " + running_time
@@ -1980,9 +1984,7 @@ def broadcast_scoreboard(update):
     # knows who owns the lane time/place cells. Compute on every broadcast
     # so heat-change broadcasts (which don't go through the FSM transition
     # branch) carry the right mode too.
-    update["lane_display_mode"] = compute_lane_display_mode(
-        update.get("race_state")
-    )
+    update["lane_display_mode"] = compute_lane_display_mode(update.get("race_state"))
     _update_scoreboard_snapshot(update)
     socketio.emit("update_scoreboard", update, namespace="/scoreboard")
     # forward_event() is non-blocking and thread-safe; safe to call even
