@@ -214,11 +214,12 @@ def register(socketio, app_module):
             update['current_heat'] = str(_app.last_event_sent[1])
             for i in range(1, num_lanes + 1):
                 _app.channel_running[i - 1] = True
+                _app.lane_times[i] = _app.running_time
                 update['lane_running%d' % i] = True
                 update['lane_time%d' % i] = _app.running_time
                 update['lane_place%d' % i] = ' '
 
-            _app.race_fsm.evaluate_update(_app.channel_running, update)
+            _app.race_fsm.evaluate_update(_app.build_board_snapshot())
             update['race_state'] = _app.race_fsm.state_name
             _app.broadcast_scoreboard(update)
             # Re-send scores in case we were previously in a blank state
@@ -229,21 +230,32 @@ def register(socketio, app_module):
 
         elif step == 'finish':
             _sim_running = False
-            update['current_event'] = str(_app.last_event_sent[0])
-            update['current_heat'] = str(_app.last_event_sent[1])
+            # Real CTS streams one channel per serial packet. Send the
+            # event/heat first and then a separate per-lane update so the
+            # state machine sees the same incremental picture it gets from
+            # hardware (this is what surfaces blank-lane edge cases).
+            head = {
+                'current_event': str(_app.last_event_sent[0]),
+                'current_heat': str(_app.last_event_sent[1]),
+            }
+            _app.race_fsm.evaluate_update(_app.build_board_snapshot())
+            head['race_state'] = _app.race_fsm.state_name
+            _app.broadcast_scoreboard(head)
+
             for i in range(1, num_lanes + 1):
                 _app.channel_running[i - 1] = False
-                update['lane_running%d' % i] = False
+                lane_update = {'lane_running%d' % i: False}
                 if i in SIM_LANES:
-                    update['lane_time%d' % i] = _format_lane_time(SIM_LANES[i]['time'])
-                    update['lane_place%d' % i] = SIM_LANES[i]['place']
+                    lane_update['lane_time%d' % i] = _format_lane_time(SIM_LANES[i]['time'])
+                    lane_update['lane_place%d' % i] = SIM_LANES[i]['place']
                 else:
-                    update['lane_time%d' % i] = '        '
-                    update['lane_place%d' % i] = ' '
+                    lane_update['lane_time%d' % i] = '        '
+                    lane_update['lane_place%d' % i] = ' '
+                _app.lane_times[i] = lane_update['lane_time%d' % i]
+                _app.race_fsm.evaluate_update(_app.build_board_snapshot())
+                lane_update['race_state'] = _app.race_fsm.state_name
+                _app.broadcast_scoreboard(lane_update)
 
-            _app.race_fsm.evaluate_update(_app.channel_running, update)
-            update['race_state'] = _app.race_fsm.state_name
-            _app.broadcast_scoreboard(update)
             # Re-send scores in case we were previously in a blank state
             _app.send_scores_info()
 
@@ -279,10 +291,11 @@ def register(socketio, app_module):
             update['current_event'] = str(_app.last_event_sent[0])
             update['current_heat'] = str(_app.last_event_sent[1])
             for i in range(1, num_lanes + 1):
+                _app.lane_times[i] = '        '
                 update['lane_time%d' % i] = '        '
                 update['lane_place%d' % i] = ' '
 
-            _app.race_fsm.evaluate_update(_app.channel_running, update)
+            _app.race_fsm.evaluate_update(_app.build_board_snapshot())
             update['race_state'] = _app.race_fsm.state_name
             _app.broadcast_scoreboard(update)
             # Re-send event info so names/teams reappear on scoreboard
@@ -291,48 +304,58 @@ def register(socketio, app_module):
 
         elif step == 'blank':
             _sim_running = False
+            # CTS blanks the event/heat display, the result lanes, and the
+            # team scores when going to the 'Blank' display (clock still
+            # running on lane 3). Mirror that here by clearing the
+            # canonical state first and then handing the FSM a snapshot.
+            _app.event_heat_info[:] = [' '] * len(_app.event_heat_info)
             update['current_event'] = '   '
             update['current_heat'] = '   '
             for i in range(1, num_lanes + 1):
                 _app.channel_running[i - 1] = False
                 update['lane_running%d' % i] = False
-            # Lane 3 still shows clock
             for i in range(1, num_lanes + 1):
                 if i == 3:
+                    _app.lane_times[i] = '    5:22'
                     update['lane_time%d' % i] = '    5:22'
                 else:
+                    _app.lane_times[i] = '        '
                     update['lane_time%d' % i] = '        '
                 update['lane_place%d' % i] = ' '
 
-            # CTS blanks team scores when going Blank; emit empty values but keep
-            # the server-side team_scores cache intact so we can restore on exit.
+            # Keep server-side team_scores cache intact for later restoration;
+            # the FSM snapshot below uses a temporary blank scores dict.
             update['score_home'] = ''
             update['score_guest1'] = ''
             update['score_guest2'] = ''
             update['score_guest3'] = ''
-
-            _app.race_fsm.evaluate_update(_app.channel_running, update)
+            board = _app.build_board_snapshot()
+            board['scores'] = {'score_home': '', 'score_guest1': '',
+                               'score_guest2': '', 'score_guest3': ''}
+            _app.race_fsm.evaluate_update(board)
             update['race_state'] = _app.race_fsm.state_name
             _app.broadcast_scoreboard(update)
 
         elif step == 'total_blank':
             _sim_running = False
+            _app.event_heat_info[:] = [' '] * len(_app.event_heat_info)
             update['current_event'] = '   '
             update['current_heat'] = '   '
             for i in range(1, num_lanes + 1):
                 _app.channel_running[i - 1] = False
+                _app.lane_times[i] = '        '
                 update['lane_running%d' % i] = False
                 update['lane_time%d' % i] = '        '
                 update['lane_place%d' % i] = ' '
 
-            # CTS blanks team scores when going TotalBlank; emit empty values but
-            # keep the server-side team_scores cache intact for restoration.
             update['score_home'] = ''
             update['score_guest1'] = ''
             update['score_guest2'] = ''
             update['score_guest3'] = ''
-
-            _app.race_fsm.evaluate_update(_app.channel_running, update)
+            board = _app.build_board_snapshot()
+            board['scores'] = {'score_home': '', 'score_guest1': '',
+                               'score_guest2': '', 'score_guest3': ''}
+            _app.race_fsm.evaluate_update(board)
             update['race_state'] = _app.race_fsm.state_name
             _app.broadcast_scoreboard(update)
 
