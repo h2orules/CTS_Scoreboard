@@ -70,6 +70,11 @@ settings = {
     "serial_port": "COM1",
     "username": "admin",
     "password": "password",
+    # Path to a file that will receive a timestamped log of every CTS serial
+    # frame (raw hex + parsed annotation). Empty disables logging. The
+    # command-line --out flag overrides this. The file format is the same
+    # one --in replays, so captures can be fed back through the parser.
+    "cts_log_file": "",
     # Ad rotation: list of dicts {'filename': str, 'enabled': bool}.
     # Files live in static/ad/. Order in the list is rotation order.
     "ad_images": [],
@@ -177,6 +182,10 @@ lane_info = [
 time_info = [0, 0, 0, 0, 0, 0, 0, 0]
 running_time = "        "
 channel_running = [False for i in range(10)]
+# Decoded per-lane time string snapshot, kept in sync with lane_info / the
+# running clock by parse_line. Lives at the module level so build_board_snapshot()
+# can hand a complete picture to the FSM, and so sim.py can stay consistent.
+lane_times = {}
 score_info = {
     0x14: [" ", " ", " ", " ", " ", " ", " ", " "],
     0x15: [" ", " ", " ", " ", " ", " ", " ", " "],
@@ -188,6 +197,26 @@ team_scores = {
     "score_guest3": "",
 }
 race_fsm = RaceStateMachine()
+
+
+def build_board_snapshot():
+    """Return a fresh dict snapshot of current display state for the FSM.
+
+    Reads directly from the canonical module-level state (lane_times,
+    channel_running, event_heat_info, team_scores) — there is no FSM-owned
+    duplicate cache to drift from.
+    """
+    ev = "".join(event_heat_info[:3])
+    ht = "".join(event_heat_info[-3:])
+    num_lanes = settings.get("num_lanes", 10)
+    return {
+        "event_heat": (ev, ht),
+        "running_lanes": {i + 1 for i, r in enumerate(channel_running) if r},
+        "lane_times": dict(lane_times),
+        "scores": dict(team_scores),
+        "num_lanes": num_lanes,
+    }
+
 
 # Content cache for server-rendered HTML fragments.
 # Structure: { resource_name: { 'key': str, 'html': str } }
@@ -427,6 +456,29 @@ def parse_line(l, out=None):
         channel = ((c & 0x3E) >> 1) ^ 0x1F
 
         if (1 <= channel <= 10) and not format_display:
+            # Race-start edge: if this lane is going running and no
+            # other lane was running yet, the global running_time
+            # string and time_info[] still hold the prior race's clock
+            # (or the TOD clock) value. CTS only emits a full BE
+            # frame at each .0 boundary; in between it sends
+            # tenths-only frames that update positions 6-7 only. So
+            # until the next .0 boundary (up to ~1s away), the
+            # running clock would render stale MM/SS digits with a
+            # ticking tenths nibble -- e.g. "30:08.4" while the real
+            # race is at ".4". Blank time_info MM/SS and clear the
+            # running_time string now so the bridge frames render
+            # cleanly until the first new full frame arrives.
+            if running_finish and not any(channel_running):
+                for i in range(2, 8):
+                    time_info[i] = i << 4  # low nibble 0 -> blank
+                # Seed seconds-ones with "0" so the bridge frames render
+                # as "0.X" instead of just ".X" until the next .0
+                # boundary delivers the full clock frame. CTS encodes
+                # the digit "0" as low-nibble 0xF. Slots: 2,3=MM,
+                # 4,5=SS, 6=tenths, 7=hundredths.
+                time_info[5] = (5 << 4) | 0xF
+                running_time = "    0   "
+                update["running_time"] = running_time
             channel_running[channel - 1] = running_finish
             # This is a lane display of interest
             while len(l):
@@ -450,12 +502,20 @@ def parse_line(l, out=None):
                 lane_time += hex_to_digit(lane_info[channel][4]) + hex_to_digit(
                     lane_info[channel][5]
                 )
-                lane_time += "." if lane_time.strip() else " "
-                lane_time += hex_to_digit(lane_info[channel][6]) + hex_to_digit(
+                _ss = hex_to_digit(lane_info[channel][6]) + hex_to_digit(
                     lane_info[channel][7]
                 )
+                # Only show the seconds separator when seconds digits are
+                # present; the TOD clock the CTS pipes through lane 3 in
+                # Blank state only carries HH:MM and would otherwise
+                # render as "HH:MM." on the large clock.
+                lane_time += "." if (lane_time.strip() and _ss.strip()) else " "
+                lane_time += _ss
                 s = "%4s: %s %s %s" % (channel, lane, place, lane_time)
                 update["lane_time%i" % channel] = lane_time
+
+            # Keep the decoded per-lane snapshot in sync for the FSM.
+            lane_times[channel] = lane_time
 
             print_at(channel + 1, 0, " " * 20)
             print_at(
@@ -470,8 +530,12 @@ def parse_line(l, out=None):
             running_time = hex_to_digit(time_info[2]) + hex_to_digit(time_info[3])
             running_time += ":" if running_time.strip() else " "
             running_time += hex_to_digit(time_info[4]) + hex_to_digit(time_info[5])
-            running_time += "." if running_time.strip() else " "
-            running_time += hex_to_digit(time_info[6]) + hex_to_digit(time_info[7])
+            _ss = hex_to_digit(time_info[6]) + hex_to_digit(time_info[7])
+            # Only show the seconds separator when seconds digits exist;
+            # the TOD clock CTS shows in Blank/idle sends only HH:MM and
+            # would otherwise render as "HH:MM.  ".
+            running_time += "." if (running_time.strip() and _ss.strip()) else " "
+            running_time += _ss
             update["running_time"] = running_time
 
             s = "Running Time: " + running_time
@@ -550,7 +614,7 @@ def parse_line(l, out=None):
     finally:
         # Output anything we got
         if "current_event" in update or "running_time" in update:
-            race_fsm.evaluate_update(channel_running, update)
+            race_fsm.evaluate_update(build_board_snapshot())
             update["race_state"] = race_fsm.state_name
             broadcast_scoreboard(update)
             update.clear()
@@ -1764,6 +1828,7 @@ def _build_render_context():
         initial_lanes=initial_lanes,
         initial_scores=team_scores,
         initial_race_state=race_fsm.state_name,
+        initial_lane_display_mode=compute_lane_display_mode(),
         initial_message_pages=initial_message_pages,
         initial_active_message_page=_message_rotation_index,
         initial_qr_overlay_svg=qr_overlay_svg,
@@ -1887,6 +1952,34 @@ _last_scoreboard_state: dict = {}
 _PER_RACE_KEY_PREFIXES = ("lane_time", "lane_place", "lane_running")
 
 
+def compute_lane_display_mode(state_name=None):
+    """Return the authoritative display mode for the lane time/place cells.
+
+    The mode tells the client who owns those cells right now:
+      * ``"server"`` — CTS retransmissions flow through; qualifying-time
+        evaluation runs; cache is fresh. Used for Running, Finished,
+        Blank, TotalBlank, and any *PreRace state when seed-time display
+        is disabled (operator wants previous results to persist).
+      * ``"seed_times"`` — Client paints seed times; qualifying-time
+        evaluation is skipped; cache is cleared. Used for any *PreRace
+        state when seed-time display is enabled.
+      * ``"clear"`` — Client blanks every lane cell (time, place, name,
+        team, age code); qualifying eval skipped; cache cleared. Used
+        for the FSM's Clear state (operator's CTS Clear-Lanes submenu).
+
+    The seed-times-vs-empty distinction is left to the client because it
+    already has the per-lane seed values; the server only decides who
+    owns the cells.
+    """
+    state = state_name or race_fsm.state_name
+    if state in ("Clear", "PreRaceClear"):
+        return "clear"
+    if state in ("PreRace", "ClearPreRace", "BlankPreRace", "TotalBlankPreRace"):
+        if settings.get("seed_time_label", "Seed Time") != "None":
+            return "seed_times"
+    return "server"
+
+
 def _update_scoreboard_snapshot(update):
     new_event = update.get("current_event")
     new_heat = update.get("current_heat")
@@ -1915,6 +2008,11 @@ def broadcast_scoreboard(update):
     relay's ``meet_open`` handshake is enough — no separate "enabled"
     toggle.
     """
+    # lane_display_mode rides alongside race_state so the client always
+    # knows who owns the lane time/place cells. Compute on every broadcast
+    # so heat-change broadcasts (which don't go through the FSM transition
+    # branch) carry the right mode too.
+    update["lane_display_mode"] = compute_lane_display_mode(update.get("race_state"))
     _update_scoreboard_snapshot(update)
     socketio.emit("update_scoreboard", update, namespace="/scoreboard")
     # forward_event() is non-blocking and thread-safe; safe to call even
@@ -2198,6 +2296,12 @@ def main():
         out_file = args.out
         in_speed = float(args.in_speed)
         debug_console = args.debug
+        # Settings-driven CTS stream log: if `cts_log_file` is configured and
+        # no --out was given on the command line, dump the serial stream
+        # (timestamped raw frames + parsed annotations) there. Same format
+        # as --out, so the file can later be replayed with --in.
+        if not out_file and settings.get("cts_log_file"):
+            out_file = settings["cts_log_file"]
         ap.c()
         socketio.run(app, host="0.0.0.0")
     except:

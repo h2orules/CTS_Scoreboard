@@ -1,0 +1,343 @@
+2026-05-31 20:52:43,603 INFO azure_relay: relay: connecting to https://cts-sb-prod-app.orangedune-62254e3e.westus.azurecontainerapps.io (meet_id=HWDolphins)
+2026-05-31 20:52:44,024 INFO azure_relay: relay: socket connected, sending meet_open
+2026-05-31 20:52:44,651 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:52:44] "GET /socket.io/?EIO=4&transport=polling&t=oapu0upi HTTP/1.1" 200 276 0.000481
+Client connected to scoreboard namespace
+2026-05-31 20:52:44,677 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:52:44] "POST /socket.io/?EIO=4&transport=polling&t=oapuobxx&sid=J3VesSHJO8lo2-rMAAAA HTTP/1.1" 200 199 0.010338
+2026-05-31 20:52:44,680 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:52:44] "GET /socket.io/?EIO=4&transport=polling&t=oapupvsi&sid=J3VesSHJO8lo2-rMAAAA HTTP/1.1" 200 157 0.000131
+2026-05-31 20:52:44,693 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:52:44] "GET /socket.io/?EIO=4&transport=polling&t=oapvdcqv&sid=J3VesSHJO8lo2-rMAAAA HTTP/1.1" 200 157 0.000139
+2026-05-31 20:52:44,790 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:52:44,791 DEBUG transitions.core: Initiating transition from state TotalBlank to state TotalBlankPreRace...
+2026-05-31 20:52:44,791 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:52:44,791 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:52:44,791 DEBUG transitions.core: Exiting state TotalBlank. Processing callbacks...
+2026-05-31 20:52:44,791 INFO transitions.core: Finished processing state TotalBlank exit callbacks.
+2026-05-31 20:52:44,791 DEBUG transitions.core: Entering state TotalBlankPreRace. Processing callbacks...
+2026-05-31 20:52:44,791 INFO transitions.core: Finished processing state TotalBlankPreRace enter callbacks.
+2026-05-31 20:52:44,791 INFO race_state_machine: Race state: None -> RaceState.TotalBlankPreRace
+2026-05-31 20:52:44,791 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:52:44,791 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:52:44,791 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:52:45,087 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:52:45,087 DEBUG transitions.core: Initiating transition from state TotalBlankPreRace to state PreRace...
+2026-05-31 20:52:45,087 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:52:45,087 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:52:45,087 DEBUG transitions.core: Exiting state TotalBlankPreRace. Processing callbacks...
+2026-05-31 20:52:45,087 INFO transitions.core: Finished processing state TotalBlankPreRace exit callbacks.
+2026-05-31 20:52:45,087 DEBUG transitions.core: Entering state PreRace. Processing callbacks...
+2026-05-31 20:52:45,087 INFO transitions.core: Finished processing state PreRace enter callbacks.
+2026-05-31 20:52:45,087 INFO race_state_machine: Race state: RaceState.TotalBlankPreRace -> RaceState.PreRace
+2026-05-31 20:52:45,087 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:52:45,087 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:52:45,087 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:52:45,210 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:52:45,210 DEBUG transitions.core: Initiating transition from state PreRace to state PreRace...
+2026-05-31 20:52:45,210 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:52:45,210 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:52:45,210 DEBUG transitions.core: Exiting state PreRace. Processing callbacks...
+2026-05-31 20:52:45,210 INFO transitions.core: Finished processing state PreRace exit callbacks.
+2026-05-31 20:52:45,210 DEBUG transitions.core: Entering state PreRace. Processing callbacks...
+2026-05-31 20:52:45,210 INFO transitions.core: Finished processing state PreRace enter callbacks.
+2026-05-31 20:52:45,210 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:52:45,210 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:52:45,210 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:52:47,303 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:52:47] "GET /socket.io/?EIO=4&transport=polling&t=oarvt1yt HTTP/1.1" 200 276 0.000335
+Client connected to scoreboard namespace
+2026-05-31 20:52:47,330 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:52:47] "POST /socket.io/?EIO=4&transport=polling&t=oarwb1lk&sid=A1bET-ZrpRnOzxeDAAAC HTTP/1.1" 200 199 0.011789
+2026-05-31 20:52:47,333 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:52:47] "GET /socket.io/?EIO=4&transport=polling&t=oarwcpwf&sid=A1bET-ZrpRnOzxeDAAAC HTTP/1.1" 200 1765 0.001406
+2026-05-31 20:52:47,348 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:52:47] "GET /socket.io/?EIO=4&transport=polling&t=oarx5i4a&sid=A1bET-ZrpRnOzxeDAAAC HTTP/1.1" 200 157 0.000197
+2026-05-31 20:53:12,289 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:53:12] "GET /web/home HTTP/1.1" 200 61583 0.070808
+2026-05-31 20:53:12,313 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:53:12] "GET /static/css/scoreboard_style_web.css HTTP/1.1" 304 234 0.004093
+2026-05-31 20:53:12,319 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:53:12] "GET /static/socket.io.4.8.3.min.js HTTP/1.1" 304 233 0.001091
+2026-05-31 20:53:12,321 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:53:12] "GET /static/js/scoreboard.js HTTP/1.1" 304 224 0.001178
+2026-05-31 20:53:12,339 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:53:12] "GET /static/pool.jpg HTTP/1.1" 304 219 0.001107
+2026-05-31 20:53:12,340 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:53:12] "GET /socket.io/?EIO=4&transport=polling&t=obb7dujk HTTP/1.1" 200 276 0.000238
+Client connected to scoreboard namespace
+2026-05-31 20:53:12,509 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:53:12] "POST /socket.io/?EIO=4&transport=polling&t=obbbuf8i&sid=y0CXZCkgmGMoREjAAAAE HTTP/1.1" 200 199 0.008855
+2026-05-31 20:53:12,510 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:53:12] "GET /socket.io/?EIO=4&transport=polling&t=obbbuf8g&sid=y0CXZCkgmGMoREjAAAAE HTTP/1.1" 200 1863 0.000546
+2026-05-31 20:53:12,525 INFO geventwebsocket.handler: 192.168.22.93 - - [2026-05-31 20:53:12] "GET /socket.io/?EIO=4&transport=polling&t=obbcilve&sid=y0CXZCkgmGMoREjAAAAE HTTP/1.1" 200 157 0.000139
+2026-05-31 20:53:23,885 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:53:23,885 DEBUG transitions.core: Initiating transition from state PreRace to state PreRace...
+2026-05-31 20:53:23,885 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:53:23,885 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:53:23,885 DEBUG transitions.core: Exiting state PreRace. Processing callbacks...
+2026-05-31 20:53:23,885 INFO transitions.core: Finished processing state PreRace exit callbacks.
+2026-05-31 20:53:23,885 DEBUG transitions.core: Entering state PreRace. Processing callbacks...
+2026-05-31 20:53:23,885 INFO transitions.core: Finished processing state PreRace enter callbacks.
+2026-05-31 20:53:23,885 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:53:23,885 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:53:23,885 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:53:26,263 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:53:26,263 DEBUG transitions.core: Initiating transition from state PreRace to state Running...
+2026-05-31 20:53:26,263 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:53:26,263 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:53:26,263 DEBUG transitions.core: Exiting state PreRace. Processing callbacks...
+2026-05-31 20:53:26,263 INFO transitions.core: Finished processing state PreRace exit callbacks.
+2026-05-31 20:53:26,263 DEBUG transitions.core: Entering state Running. Processing callbacks...
+2026-05-31 20:53:26,263 INFO transitions.core: Finished processing state Running enter callbacks.
+2026-05-31 20:53:26,263 INFO race_state_machine: Race state: RaceState.PreRace -> RaceState.Running
+2026-05-31 20:53:26,263 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:53:26,263 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:53:26,263 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:53:48,356 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:53:48,356 DEBUG transitions.core: Initiating transition from state Running to state Finished...
+2026-05-31 20:53:48,356 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:53:48,356 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:53:48,356 DEBUG transitions.core: Exiting state Running. Processing callbacks...
+2026-05-31 20:53:48,356 INFO transitions.core: Finished processing state Running exit callbacks.
+2026-05-31 20:53:48,356 DEBUG transitions.core: Entering state Finished. Processing callbacks...
+2026-05-31 20:53:48,356 INFO transitions.core: Finished processing state Finished enter callbacks.
+2026-05-31 20:53:48,356 INFO race_state_machine: Race state: RaceState.Running -> RaceState.Finished
+2026-05-31 20:53:48,356 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:53:48,356 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:53:48,356 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:54:02,553 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:54:02,554 DEBUG transitions.core: Initiating transition from state Finished to state PreRace...
+2026-05-31 20:54:02,554 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:54:02,554 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:54:02,554 DEBUG transitions.core: Exiting state Finished. Processing callbacks...
+2026-05-31 20:54:02,554 INFO transitions.core: Finished processing state Finished exit callbacks.
+2026-05-31 20:54:02,554 DEBUG transitions.core: Entering state PreRace. Processing callbacks...
+2026-05-31 20:54:02,554 INFO transitions.core: Finished processing state PreRace enter callbacks.
+2026-05-31 20:54:02,554 INFO race_state_machine: Race state: RaceState.Finished -> RaceState.PreRace
+2026-05-31 20:54:02,554 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:54:02,554 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:54:02,555 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:54:20,847 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:54:20,848 DEBUG transitions.core: Initiating transition from state PreRace to state PreRace...
+2026-05-31 20:54:20,848 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:54:20,848 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:54:20,848 DEBUG transitions.core: Exiting state PreRace. Processing callbacks...
+2026-05-31 20:54:20,848 INFO transitions.core: Finished processing state PreRace exit callbacks.
+2026-05-31 20:54:20,848 DEBUG transitions.core: Entering state PreRace. Processing callbacks...
+2026-05-31 20:54:20,848 INFO transitions.core: Finished processing state PreRace enter callbacks.
+2026-05-31 20:54:20,848 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:54:20,848 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:54:20,848 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:55:20,891 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:55:20,892 DEBUG transitions.core: Initiating transition from state PreRace to state PreRace...
+2026-05-31 20:55:20,892 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:55:20,892 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:55:20,892 DEBUG transitions.core: Exiting state PreRace. Processing callbacks...
+2026-05-31 20:55:20,892 INFO transitions.core: Finished processing state PreRace exit callbacks.
+2026-05-31 20:55:20,892 DEBUG transitions.core: Entering state PreRace. Processing callbacks...
+2026-05-31 20:55:20,892 INFO transitions.core: Finished processing state PreRace enter callbacks.
+2026-05-31 20:55:20,892 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:55:20,892 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:55:20,892 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:55:21,261 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:55:21,261 DEBUG transitions.core: Initiating transition from state PreRace to state Blank...
+2026-05-31 20:55:21,261 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:55:21,261 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:55:21,261 DEBUG transitions.core: Exiting state PreRace. Processing callbacks...
+2026-05-31 20:55:21,261 INFO transitions.core: Finished processing state PreRace exit callbacks.
+2026-05-31 20:55:21,261 DEBUG transitions.core: Entering state Blank. Processing callbacks...
+2026-05-31 20:55:21,261 INFO transitions.core: Finished processing state Blank enter callbacks.
+2026-05-31 20:55:21,261 INFO race_state_machine: Race state: RaceState.PreRace -> RaceState.Blank
+2026-05-31 20:55:21,261 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:55:21,261 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:55:21,262 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:55:41,659 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:55:41,660 DEBUG transitions.core: Initiating transition from state Blank to state TotalBlank...
+2026-05-31 20:55:41,660 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:55:41,660 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:55:41,660 DEBUG transitions.core: Exiting state Blank. Processing callbacks...
+2026-05-31 20:55:41,660 INFO transitions.core: Finished processing state Blank exit callbacks.
+2026-05-31 20:55:41,660 DEBUG transitions.core: Entering state TotalBlank. Processing callbacks...
+2026-05-31 20:55:41,660 INFO transitions.core: Finished processing state TotalBlank enter callbacks.
+2026-05-31 20:55:41,660 INFO race_state_machine: Race state: RaceState.Blank -> RaceState.TotalBlank
+2026-05-31 20:55:41,660 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:55:41,660 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:55:41,660 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:55:44,387 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:55:44,387 DEBUG transitions.core: Initiating transition from state TotalBlank to state TotalBlankPreRace...
+2026-05-31 20:55:44,387 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:55:44,387 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:55:44,387 DEBUG transitions.core: Exiting state TotalBlank. Processing callbacks...
+2026-05-31 20:55:44,387 INFO transitions.core: Finished processing state TotalBlank exit callbacks.
+2026-05-31 20:55:44,387 DEBUG transitions.core: Entering state TotalBlankPreRace. Processing callbacks...
+2026-05-31 20:55:44,387 INFO transitions.core: Finished processing state TotalBlankPreRace enter callbacks.
+2026-05-31 20:55:44,387 INFO race_state_machine: Race state: RaceState.TotalBlank -> RaceState.TotalBlankPreRace
+2026-05-31 20:55:44,387 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:55:44,387 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:55:44,387 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:55:44,387 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:55:44,387 DEBUG transitions.core: Initiating transition from state TotalBlankPreRace to state ClearPreRace...
+2026-05-31 20:55:44,387 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:55:44,387 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:55:44,388 DEBUG transitions.core: Exiting state TotalBlankPreRace. Processing callbacks...
+2026-05-31 20:55:44,388 INFO transitions.core: Finished processing state TotalBlankPreRace exit callbacks.
+2026-05-31 20:55:44,388 DEBUG transitions.core: Entering state ClearPreRace. Processing callbacks...
+2026-05-31 20:55:44,388 INFO transitions.core: Finished processing state ClearPreRace enter callbacks.
+2026-05-31 20:55:44,388 INFO race_state_machine: Race state: RaceState.TotalBlankPreRace -> RaceState.ClearPreRace
+2026-05-31 20:55:44,388 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:55:44,388 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:55:44,388 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:55:49,080 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:55:49,080 DEBUG transitions.core: Initiating transition from state ClearPreRace to state ClearPreRace...
+2026-05-31 20:55:49,080 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:55:49,080 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:55:49,080 DEBUG transitions.core: Exiting state ClearPreRace. Processing callbacks...
+2026-05-31 20:55:49,080 INFO transitions.core: Finished processing state ClearPreRace exit callbacks.
+2026-05-31 20:55:49,080 DEBUG transitions.core: Entering state ClearPreRace. Processing callbacks...
+2026-05-31 20:55:49,080 INFO transitions.core: Finished processing state ClearPreRace enter callbacks.
+2026-05-31 20:55:49,080 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:55:49,080 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:55:49,080 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:55:49,245 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:55:49,245 DEBUG transitions.core: Initiating transition from state ClearPreRace to state Blank...
+2026-05-31 20:55:49,245 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:55:49,245 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:55:49,245 DEBUG transitions.core: Exiting state ClearPreRace. Processing callbacks...
+2026-05-31 20:55:49,245 INFO transitions.core: Finished processing state ClearPreRace exit callbacks.
+2026-05-31 20:55:49,245 DEBUG transitions.core: Entering state Blank. Processing callbacks...
+2026-05-31 20:55:49,245 INFO transitions.core: Finished processing state Blank enter callbacks.
+2026-05-31 20:55:49,245 INFO race_state_machine: Race state: RaceState.ClearPreRace -> RaceState.Blank
+2026-05-31 20:55:49,245 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:55:49,246 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:55:49,246 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:55:55,679 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:55:55,679 DEBUG transitions.core: Initiating transition from state Blank to state Running...
+2026-05-31 20:55:55,679 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:55:55,679 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:55:55,679 DEBUG transitions.core: Exiting state Blank. Processing callbacks...
+2026-05-31 20:55:55,679 INFO transitions.core: Finished processing state Blank exit callbacks.
+2026-05-31 20:55:55,679 DEBUG transitions.core: Entering state Running. Processing callbacks...
+2026-05-31 20:55:55,679 INFO transitions.core: Finished processing state Running enter callbacks.
+2026-05-31 20:55:55,679 INFO race_state_machine: Race state: RaceState.Blank -> RaceState.Running
+2026-05-31 20:55:55,679 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:55:55,679 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:55:55,679 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:55:55,843 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:55:55,843 DEBUG transitions.core: Initiating transition from state Running to state PreRace...
+2026-05-31 20:55:55,843 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:55:55,844 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:55:55,844 DEBUG transitions.core: Exiting state Running. Processing callbacks...
+2026-05-31 20:55:55,844 INFO transitions.core: Finished processing state Running exit callbacks.
+2026-05-31 20:55:55,844 DEBUG transitions.core: Entering state PreRace. Processing callbacks...
+2026-05-31 20:55:55,844 INFO transitions.core: Finished processing state PreRace enter callbacks.
+2026-05-31 20:55:55,844 INFO race_state_machine: Race state: RaceState.Running -> RaceState.PreRace
+2026-05-31 20:55:55,844 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:55:55,844 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:55:55,844 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:55:58,577 WARNING transitions.core: Can't trigger event finish from state PreRace!
+2026-05-31 20:55:58,578 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:56:14,782 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:56:14,782 DEBUG transitions.core: Initiating transition from state PreRace to state Running...
+2026-05-31 20:56:14,782 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:56:14,782 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:56:14,782 DEBUG transitions.core: Exiting state PreRace. Processing callbacks...
+2026-05-31 20:56:14,782 INFO transitions.core: Finished processing state PreRace exit callbacks.
+2026-05-31 20:56:14,783 DEBUG transitions.core: Entering state Running. Processing callbacks...
+2026-05-31 20:56:14,783 INFO transitions.core: Finished processing state Running enter callbacks.
+2026-05-31 20:56:14,783 INFO race_state_machine: Race state: RaceState.PreRace -> RaceState.Running
+2026-05-31 20:56:14,783 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:56:14,783 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:56:14,783 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:56:18,192 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:56:18,192 DEBUG transitions.core: Initiating transition from state Running to state Finished...
+2026-05-31 20:56:18,193 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:56:18,193 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:56:18,193 DEBUG transitions.core: Exiting state Running. Processing callbacks...
+2026-05-31 20:56:18,193 INFO transitions.core: Finished processing state Running exit callbacks.
+2026-05-31 20:56:18,193 DEBUG transitions.core: Entering state Finished. Processing callbacks...
+2026-05-31 20:56:18,193 INFO transitions.core: Finished processing state Finished enter callbacks.
+2026-05-31 20:56:18,193 INFO race_state_machine: Race state: RaceState.Running -> RaceState.Finished
+2026-05-31 20:56:18,193 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:56:18,193 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:56:18,193 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:56:18,193 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:56:18,193 DEBUG transitions.core: Initiating transition from state Finished to state Clear...
+2026-05-31 20:56:18,193 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:56:18,193 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:56:18,193 DEBUG transitions.core: Exiting state Finished. Processing callbacks...
+2026-05-31 20:56:18,193 INFO transitions.core: Finished processing state Finished exit callbacks.
+2026-05-31 20:56:18,193 DEBUG transitions.core: Entering state Clear. Processing callbacks...
+2026-05-31 20:56:18,193 INFO transitions.core: Finished processing state Clear enter callbacks.
+2026-05-31 20:56:18,193 INFO race_state_machine: Race state: RaceState.Finished -> RaceState.Clear
+2026-05-31 20:56:18,193 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:56:18,193 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:56:18,193 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:56:23,190 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:56:23,190 DEBUG transitions.core: Initiating transition from state Clear to state Running...
+2026-05-31 20:56:23,190 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:56:23,190 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:56:23,190 DEBUG transitions.core: Exiting state Clear. Processing callbacks...
+2026-05-31 20:56:23,190 INFO transitions.core: Finished processing state Clear exit callbacks.
+2026-05-31 20:56:23,190 DEBUG transitions.core: Entering state Running. Processing callbacks...
+2026-05-31 20:56:23,190 INFO transitions.core: Finished processing state Running enter callbacks.
+2026-05-31 20:56:23,190 INFO race_state_machine: Race state: RaceState.Clear -> RaceState.Running
+2026-05-31 20:56:23,190 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:56:23,191 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:56:23,191 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:56:48,182 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:56:48,182 DEBUG transitions.core: Initiating transition from state Running to state Finished...
+2026-05-31 20:56:48,182 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:56:48,182 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:56:48,182 DEBUG transitions.core: Exiting state Running. Processing callbacks...
+2026-05-31 20:56:48,182 INFO transitions.core: Finished processing state Running exit callbacks.
+2026-05-31 20:56:48,182 DEBUG transitions.core: Entering state Finished. Processing callbacks...
+2026-05-31 20:56:48,182 INFO transitions.core: Finished processing state Finished enter callbacks.
+2026-05-31 20:56:48,182 INFO race_state_machine: Race state: RaceState.Running -> RaceState.Finished
+2026-05-31 20:56:48,182 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:56:48,183 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:56:48,183 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:56:48,183 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:56:48,183 DEBUG transitions.core: Initiating transition from state Finished to state Clear...
+2026-05-31 20:56:48,183 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:56:48,183 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:56:48,183 DEBUG transitions.core: Exiting state Finished. Processing callbacks...
+2026-05-31 20:56:48,183 INFO transitions.core: Finished processing state Finished exit callbacks.
+2026-05-31 20:56:48,183 DEBUG transitions.core: Entering state Clear. Processing callbacks...
+2026-05-31 20:56:48,183 INFO transitions.core: Finished processing state Clear enter callbacks.
+2026-05-31 20:56:48,183 INFO race_state_machine: Race state: RaceState.Finished -> RaceState.Clear
+2026-05-31 20:56:48,183 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:56:48,183 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:56:48,183 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:56:48,297 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:56:48,297 DEBUG transitions.core: Initiating transition from state Clear to state ClearPreRace...
+2026-05-31 20:56:48,297 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:56:48,297 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:56:48,297 DEBUG transitions.core: Exiting state Clear. Processing callbacks...
+2026-05-31 20:56:48,297 INFO transitions.core: Finished processing state Clear exit callbacks.
+2026-05-31 20:56:48,297 DEBUG transitions.core: Entering state ClearPreRace. Processing callbacks...
+2026-05-31 20:56:48,297 INFO transitions.core: Finished processing state ClearPreRace enter callbacks.
+2026-05-31 20:56:48,297 INFO race_state_machine: Race state: RaceState.Clear -> RaceState.ClearPreRace
+2026-05-31 20:56:48,297 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:56:48,297 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:56:48,297 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:56:48,297 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:56:48,297 DEBUG transitions.core: Initiating transition from state ClearPreRace to state Blank...
+2026-05-31 20:56:48,297 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:56:48,297 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:56:48,297 DEBUG transitions.core: Exiting state ClearPreRace. Processing callbacks...
+2026-05-31 20:56:48,297 INFO transitions.core: Finished processing state ClearPreRace exit callbacks.
+2026-05-31 20:56:48,297 DEBUG transitions.core: Entering state Blank. Processing callbacks...
+2026-05-31 20:56:48,298 INFO transitions.core: Finished processing state Blank enter callbacks.
+2026-05-31 20:56:48,298 INFO race_state_machine: Race state: RaceState.ClearPreRace -> RaceState.Blank
+2026-05-31 20:56:48,298 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:56:48,298 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:56:48,298 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:56:50,205 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:56:50,205 DEBUG transitions.core: Initiating transition from state Blank to state Running...
+2026-05-31 20:56:50,205 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:56:50,205 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:56:50,205 DEBUG transitions.core: Exiting state Blank. Processing callbacks...
+2026-05-31 20:56:50,205 INFO transitions.core: Finished processing state Blank exit callbacks.
+2026-05-31 20:56:50,205 DEBUG transitions.core: Entering state Running. Processing callbacks...
+2026-05-31 20:56:50,205 INFO transitions.core: Finished processing state Running enter callbacks.
+2026-05-31 20:56:50,205 INFO race_state_machine: Race state: RaceState.Blank -> RaceState.Running
+2026-05-31 20:56:50,205 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:56:50,205 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:56:50,205 DEBUG transitions.core: Executed machine finalize callbacks
+2026-05-31 20:56:50,339 DEBUG transitions.core: Executed machine preparation callbacks before conditions.
+2026-05-31 20:56:50,340 DEBUG transitions.core: Initiating transition from state Running to state PreRace...
+2026-05-31 20:56:50,340 DEBUG transitions.core: Executed callbacks before conditions.
+2026-05-31 20:56:50,340 DEBUG transitions.core: Executed callback before transition.
+2026-05-31 20:56:50,340 DEBUG transitions.core: Exiting state Running. Processing callbacks...
+2026-05-31 20:56:50,340 INFO transitions.core: Finished processing state Running exit callbacks.
+2026-05-31 20:56:50,340 DEBUG transitions.core: Entering state PreRace. Processing callbacks...
+2026-05-31 20:56:50,340 INFO transitions.core: Finished processing state PreRace enter callbacks.
+2026-05-31 20:56:50,340 INFO race_state_machine: Race state: RaceState.Running -> RaceState.PreRace
+2026-05-31 20:56:50,340 INFO transitions.core: Executed callback '_on_state_changed'
+2026-05-31 20:56:50,340 DEBUG transitions.core: Executed callback after transition.
+2026-05-31 20:56:50,340 DEBUG transitions.core: Executed machine finalize callbacks
