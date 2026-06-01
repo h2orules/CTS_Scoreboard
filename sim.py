@@ -136,18 +136,19 @@ def register(socketio, app_module):
         ev_num = 99
         heat_num = 1
 
-        # --- Populate event_info ---
+        # --- Populate event_info (heats 1 and 2 share the same roster so
+        # the Next Heat step doesn't lose names/teams/seed-times) ---
         _app.event_info.event_names[ev_num] = "Mixed 8 & Under 25 Yard Freestyle"
-        _app.event_info.events[(ev_num, heat_num)] = {}
-        _app.event_info.teams[(ev_num, heat_num)] = {}
-        _app.event_info.age_codes[(ev_num, heat_num)] = {}
-        _app.event_info.seed_times[(ev_num, heat_num)] = {}
-
-        for lane, data in SIM_LANES.items():
-            _app.event_info.events[(ev_num, heat_num)][lane] = data["name"]
-            _app.event_info.teams[(ev_num, heat_num)][lane] = data["team"]
-            _app.event_info.age_codes[(ev_num, heat_num)][lane] = data["age_code"]
-            _app.event_info.seed_times[(ev_num, heat_num)][lane] = data["seed"]
+        for ht in (1, 2):
+            _app.event_info.events[(ev_num, ht)] = {}
+            _app.event_info.teams[(ev_num, ht)] = {}
+            _app.event_info.age_codes[(ev_num, ht)] = {}
+            _app.event_info.seed_times[(ev_num, ht)] = {}
+            for lane, data in SIM_LANES.items():
+                _app.event_info.events[(ev_num, ht)][lane] = data["name"]
+                _app.event_info.teams[(ev_num, ht)][lane] = data["team"]
+                _app.event_info.age_codes[(ev_num, ht)][lane] = data["age_code"]
+                _app.event_info.seed_times[(ev_num, ht)][lane] = data["seed"]
 
         _app.event_info.event_meta[ev_num] = {
             "stroke_code": 1,
@@ -401,6 +402,56 @@ def register(socketio, app_module):
             update["race_state"] = _app.race_fsm.state_name
             _app.broadcast_scoreboard(update)
             # Re-send event info so names/teams reappear on scoreboard
+            _app.send_event_info()
+            _app.send_scores_info()
+
+        elif step == "lanes_on":
+            # Operator's CTS "Lanes On" submenu: restart the lane-byte
+            # stream that was suppressed by Clear-Lanes. Real CTS
+            # re-emits whatever it was holding before the clear; mirror
+            # that by re-populating from SIM_LANES finish data.
+            update["current_event"] = str(_app.last_event_sent[0])
+            update["current_heat"] = str(_app.last_event_sent[1])
+            for i in range(1, num_lanes + 1):
+                if i in SIM_LANES:
+                    t = _format_lane_time(SIM_LANES[i]["time"])
+                    _app.lane_times[i] = t
+                    update["lane_time%d" % i] = t
+                    update["lane_place%d" % i] = SIM_LANES[i]["place"]
+                else:
+                    _app.lane_times[i] = "        "
+                    update["lane_time%d" % i] = "        "
+                    update["lane_place%d" % i] = " "
+
+            _app.race_fsm.evaluate_update(_app.build_board_snapshot())
+            update["race_state"] = _app.race_fsm.state_name
+            _app.broadcast_scoreboard(update)
+            _app.send_event_info()
+            _app.send_scores_info()
+
+        elif step == "next_heat":
+            # Operator advances the heat on the CTS console while the
+            # previous race's finish times are still being retransmitted
+            # on the wire. The FSM should land in PreRace with stale
+            # lane data; a subsequent Clear -> PreRaceClear; Lanes On
+            # -> back to PreRace.
+            ev_num = _app.last_event_sent[0]
+            new_heat = 2 if _app.last_event_sent[1] == 1 else 1
+            _app.last_event_sent = (ev_num, new_heat)
+            update["current_event"] = str(ev_num)
+            update["current_heat"] = str(new_heat)
+            # Re-stream the cached finish lane data unchanged — that's
+            # what real CTS does until the next race starts.
+            for i in range(1, num_lanes + 1):
+                update["lane_time%d" % i] = _app.lane_times.get(i, "        ")
+                if i in SIM_LANES:
+                    update["lane_place%d" % i] = SIM_LANES[i]["place"]
+                else:
+                    update["lane_place%d" % i] = " "
+
+            _app.race_fsm.notify_event_change()
+            update["race_state"] = _app.race_fsm.state_name
+            _app.broadcast_scoreboard(update)
             _app.send_event_info()
             _app.send_scores_info()
 

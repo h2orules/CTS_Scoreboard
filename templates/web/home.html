@@ -187,7 +187,9 @@
             <button type="button" onclick="socket.emit('sim_step', {step:'start'});">▶ Start</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'finish'});">🏁 Finish</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'reset'});">↺ Reset</button>
+            <button type="button" onclick="socket.emit('sim_step', {step:'next_heat'});">Next Heat</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'clear'});">Clear</button>
+            <button type="button" onclick="socket.emit('sim_step', {step:'lanes_on'});">Lanes On</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'blank'});">Blank</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'total_blank'});">Total Blank</button>
             <button type="button" onclick="runFullSequence();">▶▶ Full Sequence</button>
