@@ -1,5 +1,6 @@
 import enum
 import logging
+
 from transitions.extensions import LockedMachine
 
 logger = logging.getLogger(__name__)
@@ -20,75 +21,59 @@ class RaceState(enum.Enum):
 # All valid transitions as [trigger, source, dest]
 TRANSITIONS = [
     # PreRace -> Running when any lane starts running
-    ['start_running', 'PreRace', 'Running'],
-    ['go_blank', 'PreRace', 'Blank'],
-    ['go_total_blank', 'PreRace', 'TotalBlank'],
-
+    ["start_running", "PreRace", "Running"],
+    ["go_blank", "PreRace", "Blank"],
+    ["go_total_blank", "PreRace", "TotalBlank"],
     # Running -> Finished when all active running lanes stop
-    ['finish', 'Running', 'Finished'],
-
+    ["finish", "Running", "Finished"],
     # Finished -> Clear when lanes blank but event/heat still present
-    ['clear_lanes', 'Finished', 'Clear'],
-
+    ["clear_lanes", "Finished", "Clear"],
     # Finished -> PreRace when event/heat changes
-    ['change_event', 'Finished', 'PreRace'],
-
+    ["change_event", "Finished", "PreRace"],
     # Clear -> Running when a lane starts running (pre-race skipped)
-    ['start_running', 'Clear', 'Running'],
-
+    ["start_running", "Clear", "Running"],
     # Clear -> ClearPreRace when event/heat changes while in Clear
-    ['change_event', 'Clear', 'ClearPreRace'],
-
+    ["change_event", "Clear", "ClearPreRace"],
     # ClearPreRace -> Running
-    ['start_running', 'ClearPreRace', 'Running'],
-
+    ["start_running", "ClearPreRace", "Running"],
     # ClearPreRace -> PreRace when non-blank lane data arrives
-    ['show_lanes', 'ClearPreRace', 'PreRace'],
-
+    ["show_lanes", "ClearPreRace", "PreRace"],
     # Clear -> Blank/TotalBlank when event/heat disappears
-    ['go_blank', 'Clear', 'Blank'],
-    ['go_total_blank', 'Clear', 'TotalBlank'],
-
+    ["go_blank", "Clear", "Blank"],
+    ["go_total_blank", "Clear", "TotalBlank"],
     # ClearPreRace -> Blank/TotalBlank when event/heat disappears
-    ['go_blank', 'ClearPreRace', 'Blank'],
-    ['go_total_blank', 'ClearPreRace', 'TotalBlank'],
-
+    ["go_blank", "ClearPreRace", "Blank"],
+    ["go_total_blank", "ClearPreRace", "TotalBlank"],
     # Blank transitions
-    ['change_event', 'Blank', 'BlankPreRace'],
-    ['start_running', 'Blank', 'Running'],
-    ['show_lanes', 'Blank', 'PreRace'],
-    ['clear_lanes', 'Blank', 'Clear'],
-    ['go_total_blank', 'Blank', 'TotalBlank'],
-
+    ["change_event", "Blank", "BlankPreRace"],
+    ["start_running", "Blank", "Running"],
+    ["show_lanes", "Blank", "PreRace"],
+    ["clear_lanes", "Blank", "Clear"],
+    ["go_total_blank", "Blank", "TotalBlank"],
     # BlankPreRace transitions
-    ['start_running', 'BlankPreRace', 'Running'],
-    ['show_lanes', 'BlankPreRace', 'PreRace'],
-    ['clear_lanes', 'BlankPreRace', 'ClearPreRace'],
-
+    ["start_running", "BlankPreRace", "Running"],
+    ["show_lanes", "BlankPreRace", "PreRace"],
+    ["clear_lanes", "BlankPreRace", "ClearPreRace"],
     # TotalBlank transitions
-    ['change_event', 'TotalBlank', 'TotalBlankPreRace'],
-    ['go_blank', 'TotalBlank', 'Blank'],
-    ['show_lanes', 'TotalBlank', 'PreRace'],
-    ['clear_lanes', 'TotalBlank', 'Clear'],
-    ['start_running', 'TotalBlank', 'Running'],
-
+    ["change_event", "TotalBlank", "TotalBlankPreRace"],
+    ["go_blank", "TotalBlank", "Blank"],
+    ["show_lanes", "TotalBlank", "PreRace"],
+    ["clear_lanes", "TotalBlank", "Clear"],
+    ["start_running", "TotalBlank", "Running"],
     # TotalBlankPreRace transitions
-    ['start_running', 'TotalBlankPreRace', 'Running'],
-    ['show_lanes', 'TotalBlankPreRace', 'PreRace'],
-    ['clear_lanes', 'TotalBlankPreRace', 'ClearPreRace'],
-
+    ["start_running", "TotalBlankPreRace", "Running"],
+    ["show_lanes", "TotalBlankPreRace", "PreRace"],
+    ["clear_lanes", "TotalBlankPreRace", "ClearPreRace"],
     # Running -> PreRace on event/heat change (unusual but possible)
-    ['change_event', 'Running', 'PreRace'],
-
+    ["change_event", "Running", "PreRace"],
     # PreRace -> PreRace on event/heat change (reflexive, resets context)
-    ['change_event', 'PreRace', 'PreRace'],
-
+    ["change_event", "PreRace", "PreRace"],
     # ClearPreRace -> ClearPreRace on another event change
-    ['change_event', 'ClearPreRace', 'ClearPreRace'],
+    ["change_event", "ClearPreRace", "ClearPreRace"],
     # BlankPreRace -> BlankPreRace on another event change
-    ['change_event', 'BlankPreRace', 'BlankPreRace'],
+    ["change_event", "BlankPreRace", "BlankPreRace"],
     # TotalBlankPreRace -> TotalBlankPreRace on another event change
-    ['change_event', 'TotalBlankPreRace', 'TotalBlankPreRace'],
+    ["change_event", "TotalBlankPreRace", "TotalBlankPreRace"],
 ]
 
 
@@ -125,12 +110,17 @@ class RaceStateMachine:
 
     def __init__(self):
         # Snapshot tracking for edge detection
-        self._prev_event_heat = None        # (ev_str, ht_str) or None
-        self._prev_running_lanes = set()    # set of int lane numbers
+        self._prev_event_heat = None  # (ev_str, ht_str) or None
+        self._prev_running_lanes = set()  # set of int lane numbers
         # Last seen scores + lane_times, retained between calls so callers
         # can pass partial boards (mainly the tests). Production callers
         # always pass full snapshots.
-        self._scores = {'score_home': '', 'score_guest1': '', 'score_guest2': '', 'score_guest3': ''}
+        self._scores = {
+            "score_home": "",
+            "score_guest1": "",
+            "score_guest2": "",
+            "score_guest3": "",
+        }
         self._lane_times = {}
         self._prev_state = None
 
@@ -140,7 +130,7 @@ class RaceStateMachine:
             transitions=TRANSITIONS,
             initial=RaceState.TotalBlank,
             ignore_invalid_triggers=True,
-            after_state_change='_on_state_changed',
+            after_state_change="_on_state_changed",
         )
 
     def _on_state_changed(self):
@@ -158,36 +148,40 @@ class RaceStateMachine:
 
         See class docstring for the ``board`` dict shape.
         """
-        num_lanes = board.get('num_lanes', 10)
+        num_lanes = board.get("num_lanes", 10)
 
         # ------ 1. Detect event/heat change ------
-        new_eh = board.get('event_heat')
+        new_eh = board.get("event_heat")
         if new_eh is not None and new_eh != self._prev_event_heat:
             self._prev_event_heat = new_eh
-            self.trigger('change_event')
+            self.trigger("change_event")
 
         # ------ 2. Running lane edge detection ------
-        running = set(board.get('running_lanes') or [])
+        running = set(board.get("running_lanes") or [])
         had_running = bool(self._prev_running_lanes)
         has_running = bool(running)
         self._prev_running_lanes = running
         if has_running and not had_running:
-            self.trigger('start_running')
+            self.trigger("start_running")
         elif not has_running and had_running:
-            self.trigger('finish')
+            self.trigger("finish")
 
         # ------ 3. Score + lane time snapshot ------
-        if 'scores' in board and board['scores'] is not None:
-            self._scores = dict(board['scores'])
-        if 'lane_times' in board and board['lane_times'] is not None:
-            self._lane_times = dict(board['lane_times'])
+        if "scores" in board and board["scores"] is not None:
+            self._scores = dict(board["scores"])
+        if "lane_times" in board and board["lane_times"] is not None:
+            self._lane_times = dict(board["lane_times"])
 
         # ------ 4. Blank/clear evaluation ------
         current = self.state
         if current in (
-            RaceState.Finished, RaceState.Clear, RaceState.ClearPreRace,
-            RaceState.Blank, RaceState.BlankPreRace,
-            RaceState.TotalBlank, RaceState.TotalBlankPreRace,
+            RaceState.Finished,
+            RaceState.Clear,
+            RaceState.ClearPreRace,
+            RaceState.Blank,
+            RaceState.BlankPreRace,
+            RaceState.TotalBlank,
+            RaceState.TotalBlankPreRace,
             RaceState.PreRace,
         ):
             self._evaluate_blank_state(num_lanes)
@@ -195,7 +189,7 @@ class RaceStateMachine:
     def _has_nonzero_scores(self):
         """Return True if any score is non-empty and non-zero."""
         for val in self._scores.values():
-            if val and val.strip() and val.strip() != '0':
+            if val and val.strip() and val.strip() != "0":
                 return True
         return False
 
@@ -214,9 +208,9 @@ class RaceStateMachine:
 
         # Separate lane 3 (running clock channel) from result lanes
         other_lanes_blank = True  # All lanes except lane 3 have blank times
-        lane3_has_data = False    # Lane 3 shows clock or any data
+        lane3_has_data = False  # Lane 3 shows clock or any data
         for i in range(1, num_lanes + 1):
-            val = self._lane_times.get(i, '')
+            val = self._lane_times.get(i, "")
             if val and val.strip():
                 if i == 3:
                     lane3_has_data = True
@@ -225,34 +219,58 @@ class RaceStateMachine:
 
         current = self.state
         if current == RaceState.Finished and other_lanes_blank and has_event_heat:
-            self.trigger('clear_lanes')
-        elif current in (RaceState.Clear, RaceState.ClearPreRace, RaceState.PreRace) and other_lanes_blank and not has_event_heat and not scores_present:
+            self.trigger("clear_lanes")
+        elif (
+            current in (RaceState.Clear, RaceState.ClearPreRace, RaceState.PreRace)
+            and other_lanes_blank
+            and not has_event_heat
+            and not scores_present
+        ):
             if lane3_has_data:
-                self.trigger('go_blank')
+                self.trigger("go_blank")
             else:
-                self.trigger('go_total_blank')
-        elif current in (RaceState.Blank, RaceState.BlankPreRace,
-                        RaceState.TotalBlank, RaceState.TotalBlankPreRace) and other_lanes_blank and has_event_heat:
-            self.trigger('clear_lanes')
-        elif current in (RaceState.Blank, RaceState.BlankPreRace) and not lane3_has_data and not scores_present:
-            self.trigger('go_total_blank')
-        elif current in (RaceState.TotalBlank, RaceState.TotalBlankPreRace) and lane3_has_data and other_lanes_blank:
-            self.trigger('go_blank')
+                self.trigger("go_total_blank")
+        elif (
+            current
+            in (
+                RaceState.Blank,
+                RaceState.BlankPreRace,
+                RaceState.TotalBlank,
+                RaceState.TotalBlankPreRace,
+            )
+            and other_lanes_blank
+            and has_event_heat
+        ):
+            self.trigger("clear_lanes")
+        elif (
+            current in (RaceState.Blank, RaceState.BlankPreRace)
+            and not lane3_has_data
+            and not scores_present
+        ):
+            self.trigger("go_total_blank")
+        elif (
+            current in (RaceState.TotalBlank, RaceState.TotalBlankPreRace)
+            and lane3_has_data
+            and other_lanes_blank
+        ):
+            self.trigger("go_blank")
 
         # If result lanes have non-blank data, transition out of blank states.
         # Only fire from actual blank states — show_lanes isn't defined from
         # Finished/Clear/Running, and firing it there just produces noisy
         # warnings without doing useful work.
         if not other_lanes_blank and current in (
-            RaceState.Blank, RaceState.BlankPreRace,
-            RaceState.TotalBlank, RaceState.TotalBlankPreRace,
+            RaceState.Blank,
+            RaceState.BlankPreRace,
+            RaceState.TotalBlank,
+            RaceState.TotalBlankPreRace,
         ):
-            self.trigger('show_lanes')
+            self.trigger("show_lanes")
 
     def notify_event_change(self):
         """Call when send_event_info() fires due to event/heat change
         or client connect — ensures FSM is in a reasonable state."""
-        self.trigger('change_event')
+        self.trigger("change_event")
 
     @property
     def state_name(self):

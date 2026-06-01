@@ -1,10 +1,9 @@
-import pytest
-
 from race_state_machine import RaceState, RaceStateMachine
 
 
-def board(*, event_heat=None, running_lanes=None, lane_times=None,
-          scores=None, num_lanes=6):
+def board(
+    *, event_heat=None, running_lanes=None, lane_times=None, scores=None, num_lanes=6
+):
     """Shortcut for building a board snapshot dict for tests."""
     return {
         "event_heat": event_heat,
@@ -158,29 +157,45 @@ class TestEvaluateUpdate:
         # immediately demote Finished -> Clear before the final blank step.
         fsm.trigger("show_lanes")
         running_times = {i: "   12.3" for i in range(1, 7)}
-        fsm.evaluate_update(board(
-            event_heat=("1", "1"), running_lanes={1}, lane_times=running_times,
-        ))
+        fsm.evaluate_update(
+            board(
+                event_heat=("1", "1"),
+                running_lanes={1},
+                lane_times=running_times,
+            )
+        )
         finish_times = {i: "   15.23" for i in range(1, 7)}
-        fsm.evaluate_update(board(
-            event_heat=("1", "1"), running_lanes=set(), lane_times=finish_times,
-        ))
+        fsm.evaluate_update(
+            board(
+                event_heat=("1", "1"),
+                running_lanes=set(),
+                lane_times=finish_times,
+            )
+        )
         assert fsm.state == RaceState.Finished
 
         # Lanes blank but event/heat still present -> Clear
-        fsm.evaluate_update(board(
-            event_heat=("1", "1"),
-            running_lanes=set(),
-            lane_times={i: "        " for i in range(1, 7)},
-        ))
+        fsm.evaluate_update(
+            board(
+                event_heat=("1", "1"),
+                running_lanes=set(),
+                lane_times={i: "        " for i in range(1, 7)},
+            )
+        )
         assert fsm.state == RaceState.Clear
 
     def test_score_tracking(self):
         fsm = RaceStateMachine()
-        fsm.evaluate_update(board(scores={"score_home": "42",
-                                          "score_guest1": "",
-                                          "score_guest2": "",
-                                          "score_guest3": ""}))
+        fsm.evaluate_update(
+            board(
+                scores={
+                    "score_home": "42",
+                    "score_guest1": "",
+                    "score_guest2": "",
+                    "score_guest3": "",
+                }
+            )
+        )
         assert fsm._scores["score_home"] == "42"
 
 
@@ -194,12 +209,14 @@ class TestPerChannelFinishStream:
         fsm.evaluate_update(board(event_heat=("1", "1")))
         fsm.trigger("show_lanes")
         running = {i: " 12.3" for i in range(1, num_lanes + 1)}
-        fsm.evaluate_update(board(
-            event_heat=("1", "1"),
-            running_lanes=set(range(1, num_lanes + 1)),
-            lane_times=running,
-            num_lanes=num_lanes,
-        ))
+        fsm.evaluate_update(
+            board(
+                event_heat=("1", "1"),
+                running_lanes=set(range(1, num_lanes + 1)),
+                lane_times=running,
+                num_lanes=num_lanes,
+            )
+        )
         assert fsm.state == RaceState.Running
         return fsm
 
@@ -211,24 +228,34 @@ class TestPerChannelFinishStream:
         self._drive_into_running(fsm)
 
         # All lanes stop running (snapshot rebuilt with empty running set)
-        fsm.evaluate_update(board(
-            event_heat=("1", "1"),
-            running_lanes=set(),
-            lane_times={i: " 12.3" for i in range(1, 7)},
-        ))
+        fsm.evaluate_update(
+            board(
+                event_heat=("1", "1"),
+                running_lanes=set(),
+                lane_times={i: " 12.3" for i in range(1, 7)},
+            )
+        )
         assert fsm.state == RaceState.Finished
 
         # Finish times arrive per-channel; lane 5 is an empty lane (blank).
-        finish_times = {1: "  15.23", 2: "  16.89", 3: "  17.54",
-                        4: "  17.55", 5: "        ", 6: "  18.50"}
+        finish_times = {
+            1: "  15.23",
+            2: "  16.89",
+            3: "  17.54",
+            4: "  17.55",
+            5: "        ",
+            6: "  18.50",
+        }
         accumulated = {i: " 12.3" for i in range(1, 7)}
         for lane, t in finish_times.items():
             accumulated[lane] = t
-            fsm.evaluate_update(board(
-                event_heat=("1", "1"),
-                running_lanes=set(),
-                lane_times=dict(accumulated),
-            ))
+            fsm.evaluate_update(
+                board(
+                    event_heat=("1", "1"),
+                    running_lanes=set(),
+                    lane_times=dict(accumulated),
+                )
+            )
             assert fsm.state == RaceState.Finished, (
                 "Transitioned out of Finished after lane %d update" % lane
             )
@@ -239,11 +266,13 @@ class TestPerChannelFinishStream:
         lanes blank."""
         fsm = RaceStateMachine()
         self._drive_into_running(fsm)
-        fsm.evaluate_update(board(
-            event_heat=("1", "1"),
-            running_lanes=set(),
-            lane_times={i: "  15.23" for i in range(1, 7)},
-        ))
+        fsm.evaluate_update(
+            board(
+                event_heat=("1", "1"),
+                running_lanes=set(),
+                lane_times={i: "  15.23" for i in range(1, 7)},
+            )
+        )
         assert fsm.state == RaceState.Finished
 
         # Blank lanes one at a time. Should stay Finished until the LAST
@@ -251,18 +280,22 @@ class TestPerChannelFinishStream:
         accumulated = {i: "  15.23" for i in range(1, 7)}
         for i in range(1, 6):
             accumulated[i] = "        "
-            fsm.evaluate_update(board(
+            fsm.evaluate_update(
+                board(
+                    event_heat=("1", "1"),
+                    running_lanes=set(),
+                    lane_times=dict(accumulated),
+                )
+            )
+            assert fsm.state == RaceState.Finished
+        accumulated[6] = "        "
+        fsm.evaluate_update(
+            board(
                 event_heat=("1", "1"),
                 running_lanes=set(),
                 lane_times=dict(accumulated),
-            ))
-            assert fsm.state == RaceState.Finished
-        accumulated[6] = "        "
-        fsm.evaluate_update(board(
-            event_heat=("1", "1"),
-            running_lanes=set(),
-            lane_times=dict(accumulated),
-        ))
+            )
+        )
         assert fsm.state == RaceState.Clear
 
 
@@ -372,16 +405,20 @@ class TestPreRaceClears:
         running_times = {i: "   12.3" for i in range(1, 7)}
         finish_times = {i: "   15.23" for i in range(1, 7)}
         # First race
-        fsm.evaluate_update(board(event_heat=("1", "1"), running_lanes={1},
-                                   lane_times=running_times))
-        fsm.evaluate_update(board(event_heat=("1", "1"), running_lanes=set(),
-                                   lane_times=finish_times))
+        fsm.evaluate_update(
+            board(event_heat=("1", "1"), running_lanes={1}, lane_times=running_times)
+        )
+        fsm.evaluate_update(
+            board(event_heat=("1", "1"), running_lanes=set(), lane_times=finish_times)
+        )
         assert fsm.state == RaceState.Finished
         # Operator advances event; FSM lands in PreRace
-        fsm.evaluate_update(board(event_heat=("2", "1"), running_lanes=set(),
-                                   lane_times=finish_times))
+        fsm.evaluate_update(
+            board(event_heat=("2", "1"), running_lanes=set(), lane_times=finish_times)
+        )
         assert fsm.state == RaceState.PreRace
         # Next snapshot has lanes running again
-        fsm.evaluate_update(board(event_heat=("2", "1"), running_lanes={1, 2},
-                                   lane_times=running_times))
+        fsm.evaluate_update(
+            board(event_heat=("2", "1"), running_lanes={1, 2}, lane_times=running_times)
+        )
         assert fsm.state == RaceState.Running
