@@ -217,3 +217,101 @@ class TestLaneTimeFormat:
         ]
         lt = _call_parse_line_lane_time(1, bytes_)
         assert lt == " 1:23.45"
+
+
+def _lane_running_frame(channel):
+    """Build a CTS frame for a lane channel transitioning to 'running'.
+
+    Decoded channel bits: ((c & 0x3E) >> 1) ^ 0x1F == channel.
+    Bit 6 (0x40) marks the running flag; bit 0 (0x01) is format_display
+    (must be 0 for the parser to treat this as a lane channel).
+    """
+    chan_bits = ((0x1F ^ channel) << 1) & 0x3E
+    first = 0x80 | 0x40 | chan_bits
+    # Payload: lane and place set, time slots blank (running clock owns time).
+    return [
+        first,
+        _digit_byte(0, channel),  # lane
+        _digit_byte(1, channel),  # place
+        _blank_byte(2),
+        _blank_byte(3),
+        _blank_byte(4),
+        _blank_byte(5),
+        _blank_byte(6),
+        _blank_byte(7),
+    ]
+
+
+class TestRaceStartClockReset:
+    """When the operator starts a race, the CTS clock state still holds
+    the prior race's MM/SS digits until the next .0 boundary delivers a
+    full BE frame. parse_line must blank time_info[2..7] and running_time
+    on the first lane->running edge so the bridge tenths-only frames
+    don't render stale digits (e.g. "30:08.4" instead of "0.4")."""
+
+    def _reset_state(self):
+        # Mimic state right before a race starts: prior clock was at
+        # "30:08" (running) and tenths just ticked.
+        CTS_Scoreboard.time_info = [0] * 16
+        # MM = 30, SS = 08
+        CTS_Scoreboard.time_info[2] = _digit_byte(2, 3)
+        CTS_Scoreboard.time_info[3] = _digit_byte(3, 0)
+        CTS_Scoreboard.time_info[4] = _digit_byte(4, 0)
+        CTS_Scoreboard.time_info[5] = _digit_byte(5, 8)
+        CTS_Scoreboard.time_info[6] = _digit_byte(6, 4)
+        CTS_Scoreboard.time_info[7] = _blank_byte(7)
+        CTS_Scoreboard.running_time = "30:08.4 "
+        CTS_Scoreboard.channel_running = [False] * 10
+
+    def test_first_lane_running_blanks_time_info_and_running_time(self, monkeypatch):
+        self._reset_state()
+        CTS_Scoreboard.update.clear()
+        # parse_line broadcasts + clears `update` in its finally block
+        # when running_time is queued, so capture the broadcast payload.
+        captured = {}
+        monkeypatch.setattr(
+            CTS_Scoreboard, "broadcast_scoreboard", lambda u: captured.update(u)
+        )
+        CTS_Scoreboard.parse_line(_lane_running_frame(1))
+        # MM, seconds-tens, and tenths/hundredths blank; seconds-ones
+        # seeded with the digit "0" so the bridge renders as "0.X".
+        for slot in (2, 3, 4, 6, 7):
+            assert (CTS_Scoreboard.time_info[slot] & 0x0F) == 0, (
+                "slot %d not blanked: 0x%02X" % (slot, CTS_Scoreboard.time_info[slot])
+            )
+        assert (CTS_Scoreboard.time_info[5] & 0x0F) == 0xF
+        assert CTS_Scoreboard.running_time == "    0   "
+        # The reset running_time should have gone out on the wire.
+        assert captured.get("running_time") == "    0   "
+
+    def test_subsequent_lane_does_not_reset(self):
+        """Once one lane is already running, a second lane joining must
+        NOT re-blank the clock (which by then may hold real race data)."""
+        self._reset_state()
+        # Pretend lane 1 already went running on a prior frame.
+        CTS_Scoreboard.channel_running[0] = True
+        CTS_Scoreboard.running_time = "     1.2"
+        prior_time_info = list(CTS_Scoreboard.time_info)
+        CTS_Scoreboard.update.clear()
+        CTS_Scoreboard.parse_line(_lane_running_frame(2))
+        assert CTS_Scoreboard.running_time == "     1.2"
+        assert CTS_Scoreboard.time_info == prior_time_info
+        assert "running_time" not in CTS_Scoreboard.update
+
+    def test_tenths_only_frame_after_reset_renders_blank_mmss(self):
+        """The frame the user actually sees right after race-start is a
+        tenths-only BE update. After our reset it should render with
+        blank MM/SS, not the stale prior clock."""
+        self._reset_state()
+        CTS_Scoreboard.update.clear()
+        CTS_Scoreboard.parse_line(_lane_running_frame(1))
+        # Tenths-only BE frame carrying ".9" (slot 6 = tenths digit,
+        # slot 7 = hundredths blank).
+        CTS_Scoreboard.parse_line(
+            [0xBE, _digit_byte(6, 9), _blank_byte(7)]
+        )
+        rt = CTS_Scoreboard.running_time
+        # No "30:08" or any prior-MM/SS digits should be in the output.
+        assert "30" not in rt and "08" not in rt
+        # Should render as "0.9" with a trailing blank hundredths slot.
+        assert "0.9" in rt
