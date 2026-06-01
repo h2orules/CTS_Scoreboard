@@ -27,6 +27,15 @@ class TestLaneDisplayMode:
         cts.settings["seed_time_label"] = "None"
         assert cts.compute_lane_display_mode("Clear") == "clear"
 
+    def test_pre_race_clear_returns_clear(self, restore_settings):
+        # PreRaceClear is entered when CTS lane bytes blank out while
+        # we're in a PreRace context (stale finish times from prior
+        # heat). Operator's Clear-Lanes trumps seed-time display.
+        cts.settings["seed_time_label"] = "Seed Time"
+        assert cts.compute_lane_display_mode("PreRaceClear") == "clear"
+        cts.settings["seed_time_label"] = "None"
+        assert cts.compute_lane_display_mode("PreRaceClear") == "clear"
+
     @pytest.mark.parametrize(
         "state",
         ["PreRace", "ClearPreRace", "BlankPreRace", "TotalBlankPreRace"],

@@ -1949,7 +1949,7 @@ def compute_lane_display_mode(state_name=None):
     owns the cells.
     """
     state = state_name or race_fsm.state_name
-    if state == "Clear":
+    if state in ("Clear", "PreRaceClear"):
         return "clear"
     if state in ("PreRace", "ClearPreRace", "BlankPreRace", "TotalBlankPreRace"):
         if settings.get("seed_time_label", "Seed Time") != "None":

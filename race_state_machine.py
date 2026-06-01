@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 class RaceState(enum.Enum):
     PreRace = "PreRace"
+    PreRaceClear = "PreRaceClear"
     Running = "Running"
     Finished = "Finished"
     Clear = "Clear"
@@ -34,6 +35,19 @@ TRANSITIONS = [
     ["start_running", "Clear", "Running"],
     # Clear -> ClearPreRace when event/heat changes while in Clear
     ["change_event", "Clear", "ClearPreRace"],
+    # Clear -> Finished when CTS resumes sending the prior race's times
+    # (operator hit "Lanes On" after "Clear Lanes" without changing heat).
+    ["show_lanes", "Clear", "Finished"],
+    # PreRace -> PreRaceClear when stale CTS result data on the wire
+    # goes blank (operator hit "Clear Lanes" after advancing the heat).
+    # Detected by edge in evaluate_update.
+    ["clear_lanes", "PreRace", "PreRaceClear"],
+    # PreRaceClear transitions
+    ["show_lanes", "PreRaceClear", "PreRace"],
+    ["change_event", "PreRaceClear", "PreRaceClear"],
+    ["start_running", "PreRaceClear", "Running"],
+    ["go_blank", "PreRaceClear", "Blank"],
+    ["go_total_blank", "PreRaceClear", "TotalBlank"],
     # ClearPreRace -> Running
     ["start_running", "ClearPreRace", "Running"],
     # ClearPreRace -> PreRace when non-blank lane data arrives
@@ -120,6 +134,12 @@ class RaceStateMachine:
         # Snapshot tracking for edge detection
         self._prev_event_heat = None  # (ev_str, ht_str) or None
         self._prev_running_lanes = set()  # set of int lane numbers
+        # Tracks whether non-clock result lanes were blank in the
+        # previous snapshot. Used to detect the "data was on the wire,
+        # operator pressed Clear-Lanes, now it's all blank" edge — the
+        # only byte-level signal CTS gives us for the Clear-Lanes
+        # button. Starts True (nothing on display at boot).
+        self._prev_other_lanes_blank = True
         # Last seen scores + lane_times, retained between calls so callers
         # can pass partial boards (mainly the tests). Production callers
         # always pass full snapshots.
@@ -196,6 +216,7 @@ class RaceStateMachine:
             RaceState.TotalBlank,
             RaceState.TotalBlankPreRace,
             RaceState.PreRace,
+            RaceState.PreRaceClear,
         ):
             self._evaluate_blank_state(num_lanes)
 
@@ -231,10 +252,31 @@ class RaceStateMachine:
                     other_lanes_blank = False
 
         current = self.state
+        # Edge: result lanes had data last cycle, now they're all blank.
+        # That's the only byte-level signature of the operator's
+        # Clear-Lanes button (CTS just stops sending the place+time
+        # bytes for previously-populated lanes). Fire clear_lanes from
+        # PreRace so the client can hide its seed-time overlay too.
+        # The Finished path below catches the same edge for the
+        # post-race / before-event-change case.
+        if (
+            current == RaceState.PreRace
+            and other_lanes_blank
+            and not self._prev_other_lanes_blank
+            and has_event_heat
+        ):
+            self.trigger("clear_lanes")
+            current = self.state
         if current == RaceState.Finished and other_lanes_blank and has_event_heat:
             self.trigger("clear_lanes")
         elif (
-            current in (RaceState.Clear, RaceState.ClearPreRace, RaceState.PreRace)
+            current
+            in (
+                RaceState.Clear,
+                RaceState.PreRaceClear,
+                RaceState.ClearPreRace,
+                RaceState.PreRace,
+            )
             and other_lanes_blank
             and not has_event_heat
             and not scores_present
@@ -268,17 +310,22 @@ class RaceStateMachine:
         ):
             self.trigger("go_blank")
 
-        # If result lanes have non-blank data, transition out of blank states.
-        # Only fire from actual blank states — show_lanes isn't defined from
-        # Finished/Clear/Running, and firing it there just produces noisy
-        # warnings without doing useful work.
+        # If result lanes have non-blank data, transition out of blank/
+        # cleared states. Clear -> Finished and PreRaceClear -> PreRace
+        # cover the operator's \"Lanes On\" press restoring the previous
+        # display.
         if not other_lanes_blank and current in (
             RaceState.Blank,
             RaceState.BlankPreRace,
             RaceState.TotalBlank,
             RaceState.TotalBlankPreRace,
+            RaceState.Clear,
+            RaceState.ClearPreRace,
+            RaceState.PreRaceClear,
         ):
             self.trigger("show_lanes")
+
+        self._prev_other_lanes_blank = other_lanes_blank
 
     def notify_event_change(self):
         """Call when send_event_info() fires due to event/heat change
