@@ -187,7 +187,9 @@
             <button type="button" onclick="socket.emit('sim_step', {step:'start'});">▶ Start</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'finish'});">🏁 Finish</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'reset'});">↺ Reset</button>
+            <button type="button" onclick="socket.emit('sim_step', {step:'next_heat'});">Next Heat</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'clear'});">Clear</button>
+            <button type="button" onclick="socket.emit('sim_step', {step:'lanes_on'});">Lanes On</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'blank'});">Blank</button>
             <button type="button" onclick="socket.emit('sim_step', {step:'total_blank'});">Total Blank</button>
             <button type="button" onclick="runFullSequence();">▶▶ Full Sequence</button>
@@ -241,6 +243,7 @@
     var confettiFired = {};  // Track which lanes have already shown confetti
     var maxQtTagLen = 0;    // Longest tag string for space reservation
     var raceState = {{ initial_race_state | tojson }};
+    var laneDisplayMode = {{ initial_lane_display_mode | tojson }};
     var qrOverlayVisibility = {{ initial_qr_overlay_visibility | default('off') | tojson }};
     var qrOverlayCorner = {{ initial_qr_overlay_corner | default('top-right') | tojson }};
 
@@ -462,6 +465,12 @@
         if (tagEl) tagEl.textContent = "";
 
         if (isRunning) return;
+        // Qualifying-time evaluation only runs when the server owns the
+        // lane cells (Running/Finished/Blank/TotalBlank). In *PreRace and
+        // Clear the client paints seeds or blanks; evaluating those
+        // values against standards would (e.g.) decorate a seed time as
+        // meeting an A standard.
+        if (!window.isServerOwnedLaneDisplay(laneDisplayMode)) return;
 
         var seconds = parseTimeToSeconds(timeText);
         var thresholds = getThresholdsForLane(lane, qtThresholds, laneAgeCodes);
@@ -767,9 +776,9 @@
         confettiFired = {};
         laneTimes = {};
         // Pull fresh seed times out of the same payload BEFORE rendering,
-        // so updateSeedTimeDisplay doesn't paint stale values from the
-        // previous event. The generic forEach below also assigns these,
-        // but it runs after the race_state branch, which is too late.
+        // so paintSeedTimes doesn't paint stale values from the previous
+        // event. The generic forEach below also assigns these, but it
+        // runs after applyLaneDisplay, which is too late.
         for (var key in s) {
             if (Object.prototype.hasOwnProperty.call(s, key)) {
                 var m = key.match(/^lane_seed_time(\d+)$/);
@@ -785,29 +794,51 @@
                 s["qualifying_times_key"] || null
             );
         }
-        updateSeedTimeDisplay(raceState);
+    }
+
+    // Blank every lane cell (time/place/name/team/age code) and the time
+    // column header. Used by the Clear display mode (operator's CTS Clear
+    // Lanes submenu).
+    // Blank lane time/place cells and reset the time-column header. Used
+    // by the Clear display mode (operator's CTS Clear-Lanes submenu).
+    // Names, teams and age codes come from HyTek event data (not CTS), so
+    // we deliberately leave those alone — Clear is about wiping race
+    // results, not the event roster.
+    function blankAllLaneCells() {
+        laneTimes = {};
+        for (var i = 1; i <= {{ num_lanes }}; i++) {
+            var t = document.getElementById('lane_time' + i);
+            if (t) { t.innerHTML = '&nbsp;'; t.classList.remove('seed-time-italic'); }
+            var p = document.getElementById('lane_place' + i);
+            if (p) p.innerHTML = '&nbsp;';
+        }
+        var timeColEl = document.getElementById('scoreboard_time_col');
+        if (timeColEl) {
+            timeColEl.textContent = 'Time';
+            timeColEl.classList.remove('seed-time-italic');
+        }
     }
 
     // formatSeedTime is provided by scoreboard.js (on window)
 
-    // Show/hide seed times based on race state and settings
-    function updateSeedTimeDisplay(state) {
+    // Paint seed times into the lane time cells. If no lane has a numeric
+    // seed time, blank the cells instead (still client-owned). Always
+    // blanks lane_place cells \u2014 places are meaningless when no race has
+    // run.
+    function paintSeedTimes() {
         var timeColEl = document.getElementById('scoreboard_time_col');
-        var showSeed = (state === "PreRace") && (seedTimeLabel !== "None");
-
-        // Check if at least one lane has a numeric seed time
-        if (showSeed) {
-            var hasAnySeed = false;
-            for (var i = 1; i <= {{ num_lanes }}; i++) {
-                if (laneSeedTimes[i] !== "" && laneSeedTimes[i] !== undefined && !isNaN(laneSeedTimes[i])) {
-                    hasAnySeed = true;
-                    break;
-                }
+        var hasAnySeed = false;
+        for (var i = 1; i <= {{ num_lanes }}; i++) {
+            if (laneSeedTimes[i] !== "" && laneSeedTimes[i] !== undefined && !isNaN(laneSeedTimes[i])) {
+                hasAnySeed = true;
+                break;
             }
-            if (!hasAnySeed) showSeed = false;
         }
 
-        if (showSeed) {
+        laneTimes = {};
+        resetLaneQualifications();
+
+        if (hasAnySeed) {
             if (timeColEl) {
                 timeColEl.textContent = seedTimeLabel;
                 timeColEl.classList.add('seed-time-italic');
@@ -818,6 +849,8 @@
                     el.textContent = formatSeedTime(laneSeedTimes[i]);
                     el.classList.add('seed-time-italic');
                 }
+                var pel = document.getElementById('lane_place' + i);
+                if (pel) pel.innerHTML = '&nbsp;';
             }
         } else {
             if (timeColEl) {
@@ -826,8 +859,43 @@
             }
             for (var i = 1; i <= {{ num_lanes }}; i++) {
                 var el = document.getElementById('lane_time' + i);
-                if (el) el.classList.remove('seed-time-italic');
+                if (el) {
+                    el.classList.remove('seed-time-italic');
+                    el.innerHTML = '&nbsp;';
+                }
+                var pel = document.getElementById('lane_place' + i);
+                if (pel) pel.innerHTML = '&nbsp;';
             }
+        }
+    }
+
+    // Clear seed-time decorations when leaving a client-owned display
+    // (going back to server-owned cells for Running/Finished/etc.).
+    function clearSeedDecorations() {
+        var timeColEl = document.getElementById('scoreboard_time_col');
+        if (timeColEl) {
+            timeColEl.textContent = 'Time';
+            timeColEl.classList.remove('seed-time-italic');
+        }
+        for (var i = 1; i <= {{ num_lanes }}; i++) {
+            var el = document.getElementById('lane_time' + i);
+            if (el) el.classList.remove('seed-time-italic');
+        }
+    }
+
+    // Single entry point: dispatch on lane_display_mode. Called whenever
+    // the server-declared ownership changes OR the heat changes.
+    function applyLaneDisplay(s) {
+        if (laneDisplayMode === "seed_times") {
+            onPreRaceEntry(s);
+            paintSeedTimes();
+        } else if (laneDisplayMode === "clear") {
+            blankAllLaneCells();
+        } else {
+            // server-owned: drop any italic/seed-label decorations from
+            // a prior client-owned mode; the field-loop and running-time
+            // loop populate the cells from the server payload.
+            clearSeedDecorations();
         }
     }
 
@@ -840,16 +908,15 @@
 
     // On full page reload the server sends the same race_state ("PreRace"
     // most often) that we already initialized from initial_race_state, so
-    // the WebSocket race_state branch never fires onPreRaceEntry / paints
-    // the seed-time column. Paint it now from the server-pre-populated
-    // laneSeedTimes so the column header + cells are correct on first paint.
+    // the WebSocket race_state branch never fires. Paint the initial
+    // display now from the server-pre-populated laneSeedTimes / cached
+    // lane data so the column header + cells are correct on first paint.
     if (typeof document !== 'undefined') {
+        var _initialPaint = function () { applyLaneDisplay({}); };
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', function () {
-                updateSeedTimeDisplay(raceState);
-            });
+            document.addEventListener('DOMContentLoaded', _initialPaint);
         } else {
-            updateSeedTimeDisplay(raceState);
+            _initialPaint();
         }
     }
 
@@ -874,6 +941,11 @@
             {event: 'sim_step', data: {step: 'finish'}, delay: 4000},
             {event: 'sim_step', data: {step: 'clear'}, delay: 3000},
             {event: 'sim_step', data: {step: 'blank'}, delay: 3000},
+            // Exercise Blank -> BlankPreRace -> TotalBlank path: loading
+            // an event from Blank fires change_event (-> BlankPreRace);
+            // total_blank then exercises the new BlankPreRace -> TotalBlank
+            // transition that used to log a "Can't trigger" warning.
+            {event: 'sim_load_event', delay: 2000},
             {event: 'sim_step', data: {step: 'total_blank'}, delay: 3000},
         ];
         var i = 0;
@@ -916,12 +988,23 @@
             qrChanged = true;
         }
 
+        // Track lane_display_mode from server BEFORE handling fields so
+        // suppression/cache gating below see the new mode in the same
+        // broadcast cycle. lane_display_mode is the single source of
+        // truth for who owns the lane time/place cells:
+        //   * "server"     — CTS bytes flow through; qualifying eval runs
+        //   * "seed_times" — client paints seeds; qualifying eval skipped
+        //   * "clear"      — client paints blanks; qualifying eval skipped
+        var prevLaneDisplayMode = laneDisplayMode;
+        if ("lane_display_mode" in s) laneDisplayMode = s["lane_display_mode"];
+
         // Re-render qualifying info / records whenever the server sends a
         // new key. send_event_info() emits this on every event/heat change;
         // the race FSM may not transition (e.g. PreRace -> PreRace), so we
         // can't rely on the race_state block below to trigger it.
-        if ('qualifying_times_key' in new_s &&
-            new_s['qualifying_times_key'] !== qualifyingTimesKey) {
+        var qualifyingKeyChanged = ('qualifying_times_key' in new_s &&
+            new_s['qualifying_times_key'] !== qualifyingTimesKey);
+        if (qualifyingKeyChanged) {
             renderQualifyingInfo(
                 new_s['qualifying_times'] || [],
                 new_s['record_sets'] || [],
@@ -931,24 +1014,37 @@
 
         // Track race state from server FSM and handle transitions
         var eventHeatChanged = false;
-        if ("race_state" in s && s["race_state"] !== raceState) {
+        var raceStateChanged = ("race_state" in s && s["race_state"] !== raceState);
+        if (raceStateChanged) {
             var prevState = raceState;
             raceState = s["race_state"];
             console.log("Race state:", prevState, "→", raceState);
-
-            // All *PreRace states trigger the same reset
-            if (raceState === "PreRace" || raceState === "ClearPreRace" ||
-                raceState === "BlankPreRace" || raceState === "TotalBlankPreRace") {
-                onPreRaceEntry(s);
-                eventHeatChanged = true;
-            } else {
-                // Leaving PreRace — clear seed time display
-                updateSeedTimeDisplay(raceState);
-            }
-
             // Update display mode for blank states
             updateBlankDisplay(raceState);
             qrChanged = true;
+        }
+
+        // Detect (event, heat) change. Same-event heat changes do NOT
+        // move the qualifying_times_key (qualifying data is per-event),
+        // so we need an explicit signal to re-paint seed times for the
+        // new heat — otherwise the prior heat's seed times remain on
+        // lanes whose new entry is NT.
+        var newEv = ("current_event" in new_s) ? (parseInt(new_s["current_event"]) || currentEvent) : currentEvent;
+        var newHt = ("current_heat" in new_s) ? (parseInt(new_s["current_heat"]) || currentHeat) : currentHeat;
+        var eventOrHeatChanged = (newEv !== currentEvent) || (newHt !== currentHeat);
+
+        // Apply lane-cell display rules whenever the server-declared
+        // ownership changes OR the heat changes within the same mode.
+        // A single applyLaneDisplay() call handles all of:
+        //   * fresh-heat seed-time paint (mode "seed_times")
+        //   * Clear-lanes blank (mode "clear")
+        //   * leaving any client-owned mode (drop stale class state)
+        if (raceStateChanged || qualifyingKeyChanged || eventOrHeatChanged ||
+            laneDisplayMode !== prevLaneDisplayMode) {
+            applyLaneDisplay(s);
+            if (laneDisplayMode === "seed_times" || laneDisplayMode === "clear") {
+                eventHeatChanged = true;
+            }
         }
 
         if (qrChanged) updateQrOverlay();
@@ -997,15 +1093,19 @@
 
         message_keys.forEach((k) => {
             if (valid_fields.indexOf(k) > 0) {
-                var el = document.getElementById(k);
-                if (el) {
-                    var val = s[k];
-                    if (k.startsWith("score_")) {
-                        val = (val && val.trim() !== "" && val.trim() !== "0") ? val.trim() : "0";
-                    }
-                    el.innerHTML = val;
-                    if (k.startsWith("score_")) {
-                        updateScoreWidths();
+                if (window.shouldSuppressLaneField(laneDisplayMode, k)) {
+                    // skip — lane cell owned by client-side display
+                } else {
+                    var el = document.getElementById(k);
+                    if (el) {
+                        var val = s[k];
+                        if (k.startsWith("score_")) {
+                            val = (val && val.trim() !== "" && val.trim() !== "0") ? val.trim() : "0";
+                        }
+                        el.innerHTML = val;
+                        if (k.startsWith("score_")) {
+                            updateScoreWidths();
+                        }
                     }
                 }
             }
@@ -1031,7 +1131,14 @@
             }
             var laneTimeMatch = k.match(/^lane_time(\d+)$/);
             if (laneTimeMatch) {
-                laneTimes[laneTimeMatch[1]] = s[k] || "";
+                // Only update the laneTimes cache when the server owns the
+                // lane cells; otherwise it would hold stale CTS-retransmit
+                // bytes that the qualifying-time evaluator would later
+                // decorate (e.g. tagging a blanked PreRace lane with the
+                // previous race's A-standard).
+                if (window.isServerOwnedLaneDisplay(laneDisplayMode)) {
+                    laneTimes[laneTimeMatch[1]] = s[k] || "";
+                }
                 // Feed lane 3 time to blank clock when in Blank state
                 if (laneTimeMatch[1] === "3" &&
                     (raceState === "Blank" || raceState === "BlankPreRace")) {
