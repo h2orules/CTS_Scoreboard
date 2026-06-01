@@ -70,6 +70,11 @@ settings = {
     "serial_port": "COM1",
     "username": "admin",
     "password": "password",
+    # Path to a file that will receive a timestamped log of every CTS serial
+    # frame (raw hex + parsed annotation). Empty disables logging. The
+    # command-line --out flag overrides this. The file format is the same
+    # one --in replays, so captures can be fed back through the parser.
+    "cts_log_file": "",
     # Ad rotation: list of dicts {'filename': str, 'enabled': bool}.
     # Files live in static/ad/. Order in the list is rotation order.
     "ad_images": [],
@@ -177,6 +182,10 @@ lane_info = [
 time_info = [0, 0, 0, 0, 0, 0, 0, 0]
 running_time = "        "
 channel_running = [False for i in range(10)]
+# Decoded per-lane time string snapshot, kept in sync with lane_info / the
+# running clock by parse_line. Lives at the module level so build_board_snapshot()
+# can hand a complete picture to the FSM, and so sim.py can stay consistent.
+lane_times = {}
 score_info = {
     0x14: [" ", " ", " ", " ", " ", " ", " ", " "],
     0x15: [" ", " ", " ", " ", " ", " ", " ", " "],
@@ -188,6 +197,25 @@ team_scores = {
     "score_guest3": "",
 }
 race_fsm = RaceStateMachine()
+
+
+def build_board_snapshot():
+    """Return a fresh dict snapshot of current display state for the FSM.
+
+    Reads directly from the canonical module-level state (lane_times,
+    channel_running, event_heat_info, team_scores) — there is no FSM-owned
+    duplicate cache to drift from.
+    """
+    ev = "".join(event_heat_info[:3])
+    ht = "".join(event_heat_info[-3:])
+    num_lanes = settings.get("num_lanes", 10)
+    return {
+        "event_heat": (ev, ht),
+        "running_lanes": {i + 1 for i, r in enumerate(channel_running) if r},
+        "lane_times": dict(lane_times),
+        "scores": dict(team_scores),
+        "num_lanes": num_lanes,
+    }
 
 # Content cache for server-rendered HTML fragments.
 # Structure: { resource_name: { 'key': str, 'html': str } }
@@ -457,6 +485,9 @@ def parse_line(l, out=None):
                 s = "%4s: %s %s %s" % (channel, lane, place, lane_time)
                 update["lane_time%i" % channel] = lane_time
 
+            # Keep the decoded per-lane snapshot in sync for the FSM.
+            lane_times[channel] = lane_time
+
             print_at(channel + 1, 0, " " * 20)
             print_at(
                 channel + 1, 0, "%4s: %s %s %s" % (channel, lane, place, lane_time)
@@ -550,7 +581,7 @@ def parse_line(l, out=None):
     finally:
         # Output anything we got
         if "current_event" in update or "running_time" in update:
-            race_fsm.evaluate_update(channel_running, update)
+            race_fsm.evaluate_update(build_board_snapshot())
             update["race_state"] = race_fsm.state_name
             broadcast_scoreboard(update)
             update.clear()
@@ -2198,6 +2229,12 @@ def main():
         out_file = args.out
         in_speed = float(args.in_speed)
         debug_console = args.debug
+        # Settings-driven CTS stream log: if `cts_log_file` is configured and
+        # no --out was given on the command line, dump the serial stream
+        # (timestamped raw frames + parsed annotations) there. Same format
+        # as --out, so the file can later be replayed with --in.
+        if not out_file and settings.get("cts_log_file"):
+            out_file = settings["cts_log_file"]
         ap.c()
         socketio.run(app, host="0.0.0.0")
     except:
