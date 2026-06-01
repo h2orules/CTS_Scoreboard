@@ -54,6 +54,8 @@ TRANSITIONS = [
     ["start_running", "BlankPreRace", "Running"],
     ["show_lanes", "BlankPreRace", "PreRace"],
     ["clear_lanes", "BlankPreRace", "ClearPreRace"],
+    ["go_blank", "BlankPreRace", "Blank"],
+    ["go_total_blank", "BlankPreRace", "TotalBlank"],
     # TotalBlank transitions
     ["change_event", "TotalBlank", "TotalBlankPreRace"],
     ["go_blank", "TotalBlank", "Blank"],
@@ -64,6 +66,8 @@ TRANSITIONS = [
     ["start_running", "TotalBlankPreRace", "Running"],
     ["show_lanes", "TotalBlankPreRace", "PreRace"],
     ["clear_lanes", "TotalBlankPreRace", "ClearPreRace"],
+    ["go_blank", "TotalBlankPreRace", "Blank"],
+    ["go_total_blank", "TotalBlankPreRace", "TotalBlank"],
     # Running -> PreRace on event/heat change (unusual but possible)
     ["change_event", "Running", "PreRace"],
     # PreRace -> PreRace on event/heat change (reflexive, resets context)

@@ -381,6 +381,64 @@ class TestBlankTransitions:
         assert fsm.state == RaceState.TotalBlankPreRace
 
 
+class TestPreRaceBlankTransitions:
+    """Operator may toggle Blank/Total-Blank while the FSM is in any of
+    the *PreRace variants. These transitions used to be missing, producing
+    `Can't trigger event ...` warnings from the live console."""
+
+    def test_blank_pre_race_to_total_blank(self):
+        fsm = RaceStateMachine()
+        fsm.trigger("go_blank")
+        fsm.trigger("change_event")
+        assert fsm.state == RaceState.BlankPreRace
+        fsm.trigger("go_total_blank")
+        assert fsm.state == RaceState.TotalBlank
+
+    def test_blank_pre_race_to_blank(self):
+        fsm = RaceStateMachine()
+        fsm.trigger("go_blank")
+        fsm.trigger("change_event")
+        assert fsm.state == RaceState.BlankPreRace
+        fsm.trigger("go_blank")
+        assert fsm.state == RaceState.Blank
+
+    def test_total_blank_pre_race_to_blank(self):
+        fsm = RaceStateMachine()
+        fsm.trigger("change_event")
+        assert fsm.state == RaceState.TotalBlankPreRace
+        fsm.trigger("go_blank")
+        assert fsm.state == RaceState.Blank
+
+    def test_total_blank_pre_race_to_total_blank(self):
+        fsm = RaceStateMachine()
+        fsm.trigger("change_event")
+        assert fsm.state == RaceState.TotalBlankPreRace
+        fsm.trigger("go_total_blank")
+        assert fsm.state == RaceState.TotalBlank
+
+    def test_clear_pre_race_to_blank(self):
+        fsm = RaceStateMachine()
+        fsm.trigger("show_lanes")
+        fsm.trigger("start_running")
+        fsm.trigger("finish")
+        fsm.trigger("clear_lanes")
+        fsm.trigger("change_event")
+        assert fsm.state == RaceState.ClearPreRace
+        fsm.trigger("go_blank")
+        assert fsm.state == RaceState.Blank
+
+    def test_clear_pre_race_to_total_blank(self):
+        fsm = RaceStateMachine()
+        fsm.trigger("show_lanes")
+        fsm.trigger("start_running")
+        fsm.trigger("finish")
+        fsm.trigger("clear_lanes")
+        fsm.trigger("change_event")
+        assert fsm.state == RaceState.ClearPreRace
+        fsm.trigger("go_total_blank")
+        assert fsm.state == RaceState.TotalBlank
+
+
 class TestPreRaceClears:
     """The previous FSM cleared an internal `_active_running_lanes` set on
     entry to PreRace-style states. With the Option-A snapshot API the FSM

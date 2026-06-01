@@ -788,6 +788,32 @@
         updateSeedTimeDisplay(raceState);
     }
 
+    // Called on entry to Clear: blank all lane cells (time, place, name,
+    // team, age code). The CTS Clear Lanes submenu is an explicit operator
+    // action — honor it literally. CTS keeps re-streaming the previous
+    // race's lane bytes, but the generic field-loop suppresses those writes
+    // while raceState === "Clear" so the blanks stick.
+    function onClearEntry() {
+        laneTimes = {};
+        for (var i = 1; i <= {{ num_lanes }}; i++) {
+            var t = document.getElementById('lane_time' + i);
+            if (t) { t.innerHTML = '&nbsp;'; t.classList.remove('seed-time-italic'); }
+            var p = document.getElementById('lane_place' + i);
+            if (p) p.innerHTML = '&nbsp;';
+            var n = document.getElementById('lane_swimmer_name' + i);
+            if (n) n.textContent = '\u00A0';
+            var tm = document.getElementById('lane_team' + i);
+            if (tm) tm.textContent = '';
+            var ac = document.getElementById('lane_age_code' + i);
+            if (ac) ac.textContent = '';
+        }
+        var timeColEl = document.getElementById('scoreboard_time_col');
+        if (timeColEl) {
+            timeColEl.textContent = 'Time';
+            timeColEl.classList.remove('seed-time-italic');
+        }
+    }
+
     // formatSeedTime is provided by scoreboard.js (on window)
 
     // Show/hide seed times based on race state and settings
@@ -874,6 +900,11 @@
             {event: 'sim_step', data: {step: 'finish'}, delay: 4000},
             {event: 'sim_step', data: {step: 'clear'}, delay: 3000},
             {event: 'sim_step', data: {step: 'blank'}, delay: 3000},
+            // Exercise Blank -> BlankPreRace -> TotalBlank path: loading
+            // an event from Blank fires change_event (-> BlankPreRace);
+            // total_blank then exercises the new BlankPreRace -> TotalBlank
+            // transition that used to log a "Can't trigger" warning.
+            {event: 'sim_load_event', delay: 2000},
             {event: 'sim_step', data: {step: 'total_blank'}, delay: 3000},
         ];
         var i = 0;
@@ -941,6 +972,10 @@
                 raceState === "BlankPreRace" || raceState === "TotalBlankPreRace") {
                 onPreRaceEntry(s);
                 eventHeatChanged = true;
+            } else if (raceState === "Clear") {
+                // CTS Clear Lanes submenu — blank the board
+                onClearEntry();
+                updateSeedTimeDisplay(raceState);
             } else {
                 // Leaving PreRace — clear seed time display
                 updateSeedTimeDisplay(raceState);
@@ -997,15 +1032,26 @@
 
         message_keys.forEach((k) => {
             if (valid_fields.indexOf(k) > 0) {
-                var el = document.getElementById(k);
-                if (el) {
-                    var val = s[k];
-                    if (k.startsWith("score_")) {
-                        val = (val && val.trim() !== "" && val.trim() !== "0") ? val.trim() : "0";
-                    }
-                    el.innerHTML = val;
-                    if (k.startsWith("score_")) {
-                        updateScoreWidths();
+                // CTS retransmits the last finish's lane times until the
+                // next race starts, so suppress server-driven writes to
+                // lane_time/lane_place cells while the FSM is in a state
+                // where the client owns those cells (seed times for
+                // *PreRace; blanks for Clear). The running-time loop and
+                // the *PreRace/Clear entry handlers paint the right
+                // content.
+                if (window.shouldSuppressLaneField(raceState, k)) {
+                    // skip — cell owned by client-side display
+                } else {
+                    var el = document.getElementById(k);
+                    if (el) {
+                        var val = s[k];
+                        if (k.startsWith("score_")) {
+                            val = (val && val.trim() !== "" && val.trim() !== "0") ? val.trim() : "0";
+                        }
+                        el.innerHTML = val;
+                        if (k.startsWith("score_")) {
+                            updateScoreWidths();
+                        }
                     }
                 }
             }
