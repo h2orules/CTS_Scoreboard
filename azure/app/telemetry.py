@@ -246,3 +246,37 @@ def reset_for_tests() -> None:
     global _configured, _metrics
     _configured = False
     _metrics = None
+
+
+# Module-level cache for the viewer-event logger so we don't reconfigure on
+# every POST. The logger name is the conventional "customEvents" bucket in
+# App Insights when the OTel logging exporter is in use.
+_viewer_logger: logging.Logger | None = None
+
+
+def _viewer_event_logger() -> logging.Logger:
+    global _viewer_logger
+    if _viewer_logger is None:
+        _viewer_logger = logging.getLogger("cts.viewer")
+        # Inherit handlers from root (Azure Monitor attaches there when
+        # configure_azure_monitor ran; otherwise plain stdout in dev).
+        _viewer_logger.propagate = True
+    return _viewer_logger
+
+
+def emit_viewer_event(name: str, props: dict[str, Any]) -> None:
+    """Forward a single viewer-engagement event to App Insights.
+
+    Implemented as a structured log record so it lands in ``traces`` /
+    ``customEvents`` via the existing OTel logging exporter that
+    ``configure_azure_monitor`` installs. No-op safe when telemetry is the
+    stub: the record still hits the local logger but does not leave the box.
+    """
+    logger = _viewer_event_logger()
+    # ``extra`` keys become OTel attributes on the log record, which the
+    # Azure Monitor exporter promotes to customDimensions.
+    safe_props: dict[str, Any] = {}
+    for k, v in props.items():
+        if isinstance(k, str) and isinstance(v, (str, int, float, bool)):
+            safe_props[k] = v
+    logger.info(name, extra={"viewer_event": name, **safe_props})

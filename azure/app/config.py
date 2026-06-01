@@ -91,6 +91,13 @@ class Settings(BaseSettings):
     # that feed observable gauges. 0 disables the poller entirely.
     redis_info_scrape_seconds: float = Field(default=30.0, ge=0.0, le=300.0)
 
+    # ---- viewer engagement telemetry ----
+    # Salt mixed into the per-viewer device hash (sha256(salt|ip|ua)[:16]).
+    # Rotate to invalidate all current device hashes.
+    azure_telemetry_salt: str = Field(default="cts-engagement-v1")
+    # Per-IP token-bucket rate limit on POST /m/{meet_id}/api/telemetry.
+    azure_telemetry_rate_limit_per_min: int = Field(default=60, ge=1, le=10_000)
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
