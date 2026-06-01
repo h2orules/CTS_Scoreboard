@@ -162,6 +162,7 @@ class AsyncRedisLike(Protocol):
     async def hset(self, key: str, mapping: dict[str, Any] | None = ...) -> Any: ...
     async def hgetall(self, key: str) -> Any: ...
     async def expire(self, key: str, seconds: int) -> Any: ...
+    async def incr(self, key: str) -> Any: ...
     def pipeline(self, transaction: bool = ...) -> Any: ...
     def scan_iter(self, match: str | None = ...) -> AsyncIterator[Any]: ...
 
@@ -257,6 +258,7 @@ class MeetStateStore:
         host_team_name: str,
         protocol_version: int,
         pi_account_id: str,
+        pi_local_date: str | None = None,
     ) -> None:
         """Mark a meet as live. Idempotent: re-opening just refreshes the
         heartbeat and Pi binding."""
@@ -271,6 +273,7 @@ class MeetStateStore:
             "opened_at": opened_at,
             "last_heartbeat": self._clock(),
             "pi_account_id": pi_account_id,
+            "pi_local_date": pi_local_date or (existing or {}).get("pi_local_date", ""),
         }
         async with self._r.pipeline(transaction=False) as pipe:
             pipe.set(k.metadata, orjson.dumps(meta), ex=METADATA_TTL)
@@ -278,11 +281,13 @@ class MeetStateStore:
             await pipe.execute()
 
     @_timed("heartbeat")
-    async def heartbeat(self, meet_id: str) -> None:
+    async def heartbeat(self, meet_id: str, *, pi_local_date: str | None = None) -> None:
         meta = await self.get_metadata(meet_id)
         if not meta:
             return
         meta["last_heartbeat"] = self._clock()
+        if pi_local_date:
+            meta["pi_local_date"] = pi_local_date
         if meta.get("status") == "degraded":
             meta["status"] = "live"
         await self._r.set(MeetKeys(meet_id).metadata, orjson.dumps(meta), ex=METADATA_TTL)

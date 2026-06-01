@@ -957,6 +957,27 @@
         if ("current_event" in s) currentEvent = parseInt(s["current_event"]) || currentEvent;
         if ("current_heat" in s) currentHeat = parseInt(s["current_heat"]) || currentHeat;
 
+        // Engagement hook: fire when the (event, heat) pair changes so the
+        // optional engagement.js telemetry can record event-view durations.
+        if (("current_event" in s) || ("current_heat" in s)) {
+            var _ev = String(s["current_event"] != null ? s["current_event"] : currentEvent);
+            var _ht = String(s["current_heat"] != null ? s["current_heat"] : currentHeat);
+            var _key = _ev + "/" + _ht;
+            if (window.__lastEventHeatKey !== _key) {
+                window.__lastEventHeatKey = _key;
+                try {
+                    window.dispatchEvent(new CustomEvent('scoreboard:event-changed', {
+                        detail: {
+                            current_event: _ev,
+                            current_heat: _ht,
+                            event_name: s["event_name"] || '',
+                            dims: s["current_event_dims"] || null,
+                        }
+                    }));
+                } catch (e) { /* ignore */ }
+            }
+        }
+
         var valid_fields = [
             "content_meet_title",
             "current_event",
