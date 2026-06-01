@@ -316,6 +316,57 @@ class HytekEventLoader():
         except Exception:
             return ""
 
+    def get_event_dims(self, event_number):
+        """Return a flat dict of dimensional metadata for an event, suitable
+        for emitting as telemetry properties. Keys are stable strings; values
+        are JSON-safe primitives. Returns ``None`` when the event is unknown."""
+        meta = self.event_meta.get(event_number)
+        if not meta:
+            return None
+        ga = meta.get('gender_age')
+        sex_codes = meta.get('sex_codes') or []
+        if ga in MALE_GENDERS:
+            gender_agnostic = 'M'
+        elif ga in FEMALE_GENDERS:
+            gender_agnostic = 'F'
+        elif len(sex_codes) > 1:
+            gender_agnostic = 'X'
+        elif sex_codes == [1]:
+            gender_agnostic = 'M'
+        elif sex_codes == [2]:
+            gender_agnostic = 'F'
+        else:
+            gender_agnostic = ''
+        stroke_code = meta.get('stroke_code') or 0
+        stroke_name = ''
+        for s, code in {
+            Stroke.FREESTYLE: 1, Stroke.BACKSTROKE: 2, Stroke.BREASTSTROKE: 3,
+            Stroke.BUTTERFLY: 4, Stroke.MEDLEY: 5,
+        }.items():
+            if code == stroke_code:
+                stroke_name = STROKE_NAMES.get(s, '')
+                break
+        age_min = meta.get('age_min')
+        age_max = meta.get('age_max')
+        if age_min and age_max and age_min != age_max:
+            age_group_label = "%d-%d" % (age_min, age_max)
+        elif age_min and age_max and age_min == age_max:
+            age_group_label = "%d" % age_min
+        elif age_min:
+            age_group_label = "%d & Over" % age_min
+        else:
+            age_group_label = 'Open'
+        return {
+            'distance': meta.get('distance') or 0,
+            'stroke_code': stroke_code,
+            'stroke_name': stroke_name,
+            'age_min': age_min,
+            'age_max': age_max,
+            'age_group_label': age_group_label,
+            'gender_agnostic': gender_agnostic,
+            'relay': bool(meta.get('relay')),
+        }
+
     def get_display_string(self, event_number, heat_number, lane):
         try:
             return self.events[(event_number, heat_number)][lane]

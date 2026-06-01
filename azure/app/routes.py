@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
+import json
 import logging
 import re
+import time
 from collections.abc import Callable
 from html import escape
 from typing import Any
@@ -20,7 +23,9 @@ from fastapi.responses import HTMLResponse, JSONResponse, Response
 from jinja2 import BaseLoader, Environment
 
 from app.auth import InvalidPiTokenError, PiIdentity
+from app.config import get_settings
 from app.state import MeetStateStore
+from app.telemetry import emit_viewer_event
 
 log = logging.getLogger(__name__)
 
@@ -149,6 +154,45 @@ def render_meet_page(
 def _rewrite_for_meet(html: str, meet_id: str) -> str:
     """Apply all per-meet HTML rewrites the browser needs."""
     return _rewrite_api_paths(_rewrite_io_connect(html, meet_id), meet_id)
+
+
+def _compute_device_hash(request: Request, salt: str) -> str:
+    """Cookie-free per-viewer fingerprint: sha256(salt|ip|ua)[:16].
+
+    The IP comes from the trusted ``X-Forwarded-For`` left-most value (App
+    Service / Front Door already strip spoofed values) and falls back to the
+    socket peer. The hash is stable for a given (viewer, device, network)
+    triple but rotates whenever the operator rotates ``AZURE_TELEMETRY_SALT``.
+    """
+    xff = request.headers.get("x-forwarded-for", "")
+    ip = (xff.split(",")[0].strip() if xff else "") or (
+        request.client.host if request.client else ""
+    )
+    ua = request.headers.get("user-agent", "")
+    return hashlib.sha256(f"{salt}|{ip}|{ua}".encode("utf-8", "replace")).hexdigest()[:16]
+
+
+_HEAD_CLOSE_RE = re.compile(r"</head>", re.IGNORECASE)
+
+
+def _inject_engagement(html: str, *, meet_id: str, pi_local_date: str, device_hash: str) -> str:
+    """Inject the ``window.__ENGAGEMENT`` bootstrap + engagement.js script
+    immediately before ``</head>``. No-op if the page has no ``</head>``
+    (e.g. a state page); the engagement.js script self-disables when
+    ``window.__ENGAGEMENT`` is undefined."""
+    payload = {
+        "meet_id": meet_id,
+        "pi_local_date": pi_local_date,
+        "device_hash": device_hash,
+        "telemetry_endpoint": f"/m/{meet_id}/api/telemetry",
+    }
+    snippet = (
+        "<script>window.__ENGAGEMENT="
+        + json.dumps(payload, separators=(",", ":"))
+        + ";</script>"
+        + '<script src="/static/js/engagement.js" defer></script>'
+    )
+    return _HEAD_CLOSE_RE.sub(snippet + "</head>", html, count=1)
 
 
 class _DictLoader(BaseLoader):
@@ -358,6 +402,17 @@ def build_router(
                 status_code=500,
                 kind="danger",
             )
+        # Inject viewer-engagement bootstrap before </head>. Browsers POST
+        # batches to /m/{meet_id}/api/telemetry; the server (not the browser)
+        # owns the App Insights credential.
+        settings = get_settings()
+        device_hash = _compute_device_hash(request, settings.azure_telemetry_salt)
+        html = _inject_engagement(
+            html,
+            meet_id=meet_id,
+            pi_local_date=str(meta.get("pi_local_date") or ""),
+            device_hash=device_hash,
+        )
         # If the meet is degraded, leave it to the in-page Socket.IO client to
         # surface the banner via the "feed_status" event we already emit.
         return HTMLResponse(html)
@@ -430,6 +485,71 @@ def build_router(
     @router.get("/m/{meet_id}/api/footer-message/{key}")
     async def meet_footer_message(meet_id: str, key: str) -> Response:
         return await _serve_fragment(meet_id, "footer_message", key)
+
+    # Viewer engagement: browsers POST batched events here. The server
+    # owns the App Insights credential — no Azure secrets in the page.
+    @router.post("/m/{meet_id}/api/telemetry")
+    async def meet_telemetry(meet_id: str, request: Request) -> Response:
+        if not _is_valid_meet_id(meet_id):
+            return JSONResponse({"ok": False, "error": "bad_meet_id"}, status_code=400)
+        meta = await store.get_metadata(meet_id)
+        if not meta:
+            return JSONResponse({"ok": False, "error": "unknown_meet"}, status_code=404)
+
+        settings = get_settings()
+        # Per-IP minute-bucket token rate limit. Cheap (one INCR + one
+        # EXPIRE) and good enough to stop a single misbehaving client from
+        # swamping App Insights ingestion.
+        xff = request.headers.get("x-forwarded-for", "")
+        ip = (xff.split(",")[0].strip() if xff else "") or (
+            request.client.host if request.client else "unknown"
+        )
+        bucket = int(time.time() // 60)
+        rl_key = f"rl:tel:{ip}:{bucket}"
+        try:
+            count = await store._r.incr(rl_key)
+            if count == 1:
+                await store._r.expire(rl_key, 65)
+        except Exception:  # pragma: no cover - degrade open if redis hiccups
+            count = 0
+        if count and count > settings.azure_telemetry_rate_limit_per_min:
+            return JSONResponse({"ok": False, "error": "rate_limited"}, status_code=429)
+
+        try:
+            body = await request.json()
+        except Exception:
+            return JSONResponse({"ok": False, "error": "bad_json"}, status_code=400)
+        events = body.get("events") if isinstance(body, dict) else None
+        if not isinstance(events, list) or not events:
+            return JSONResponse({"ok": False, "error": "no_events"}, status_code=400)
+        if len(events) > 50:
+            events = events[:50]
+
+        device_hash = _compute_device_hash(request, settings.azure_telemetry_salt)
+        pi_local_date = str(meta.get("pi_local_date") or "")
+        accepted = 0
+        for ev in events:
+            if not isinstance(ev, dict):
+                continue
+            name = ev.get("name")
+            if not isinstance(name, str) or not name.startswith("viewer_"):
+                continue
+            props = ev.get("props") if isinstance(ev.get("props"), dict) else {}
+            assert isinstance(props, dict)
+            # Server-stamped fields override anything the browser sent so
+            # clients can't spoof identity/meet attribution.
+            props = {
+                **props,
+                "meet_id": meet_id,
+                "pi_local_date": pi_local_date,
+                "device_hash": device_hash,
+            }
+            try:
+                emit_viewer_event(name, props)
+                accepted += 1
+            except Exception:  # pragma: no cover - never let telemetry break a viewer
+                log.exception("emit_viewer_event failed name=%s", name)
+        return JSONResponse({"ok": True, "accepted": accepted})
 
     @router.get("/internal/meet_id/{name}/availability")
     async def meet_id_availability(

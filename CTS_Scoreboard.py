@@ -1110,9 +1110,13 @@ def _render_qualifying_html(qt_groups, rec_set_list):
 
     Returns the content key (hash).
     """
-    html = flask.render_template('partials/_qualifying_info.html',
-                                 qt_groups=qt_groups,
-                                 rec_set_list=rec_set_list)
+    # Called from the serial-parser greenlet, which has no Flask request or
+    # app context. flask.render_template needs current_app, so push one
+    # explicitly here.
+    with app.app_context():
+        html = flask.render_template('partials/_qualifying_info.html',
+                                     qt_groups=qt_groups,
+                                     rec_set_list=rec_set_list)
     return _cache_put('qualifying_info', html)
 
 
@@ -1414,6 +1418,7 @@ def send_event_info():
     update["current_event"] = str(last_event_sent[0])
     update["current_heat"] = str(last_event_sent[1])
     update["event_name"] = event_info.get_event_name(last_event_sent[0])
+    update["current_event_dims"] = event_info.get_event_dims(last_event_sent[0])
     update["schedule_has_names"] = event_info.has_names
     qt_results, qt_show_age = _get_qualifying_times(last_event_sent[0])
     rec_set_results, rec_show_age = _get_matching_records(last_event_sent[0])
