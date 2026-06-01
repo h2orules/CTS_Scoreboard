@@ -11,6 +11,7 @@ Two pieces, both opt-in:
 
 Calling :func:`configure_telemetry` more than once is a no-op (idempotent).
 """
+
 from __future__ import annotations
 
 import logging
@@ -122,9 +123,7 @@ class _StubUpDownCounter:
 
 
 @contextmanager
-def record_latency(
-    histogram: Any, attributes: dict[str, Any] | None = None
-) -> Iterator[None]:
+def record_latency(histogram: Any, attributes: dict[str, Any] | None = None) -> Iterator[None]:
     """Time the wrapped block and record the elapsed seconds on ``histogram``.
 
     Works with both the real OTel ``Histogram`` and the local stub. The
@@ -179,9 +178,7 @@ def configure_telemetry(
             from azure.monitor.opentelemetry import configure_azure_monitor
             from opentelemetry import metrics as ot_metrics
 
-            os.environ.setdefault(
-                "APPLICATIONINSIGHTS_CONNECTION_STRING", connection_string
-            )
+            os.environ.setdefault("APPLICATIONINSIGHTS_CONNECTION_STRING", connection_string)
             configure_azure_monitor(
                 connection_string=connection_string,
                 resource_attributes={
@@ -197,25 +194,15 @@ def configure_telemetry(
                 browser_connected=meter.create_counter("browsers_connected"),
                 browser_disconnected=meter.create_counter("browsers_disconnected"),
                 relay_event_processed=meter.create_counter("relay_events_processed"),
-                event_handler_seconds=meter.create_histogram(
-                    "event_handler_seconds", unit="s"
-                ),
-                redis_op_seconds=meter.create_histogram(
-                    "redis_op_seconds", unit="s"
-                ),
-                emit_fanout_seconds=meter.create_histogram(
-                    "emit_fanout_seconds", unit="s"
-                ),
+                event_handler_seconds=meter.create_histogram("event_handler_seconds", unit="s"),
+                redis_op_seconds=meter.create_histogram("redis_op_seconds", unit="s"),
+                emit_fanout_seconds=meter.create_histogram("emit_fanout_seconds", unit="s"),
                 active_sockets=meter.create_up_down_counter("active_sockets"),
                 pi_connections=meter.create_up_down_counter("pi_connections"),
                 cache_hits=meter.create_counter("cache_hits"),
                 cache_misses=meter.create_counter("cache_misses"),
-                coalescer_events_in=meter.create_counter(
-                    "coalescer_events_in"
-                ),
-                coalescer_batches_flushed=meter.create_counter(
-                    "coalescer_batches_flushed"
-                ),
+                coalescer_events_in=meter.create_counter("coalescer_events_in"),
+                coalescer_batches_flushed=meter.create_counter("coalescer_batches_flushed"),
                 coalescer_batch_size=meter.create_histogram(
                     "coalescer_batch_size",
                     unit="{events}",
