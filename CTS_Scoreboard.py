@@ -1796,6 +1796,7 @@ def _build_render_context():
         initial_lanes=initial_lanes,
         initial_scores=team_scores,
         initial_race_state=race_fsm.state_name,
+        initial_lane_display_mode=compute_lane_display_mode(),
         initial_message_pages=initial_message_pages,
         initial_active_message_page=_message_rotation_index,
         initial_qr_overlay_svg=qr_overlay_svg,
@@ -1919,6 +1920,34 @@ _last_scoreboard_state: dict = {}
 _PER_RACE_KEY_PREFIXES = ("lane_time", "lane_place", "lane_running")
 
 
+def compute_lane_display_mode(state_name=None):
+    """Return the authoritative display mode for the lane time/place cells.
+
+    The mode tells the client who owns those cells right now:
+      * ``"server"`` — CTS retransmissions flow through; qualifying-time
+        evaluation runs; cache is fresh. Used for Running, Finished,
+        Blank, TotalBlank, and any *PreRace state when seed-time display
+        is disabled (operator wants previous results to persist).
+      * ``"seed_times"`` — Client paints seed times; qualifying-time
+        evaluation is skipped; cache is cleared. Used for any *PreRace
+        state when seed-time display is enabled.
+      * ``"clear"`` — Client blanks every lane cell (time, place, name,
+        team, age code); qualifying eval skipped; cache cleared. Used
+        for the FSM's Clear state (operator's CTS Clear-Lanes submenu).
+
+    The seed-times-vs-empty distinction is left to the client because it
+    already has the per-lane seed values; the server only decides who
+    owns the cells.
+    """
+    state = state_name or race_fsm.state_name
+    if state == "Clear":
+        return "clear"
+    if state in ("PreRace", "ClearPreRace", "BlankPreRace", "TotalBlankPreRace"):
+        if settings.get("seed_time_label", "Seed Time") != "None":
+            return "seed_times"
+    return "server"
+
+
 def _update_scoreboard_snapshot(update):
     new_event = update.get("current_event")
     new_heat = update.get("current_heat")
@@ -1947,6 +1976,13 @@ def broadcast_scoreboard(update):
     relay's ``meet_open`` handshake is enough — no separate "enabled"
     toggle.
     """
+    # lane_display_mode rides alongside race_state so the client always
+    # knows who owns the lane time/place cells. Compute on every broadcast
+    # so heat-change broadcasts (which don't go through the FSM transition
+    # branch) carry the right mode too.
+    update["lane_display_mode"] = compute_lane_display_mode(
+        update.get("race_state")
+    )
     _update_scoreboard_snapshot(update)
     socketio.emit("update_scoreboard", update, namespace="/scoreboard")
     # forward_event() is non-blocking and thread-safe; safe to call even
