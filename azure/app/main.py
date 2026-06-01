@@ -1,4 +1,5 @@
 """FastAPI + Socket.IO entrypoint for the relay app."""
+
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
@@ -119,9 +120,7 @@ def build_app(
                 await scale_tel.stop()
             # Close the async Redis pool on shutdown so connections aren't
             # leaked between hot reloads in development. No-op on fakeredis.
-            close = getattr(redis_handle, "aclose", None) or getattr(
-                redis_handle, "close", None
-            )
+            close = getattr(redis_handle, "aclose", None) or getattr(redis_handle, "close", None)
             if close is not None:
                 try:
                     result = close()
@@ -172,17 +171,22 @@ def build_app(
     client_manager = None
     if redis_client is None:
         # Azure Container Apps' load balancer silently drops idle TCP
-        # connections after a few minutes. The Socket.IO pubsub subscriber
-        # blocks indefinitely with no traffic, so without health checks the
-        # connection gets reset and we see "Cannot receive from redis...
-        # retrying in 1 secs" on every cycle. health_check_interval makes
-        # the redis client send PING every 30s, keeping the connection alive.
+        # connections after a few minutes. health_check_interval keeps the
+        # pub/sub subscriber connection alive with a PING every 30s.
+        # socket_timeout must NOT be set here: the pub/sub subscriber blocks
+        # indefinitely waiting for messages, and a short timeout causes
+        # "Cannot receive from redis... retrying in 1 secs" every few seconds.
         client_manager = socketio.AsyncRedisManager(
             settings.redis_url,
             redis_options={
+                # health_check_interval keeps the idle pub/sub connection
+                # alive through Azure's TCP idle-timeout.  Do NOT set
+                # socket_timeout here: the pub/sub subscriber blocks
+                # indefinitely waiting for messages, so a short socket
+                # timeout fires every few seconds and produces the noisy
+                # "Cannot receive from redis... retrying in 1 secs" log.
                 "health_check_interval": 30,
                 "socket_keepalive": True,
-                "socket_timeout": 5,
                 "socket_connect_timeout": 5,
             },
         )

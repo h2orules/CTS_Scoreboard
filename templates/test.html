@@ -80,7 +80,9 @@
         <button type="button" onclick="socket.emit('sim_step', {step:'start'});">&#9654; Start</button>
         <button type="button" onclick="socket.emit('sim_step', {step:'finish'});">&#127937; Finish</button>
         <button type="button" onclick="socket.emit('sim_step', {step:'reset'});">&#8634; Reset</button>
+        <button type="button" onclick="socket.emit('sim_step', {step:'next_heat'});">Next Heat</button>
         <button type="button" onclick="socket.emit('sim_step', {step:'clear'});">Clear</button>
+        <button type="button" onclick="socket.emit('sim_step', {step:'lanes_on'});">Lanes On</button>
         <button type="button" onclick="socket.emit('sim_step', {step:'blank'});">Blank</button>
         <button type="button" onclick="socket.emit('sim_step', {step:'total_blank'});">Total Blank</button>
         <button type="button" onclick="runFullSequence();">&#9654;&#9654; Full Sequence</button>
