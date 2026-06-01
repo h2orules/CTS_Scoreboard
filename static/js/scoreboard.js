@@ -200,11 +200,29 @@
         return { tag: '', classes: [], type: null };
     }
 
+    // CTS retransmits the most recent finish's lane_time/lane_place bytes
+    // until the next race starts, so the client must ignore server-driven
+    // writes to those cells whenever the FSM has handed control of them to
+    // the seed-time display (*PreRace states) or to the Clear-lanes blank
+    // display.
+    var _LANE_SUPPRESS_STATES = {
+        PreRace: true,
+        ClearPreRace: true,
+        BlankPreRace: true,
+        TotalBlankPreRace: true,
+        Clear: true,
+    };
+    function shouldSuppressLaneField(raceState, key) {
+        if (!_LANE_SUPPRESS_STATES[raceState]) return false;
+        return /^lane_time\d+$/.test(key) || /^lane_place\d+$/.test(key);
+    }
+
     // Export all functions
     exports.parseTimeToSeconds = parseTimeToSeconds;
     exports.getThresholdsForLane = getThresholdsForLane;
     exports.getRecordsForLane = getRecordsForLane;
     exports.formatSeedTime = formatSeedTime;
     exports.evaluateLaneResult = evaluateLaneResult;
+    exports.shouldSuppressLaneField = shouldSuppressLaneField;
 
 })(typeof module !== 'undefined' && module.exports ? module.exports : window);
