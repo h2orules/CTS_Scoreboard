@@ -479,10 +479,15 @@ def parse_line(l, out=None):
                 lane_time += hex_to_digit(lane_info[channel][4]) + hex_to_digit(
                     lane_info[channel][5]
                 )
-                lane_time += "." if lane_time.strip() else " "
-                lane_time += hex_to_digit(lane_info[channel][6]) + hex_to_digit(
+                _ss = hex_to_digit(lane_info[channel][6]) + hex_to_digit(
                     lane_info[channel][7]
                 )
+                # Only show the seconds separator when seconds digits are
+                # present; the TOD clock the CTS pipes through lane 3 in
+                # Blank state only carries HH:MM and would otherwise
+                # render as "HH:MM." on the large clock.
+                lane_time += "." if (lane_time.strip() and _ss.strip()) else " "
+                lane_time += _ss
                 s = "%4s: %s %s %s" % (channel, lane, place, lane_time)
                 update["lane_time%i" % channel] = lane_time
 

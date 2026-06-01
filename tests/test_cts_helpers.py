@@ -161,3 +161,59 @@ class TestRunningTimeFormat:
         ]
         rt = _call_parse_line_running_time(bytes_)
         assert rt == " 1:23.45"
+
+
+def _call_parse_line_lane_time(channel, time_info_bytes):
+    """Run parse_line with a finished-lane frame and return update[lane_timeN].
+
+    Channel encoding (decoded): channel_bits = ((c & 0x3E) >> 1) ^ 0x1F.
+    For channel N: c = ((0x1F ^ N) << 1) & 0x3E, OR'd with bits 6/7 to
+    indicate the high-bit framing used by real CTS frames. Bit 0 = 0
+    (finish, not running), bit 6 = 0 (finished).
+    """
+    chan_bits = ((0x1F ^ channel) << 1) & 0x3E
+    first = 0x80 | chan_bits  # high bit observed in real frames
+    frame = [first] + list(time_info_bytes)
+    CTS_Scoreboard.lane_info[channel] = [0] * 16
+    CTS_Scoreboard.update.clear()
+    CTS_Scoreboard.parse_line(frame)
+    return CTS_Scoreboard.update.get("lane_time%d" % channel)
+
+
+class TestLaneTimeFormat:
+    def test_lane3_tod_clock_no_trailing_period(self):
+        """Blank-state large clock is fed from lane 3. CTS sends HH:MM
+        with blank SS in Blank/idle; the formatted lane_time must not
+        include a stray '.' between MM and the blank SS slot.
+        Regression for the "9:14." artifact seen on the Blank screen."""
+        # Lane byte slots 0,1 hold lane/place; time digits live in 2..7.
+        # Lane=blank, Place=blank, HH= 9, MM=14, SS blank.
+        bytes_ = [
+            _blank_byte(0),
+            _blank_byte(1),
+            _blank_byte(2),
+            _digit_byte(3, 9),
+            _digit_byte(4, 1),
+            _digit_byte(5, 4),
+            _blank_byte(6),
+            _blank_byte(7),
+        ]
+        lt = _call_parse_line_lane_time(3, bytes_)
+        assert lt is not None
+        assert "." not in lt
+        assert lt.strip() == "9:14"
+
+    def test_lane_full_finish_time_has_period(self):
+        """Sanity: a finished swim time like 1:23.45 still emits the '.'."""
+        bytes_ = [
+            _digit_byte(0, 1),  # lane
+            _digit_byte(1, 1),  # place
+            _blank_byte(2),
+            _digit_byte(3, 1),
+            _digit_byte(4, 2),
+            _digit_byte(5, 3),
+            _digit_byte(6, 4),
+            _digit_byte(7, 5),
+        ]
+        lt = _call_parse_line_lane_time(1, bytes_)
+        assert lt == " 1:23.45"
