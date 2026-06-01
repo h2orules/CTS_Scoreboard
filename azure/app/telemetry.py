@@ -11,6 +11,7 @@ Two pieces, both opt-in:
 
 Calling :func:`configure_telemetry` more than once is a no-op (idempotent).
 """
+
 from __future__ import annotations
 
 import logging
@@ -122,9 +123,7 @@ class _StubUpDownCounter:
 
 
 @contextmanager
-def record_latency(
-    histogram: Any, attributes: dict[str, Any] | None = None
-) -> Iterator[None]:
+def record_latency(histogram: Any, attributes: dict[str, Any] | None = None) -> Iterator[None]:
     """Time the wrapped block and record the elapsed seconds on ``histogram``.
 
     Works with both the real OTel ``Histogram`` and the local stub. The
@@ -179,9 +178,7 @@ def configure_telemetry(
             from azure.monitor.opentelemetry import configure_azure_monitor
             from opentelemetry import metrics as ot_metrics
 
-            os.environ.setdefault(
-                "APPLICATIONINSIGHTS_CONNECTION_STRING", connection_string
-            )
+            os.environ.setdefault("APPLICATIONINSIGHTS_CONNECTION_STRING", connection_string)
             configure_azure_monitor(
                 connection_string=connection_string,
                 resource_attributes={
@@ -197,25 +194,15 @@ def configure_telemetry(
                 browser_connected=meter.create_counter("browsers_connected"),
                 browser_disconnected=meter.create_counter("browsers_disconnected"),
                 relay_event_processed=meter.create_counter("relay_events_processed"),
-                event_handler_seconds=meter.create_histogram(
-                    "event_handler_seconds", unit="s"
-                ),
-                redis_op_seconds=meter.create_histogram(
-                    "redis_op_seconds", unit="s"
-                ),
-                emit_fanout_seconds=meter.create_histogram(
-                    "emit_fanout_seconds", unit="s"
-                ),
+                event_handler_seconds=meter.create_histogram("event_handler_seconds", unit="s"),
+                redis_op_seconds=meter.create_histogram("redis_op_seconds", unit="s"),
+                emit_fanout_seconds=meter.create_histogram("emit_fanout_seconds", unit="s"),
                 active_sockets=meter.create_up_down_counter("active_sockets"),
                 pi_connections=meter.create_up_down_counter("pi_connections"),
                 cache_hits=meter.create_counter("cache_hits"),
                 cache_misses=meter.create_counter("cache_misses"),
-                coalescer_events_in=meter.create_counter(
-                    "coalescer_events_in"
-                ),
-                coalescer_batches_flushed=meter.create_counter(
-                    "coalescer_batches_flushed"
-                ),
+                coalescer_events_in=meter.create_counter("coalescer_events_in"),
+                coalescer_batches_flushed=meter.create_counter("coalescer_batches_flushed"),
                 coalescer_batch_size=meter.create_histogram(
                     "coalescer_batch_size",
                     unit="{events}",
@@ -246,3 +233,44 @@ def reset_for_tests() -> None:
     global _configured, _metrics
     _configured = False
     _metrics = None
+
+
+# Module-level cache for the viewer-event logger so we don't reconfigure on
+# every POST. The logger name is the conventional "customEvents" bucket in
+# App Insights when the OTel logging exporter is in use.
+_viewer_logger: logging.Logger | None = None
+
+
+def _viewer_event_logger() -> logging.Logger:
+    global _viewer_logger
+    if _viewer_logger is None:
+        _viewer_logger = logging.getLogger("cts.viewer")
+        # The root logger's level defaults to WARNING (configure_azure_monitor
+        # does not change it).  Child loggers inherit the effective level from
+        # the root unless they have their own level set, so logger.info() calls
+        # are silently dropped before a LogRecord is even created.  Setting
+        # INFO here is scoped to this namespace only — other library loggers
+        # remain at WARNING and won't flood App Insights.
+        _viewer_logger.setLevel(logging.INFO)
+        # Propagate to root so the OTel LoggingHandler (level=NOTSET) exports
+        # these records to App Insights traces.
+        _viewer_logger.propagate = True
+    return _viewer_logger
+
+
+def emit_viewer_event(name: str, props: dict[str, Any]) -> None:
+    """Forward a single viewer-engagement event to App Insights.
+
+    Implemented as a structured log record so it lands in ``traces`` /
+    ``customEvents`` via the existing OTel logging exporter that
+    ``configure_azure_monitor`` installs. No-op safe when telemetry is the
+    stub: the record still hits the local logger but does not leave the box.
+    """
+    logger = _viewer_event_logger()
+    # ``extra`` keys become OTel attributes on the log record, which the
+    # Azure Monitor exporter promotes to customDimensions.
+    safe_props: dict[str, Any] = {}
+    for k, v in props.items():
+        if isinstance(k, str) and isinstance(v, (str, int, float, bool)):
+            safe_props[k] = v
+    logger.info(name, extra={"viewer_event": name, **safe_props})

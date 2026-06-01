@@ -200,11 +200,28 @@
         return { tag: '', classes: [], type: null };
     }
 
+    // The server sends `lane_display_mode` on every broadcast as the
+    // single source of truth for who owns the lane time/place cells.
+    // The client just needs to ask: should I let the server's payload
+    // through to the lane cells, the cache, and the qualifying-time
+    // evaluator? When the answer is no, the client paints the cells
+    // itself (seed times or blanks) and the evaluator stays silent.
+    function isServerOwnedLaneDisplay(laneDisplayMode) {
+        return !laneDisplayMode || laneDisplayMode === "server";
+    }
+
+    function shouldSuppressLaneField(laneDisplayMode, key) {
+        if (isServerOwnedLaneDisplay(laneDisplayMode)) return false;
+        return /^lane_time\d+$/.test(key) || /^lane_place\d+$/.test(key);
+    }
+
     // Export all functions
     exports.parseTimeToSeconds = parseTimeToSeconds;
     exports.getThresholdsForLane = getThresholdsForLane;
     exports.getRecordsForLane = getRecordsForLane;
     exports.formatSeedTime = formatSeedTime;
     exports.evaluateLaneResult = evaluateLaneResult;
+    exports.isServerOwnedLaneDisplay = isServerOwnedLaneDisplay;
+    exports.shouldSuppressLaneField = shouldSuppressLaneField;
 
 })(typeof module !== 'undefined' && module.exports ? module.exports : window);
