@@ -456,6 +456,29 @@ def parse_line(l, out=None):
         channel = ((c & 0x3E) >> 1) ^ 0x1F
 
         if (1 <= channel <= 10) and not format_display:
+            # Race-start edge: if this lane is going running and no
+            # other lane was running yet, the global running_time
+            # string and time_info[] still hold the prior race's clock
+            # (or the TOD clock) value. CTS only emits a full BE
+            # frame at each .0 boundary; in between it sends
+            # tenths-only frames that update positions 6-7 only. So
+            # until the next .0 boundary (up to ~1s away), the
+            # running clock would render stale MM/SS digits with a
+            # ticking tenths nibble -- e.g. "30:08.4" while the real
+            # race is at ".4". Blank time_info MM/SS and clear the
+            # running_time string now so the bridge frames render
+            # cleanly until the first new full frame arrives.
+            if running_finish and not any(channel_running):
+                for i in range(2, 8):
+                    time_info[i] = i << 4  # low nibble 0 -> blank
+                # Seed seconds-ones with "0" so the bridge frames render
+                # as "0.X" instead of just ".X" until the next .0
+                # boundary delivers the full clock frame. CTS encodes
+                # the digit "0" as low-nibble 0xF. Slots: 2,3=MM,
+                # 4,5=SS, 6=tenths, 7=hundredths.
+                time_info[5] = (5 << 4) | 0xF
+                running_time = "    0   "
+                update["running_time"] = running_time
             channel_running[channel - 1] = running_finish
             # This is a lane display of interest
             while len(l):
