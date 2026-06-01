@@ -217,6 +217,7 @@ def build_board_snapshot():
         "num_lanes": num_lanes,
     }
 
+
 # Content cache for server-rendered HTML fragments.
 # Structure: { resource_name: { 'key': str, 'html': str } }
 _content_cache = {}
