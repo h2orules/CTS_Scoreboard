@@ -1,5 +1,3 @@
-import pytest
-
 import CTS_Scoreboard
 from CTS_Scoreboard import hex_to_digit
 from sim import _format_lane_time
@@ -38,9 +36,16 @@ class TestHexToDigit:
 
     def test_all_digits(self):
         expected = {
-            0x0F: "0", 0x0E: "1", 0x0D: "2", 0x0C: "3",
-            0x0B: "4", 0x0A: "5", 0x09: "6", 0x08: "7",
-            0x07: "8", 0x06: "9",
+            0x0F: "0",
+            0x0E: "1",
+            0x0D: "2",
+            0x0C: "3",
+            0x0B: "4",
+            0x0A: "5",
+            0x09: "6",
+            0x08: "7",
+            0x07: "8",
+            0x06: "9",
         }
         for val, digit in expected.items():
             assert hex_to_digit(val) == digit
@@ -130,9 +135,12 @@ class TestRunningTimeFormat:
         the minutes and the blank seconds slot."""
         # HH=12, MM=34, SS blank
         bytes_ = [
-            _digit_byte(2, 1), _digit_byte(3, 2),
-            _digit_byte(4, 3), _digit_byte(5, 4),
-            _blank_byte(6), _blank_byte(7),
+            _digit_byte(2, 1),
+            _digit_byte(3, 2),
+            _digit_byte(4, 3),
+            _digit_byte(5, 4),
+            _blank_byte(6),
+            _blank_byte(7),
         ]
         rt = _call_parse_line_running_time(bytes_)
         assert rt is not None
@@ -144,9 +152,12 @@ class TestRunningTimeFormat:
         between MM and SS is still emitted."""
         # 1:23.45 — first slot blank, then 1, 2, 3, 4, 5
         bytes_ = [
-            _blank_byte(2), _digit_byte(3, 1),
-            _digit_byte(4, 2), _digit_byte(5, 3),
-            _digit_byte(6, 4), _digit_byte(7, 5),
+            _blank_byte(2),
+            _digit_byte(3, 1),
+            _digit_byte(4, 2),
+            _digit_byte(5, 3),
+            _digit_byte(6, 4),
+            _digit_byte(7, 5),
         ]
         rt = _call_parse_line_running_time(bytes_)
         assert rt == " 1:23.45"
