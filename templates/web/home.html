@@ -797,6 +797,11 @@
     // Blank every lane cell (time/place/name/team/age code) and the time
     // column header. Used by the Clear display mode (operator's CTS Clear
     // Lanes submenu).
+    // Blank lane time/place cells and reset the time-column header. Used
+    // by the Clear display mode (operator's CTS Clear-Lanes submenu).
+    // Names, teams and age codes come from HyTek event data (not CTS), so
+    // we deliberately leave those alone — Clear is about wiping race
+    // results, not the event roster.
     function blankAllLaneCells() {
         laneTimes = {};
         for (var i = 1; i <= {{ num_lanes }}; i++) {
@@ -804,12 +809,6 @@
             if (t) { t.innerHTML = '&nbsp;'; t.classList.remove('seed-time-italic'); }
             var p = document.getElementById('lane_place' + i);
             if (p) p.innerHTML = '&nbsp;';
-            var n = document.getElementById('lane_swimmer_name' + i);
-            if (n) n.textContent = '\u00A0';
-            var tm = document.getElementById('lane_team' + i);
-            if (tm) tm.textContent = '';
-            var ac = document.getElementById('lane_age_code' + i);
-            if (ac) ac.textContent = '';
         }
         var timeColEl = document.getElementById('scoreboard_time_col');
         if (timeColEl) {

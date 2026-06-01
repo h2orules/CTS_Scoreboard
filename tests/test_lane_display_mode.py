@@ -48,9 +48,7 @@ class TestLaneDisplayMode:
         cts.settings["seed_time_label"] = "None"
         assert cts.compute_lane_display_mode(state) == "server"
 
-    @pytest.mark.parametrize(
-        "state", ["Running", "Finished", "Blank", "TotalBlank"]
-    )
+    @pytest.mark.parametrize("state", ["Running", "Finished", "Blank", "TotalBlank"])
     def test_non_pre_race_returns_server(self, restore_settings, state):
         cts.settings["seed_time_label"] = "Seed Time"
         assert cts.compute_lane_display_mode(state) == "server"

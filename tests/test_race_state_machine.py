@@ -480,3 +480,55 @@ class TestPreRaceClears:
             board(event_heat=("2", "1"), running_lanes={1, 2}, lane_times=running_times)
         )
         assert fsm.state == RaceState.Running
+
+
+class TestRunningRobustness:
+    """Regression tests for live-hardware quirks where the CTS transmits
+    event/heat metadata a frame after the running-lane bytes, or holds
+    stale running flags across an event change."""
+
+    def test_event_change_during_running_stays_running(self):
+        """Blank -> Running often sees event_heat bytes arrive a frame
+        after the running-lane bytes. The metadata churn must not yank
+        us back to PreRace (which would flip the client lane display to
+        seed-times while the race is actively running)."""
+        fsm = RaceStateMachine()
+        # Establish Blank with no event/heat
+        fsm.evaluate_update(board(event_heat=("", ""), running_lanes=set()))
+        # Running-lane bytes arrive first
+        fsm.evaluate_update(
+            board(event_heat=("", ""), running_lanes={1}, lane_times={1: "   1.0"})
+        )
+        assert fsm.state == RaceState.Running
+        # Event/heat bytes arrive next; must NOT bounce out of Running
+        fsm.evaluate_update(
+            board(event_heat=("1", "1"), running_lanes={1}, lane_times={1: "   1.0"})
+        )
+        assert fsm.state == RaceState.Running
+
+    def test_change_event_clears_stale_running_set(self, caplog):
+        """Running -> PreRace via change_event must clear the prior
+        race's running set BEFORE evaluating the running edge, otherwise
+        a later running -> empty transition in the same cycle synthesizes
+        a spurious `finish` from PreRace and logs a warning."""
+        import logging
+
+        fsm = RaceStateMachine()
+        fsm.evaluate_update(
+            board(event_heat=("1", "1"), running_lanes={1}, lane_times={1: "   1.0"})
+        )
+        assert fsm.state == RaceState.Running
+        # Simulate the bug surface: snapshot now arrives with new
+        # event/heat AND empty running set in the same cycle (operator
+        # advanced the heat between race end and next CTS frame).
+        fsm.trigger("finish")
+        fsm.trigger("change_event")
+        with caplog.at_level(logging.WARNING, logger="transitions.core"):
+            fsm.evaluate_update(
+                board(event_heat=("2", "1"), running_lanes=set(), lane_times={})
+            )
+        assert fsm._prev_running_lanes == set()
+        assert fsm.state == RaceState.PreRace
+        assert not any(
+            "Can't trigger event finish" in rec.message for rec in caplog.records
+        )
