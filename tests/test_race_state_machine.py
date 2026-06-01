@@ -532,3 +532,97 @@ class TestRunningRobustness:
         assert not any(
             "Can't trigger event finish" in rec.message for rec in caplog.records
         )
+
+
+
+class TestClearLanesByteSignal:
+    """The CTS Clear-Lanes / Lanes-On submenu does not emit a dedicated
+    sentinel — it just stops (or resumes) sending place+time bytes for
+    any lane that previously had data. evaluate_update() must detect
+    that edge and drive the FSM in both the Finished-context and
+    PreRace-context (stale-data-from-prior-race) cases."""
+
+    def _finished_board(self, eh=("1", "1")):
+        return board(
+            event_heat=eh,
+            running_lanes=set(),
+            lane_times={1: "   12.34", 2: "   13.45", 3: "   14.56"},
+        )
+
+    def _blank_board(self, eh=("1", "1")):
+        return board(event_heat=eh, running_lanes=set(), lane_times={})
+
+    def _drive_to_finished(self, fsm, eh=("1", "1")):
+        fsm.evaluate_update(
+            board(
+                event_heat=eh,
+                running_lanes={1, 2, 3},
+                lane_times={1: "   1.0", 2: "   1.0", 3: "   1.0"},
+            )
+        )
+        fsm.evaluate_update(self._finished_board(eh))
+        assert fsm.state == RaceState.Finished
+
+    def test_finished_clear_then_lanes_on_restores_finished(self):
+        fsm = RaceStateMachine()
+        self._drive_to_finished(fsm)
+        # Operator presses Clear Lanes -- CTS stops sending lane bytes.
+        fsm.evaluate_update(self._blank_board())
+        assert fsm.state == RaceState.Clear
+        # Operator presses Lanes On -- CTS resumes sending the same bytes.
+        fsm.evaluate_update(self._finished_board())
+        assert fsm.state == RaceState.Finished
+
+    def test_prerace_after_heat_change_then_clear_lanes(self):
+        """Finished -> heat change -> PreRace (with stale CTS data still
+        on the wire). Operator Clear-Lanes blanks the wire -> must land
+        in PreRaceClear so the client also blanks its seed-time overlay."""
+        fsm = RaceStateMachine()
+        self._drive_to_finished(fsm, eh=("1", "1"))
+        # Operator advances the heat; CTS keeps shipping the prior
+        # race's lane bytes for a while.
+        fsm.evaluate_update(self._finished_board(eh=("2", "1")))
+        assert fsm.state == RaceState.PreRace
+        # Operator presses Clear Lanes.
+        fsm.evaluate_update(self._blank_board(eh=("2", "1")))
+        assert fsm.state == RaceState.PreRaceClear
+        # Operator presses Lanes On -- CTS resumes the stale bytes.
+        fsm.evaluate_update(self._finished_board(eh=("2", "1")))
+        assert fsm.state == RaceState.PreRace
+
+    def test_clear_then_heat_change_then_lanes_on(self):
+        fsm = RaceStateMachine()
+        self._drive_to_finished(fsm)
+        fsm.evaluate_update(self._blank_board())
+        assert fsm.state == RaceState.Clear
+        # Heat changes while cleared -> ClearPreRace (existing transition).
+        fsm.evaluate_update(self._blank_board(eh=("2", "1")))
+        assert fsm.state == RaceState.ClearPreRace
+        # Operator Lanes On -- ClearPreRace already handles show_lanes.
+        fsm.evaluate_update(self._finished_board(eh=("2", "1")))
+        assert fsm.state == RaceState.PreRace
+
+    def test_fresh_prerace_no_data_does_not_trigger_clear(self):
+        """PreRace with no stale CTS data on the wire must NOT spuriously
+        fire clear_lanes (no edge from blank to blank)."""
+        fsm = RaceStateMachine()
+        fsm.evaluate_update(self._blank_board(eh=("1", "1")))
+        fsm.trigger("show_lanes")
+        assert fsm.state == RaceState.PreRace
+        fsm.evaluate_update(self._blank_board(eh=("1", "1")))
+        assert fsm.state == RaceState.PreRace
+
+    def test_prerace_clear_then_start_running(self):
+        fsm = RaceStateMachine()
+        self._drive_to_finished(fsm)
+        fsm.evaluate_update(self._finished_board(eh=("2", "1")))
+        fsm.evaluate_update(self._blank_board(eh=("2", "1")))
+        assert fsm.state == RaceState.PreRaceClear
+        fsm.evaluate_update(
+            board(
+                event_heat=("2", "1"),
+                running_lanes={1},
+                lane_times={1: "   1.0"},
+            )
+        )
+        assert fsm.state == RaceState.Running
