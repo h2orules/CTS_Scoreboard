@@ -200,20 +200,18 @@
         return { tag: '', classes: [], type: null };
     }
 
-    // CTS retransmits the most recent finish's lane_time/lane_place bytes
-    // until the next race starts, so the client must ignore server-driven
-    // writes to those cells whenever the FSM has handed control of them to
-    // the seed-time display (*PreRace states) or to the Clear-lanes blank
-    // display.
-    var _LANE_SUPPRESS_STATES = {
-        PreRace: true,
-        ClearPreRace: true,
-        BlankPreRace: true,
-        TotalBlankPreRace: true,
-        Clear: true,
-    };
-    function shouldSuppressLaneField(raceState, key) {
-        if (!_LANE_SUPPRESS_STATES[raceState]) return false;
+    // The server sends `lane_display_mode` on every broadcast as the
+    // single source of truth for who owns the lane time/place cells.
+    // The client just needs to ask: should I let the server's payload
+    // through to the lane cells, the cache, and the qualifying-time
+    // evaluator? When the answer is no, the client paints the cells
+    // itself (seed times or blanks) and the evaluator stays silent.
+    function isServerOwnedLaneDisplay(laneDisplayMode) {
+        return !laneDisplayMode || laneDisplayMode === "server";
+    }
+
+    function shouldSuppressLaneField(laneDisplayMode, key) {
+        if (isServerOwnedLaneDisplay(laneDisplayMode)) return false;
         return /^lane_time\d+$/.test(key) || /^lane_place\d+$/.test(key);
     }
 
@@ -223,6 +221,7 @@
     exports.getRecordsForLane = getRecordsForLane;
     exports.formatSeedTime = formatSeedTime;
     exports.evaluateLaneResult = evaluateLaneResult;
+    exports.isServerOwnedLaneDisplay = isServerOwnedLaneDisplay;
     exports.shouldSuppressLaneField = shouldSuppressLaneField;
 
 })(typeof module !== 'undefined' && module.exports ? module.exports : window);

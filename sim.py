@@ -362,24 +362,25 @@ def register(socketio, app_module):
 
         elif step == "reset":
             # Mimic the CTS console RESET key: stop the running clock and
-            # blank every lane (time/place/running) while keeping the
-            # event/heat selection so the same heat can be re-run after a
-            # false start. Drive the FSM straight to PreRace via
-            # change_event so we land in the ready-to-run state rather
-            # than passing through Clear.
-            #
-            # Intentionally do NOT include lane_time*/lane_place* in this
-            # broadcast: on the client, onPreRaceEntry() paints seed
-            # times into the lane_time cells, and the generic field
-            # loop that runs right after would overwrite them with the
-            # blanks we sent. The follow-up send_event_info() reasserts
-            # any data the scoreboard needs.
+            # mark every lane as not-running, but keep streaming the
+            # previous heat's finish lane_time/lane_place bytes — real CTS
+            # keeps retransmitting the last race's lane data on the wire
+            # until the next race starts. Drive the FSM to PreRace via
+            # change_event so the client's seed-time display takes over
+            # (the field-loop suppression discards the stale lane bytes
+            # when seed-time display is enabled).
             _sim_running = False
             update["current_event"] = str(_app.last_event_sent[0])
             update["current_heat"] = str(_app.last_event_sent[1])
             for i in range(1, num_lanes + 1):
                 _app.channel_running[i - 1] = False
                 update["lane_running%d" % i] = False
+                # Re-stream the cached finish data, faithfully mirroring CTS
+                update["lane_time%d" % i] = _app.lane_times.get(i, "        ")
+                if i in SIM_LANES:
+                    update["lane_place%d" % i] = SIM_LANES[i]["place"]
+                else:
+                    update["lane_place%d" % i] = " "
 
             _app.race_fsm.notify_event_change()
             update["race_state"] = _app.race_fsm.state_name
