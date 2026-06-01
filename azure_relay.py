@@ -40,10 +40,21 @@ import string
 import threading
 import time
 from dataclasses import asdict, dataclass, field
+from datetime import date
 from queue import Empty, Queue
 from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
+
+
+def _today_local_iso() -> str:
+    """Return the Pi's current local date as ISO-8601 (YYYY-MM-DD).
+
+    Used to stamp engagement telemetry: a meet for analytics is defined as
+    ``(meet_id, pi_local_date)`` so a multi-day event with the same meet_id
+    still rolls up per day.
+    """
+    return date.today().isoformat()
 
 # Backoff schedule in seconds. Caps at 300s. Reset on successful connect.
 BACKOFF_SCHEDULE: tuple[int, ...] = (1, 2, 4, 8, 16, 32, 60, 120, 300)
@@ -774,6 +785,7 @@ class AzureRelayClient:
             "meet_id": creds.meet_id,
             "host_team_name": host_team_name,
             "protocol_version": self.protocol_version,
+            "pi_local_date": _today_local_iso(),
         }, namespace="/pi")
 
         # Push the current template bundle, if a provider is registered. The
@@ -818,7 +830,7 @@ class AzureRelayClient:
                 if now - last_heartbeat >= HEARTBEAT_INTERVAL_S:
                     client.emit(
                         "heartbeat",
-                        {"ts": now},
+                        {"ts": now, "pi_local_date": _today_local_iso()},
                         namespace="/pi",
                         callback=_on_heartbeat_callback,
                     )

@@ -256,6 +256,7 @@ def register_handlers(
                 host_team_name=payload.get("host_team_name", ""),
                 protocol_version=int(payload.get("protocol_version", PROTOCOL_VERSION_CURRENT)),
                 pi_account_id=pi_oid,
+                pi_local_date=payload.get("pi_local_date") or None,
             )
             metrics.meet_opened.add(1, {"meet_id": meet_id})
             # Notify any already-connected viewers that the feed is live.
@@ -380,7 +381,8 @@ def register_handlers(
             meet_id = sess.get(_SESSION_PI_MEET)
             if not meet_id:
                 return {"ok": False}
-            await store.heartbeat(meet_id)
+            pi_local_date = (payload or {}).get("pi_local_date")
+            await store.heartbeat(meet_id, pi_local_date=pi_local_date or None)
             # Count distinct browser viewers in the meet's room.
             try:
                 participants = sio.manager.get_participants(namespace="/scoreboard", room=meet_id)
