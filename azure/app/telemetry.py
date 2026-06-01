@@ -258,8 +258,15 @@ def _viewer_event_logger() -> logging.Logger:
     global _viewer_logger
     if _viewer_logger is None:
         _viewer_logger = logging.getLogger("cts.viewer")
-        # Inherit handlers from root (Azure Monitor attaches there when
-        # configure_azure_monitor ran; otherwise plain stdout in dev).
+        # The root logger's level defaults to WARNING (configure_azure_monitor
+        # does not change it).  Child loggers inherit the effective level from
+        # the root unless they have their own level set, so logger.info() calls
+        # are silently dropped before a LogRecord is even created.  Setting
+        # INFO here is scoped to this namespace only — other library loggers
+        # remain at WARNING and won't flood App Insights.
+        _viewer_logger.setLevel(logging.INFO)
+        # Propagate to root so the OTel LoggingHandler (level=NOTSET) exports
+        # these records to App Insights traces.
         _viewer_logger.propagate = True
     return _viewer_logger
 
