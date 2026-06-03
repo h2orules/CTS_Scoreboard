@@ -264,12 +264,18 @@ if (( installed_any_icon )) && command -v gtk-update-icon-cache >/dev/null; then
 fi
 
 # ---------------------------------------------------------------------------
-step "Install 'cts-kiosk' / 'cts-settings' commands in ~/.local/bin"
+step "Install 'cts-kiosk' / 'cts-settings' commands in /usr/local/bin"
 # Exposing the launchers as real executables on $PATH lets the .desktop
 # files use Exec=cts-kiosk / Exec=cts-settings, which libfm/pcmanfm
 # treats as a normal application launch -- no "execute this script?"
 # prompt, and no need to flip the global libfm quick_exec setting.
-BIN_DIR="$HOME/.local/bin"
+#
+# We install into /usr/local/bin (not ~/.local/bin) because the labwc
+# Wayland session does NOT source ~/.profile, so ~/.local/bin is not on
+# the session PATH; libfm then fails to resolve Exec=cts-kiosk and
+# falls back to the "execute this script?" prompt. /usr/local/bin is
+# always on PATH for graphical sessions on Bookworm.
+BIN_DIR="/usr/local/bin"
 declare -a BIN_PAIRS=(
     "cts-kiosk:$PI_DIR/scripts/cts-kiosk.sh"
     "cts-settings:$PI_DIR/scripts/cts-settings.sh"
@@ -279,16 +285,24 @@ for pair in "${BIN_PAIRS[@]}"; do
     bin_src="${pair#*:}"
     bin_target="$BIN_DIR/$bin_name"
     if (( DRY_RUN )); then
-        log "[dry-run] would symlink $bin_target -> $bin_src"
+        log "[dry-run] would symlink $bin_target -> $bin_src (via sudo)"
     else
-        mkdir -p "$BIN_DIR"
-        ln -sfn "$bin_src" "$bin_target"
+        sudo ln -sfn "$bin_src" "$bin_target"
+    fi
+done
+# Clean up legacy ~/.local/bin symlinks from previous installer versions
+# so there's only one source of truth on $PATH.
+for stale in "$HOME/.local/bin/cts-kiosk" "$HOME/.local/bin/cts-settings"; do
+    if [ -L "$stale" ]; then
+        if (( DRY_RUN )); then
+            log "[dry-run] would remove legacy symlink $stale"
+        else
+            rm -f "$stale"
+        fi
     fi
 done
 if ! command -v cts-kiosk >/dev/null; then
-    log "Note: $BIN_DIR is not on \$PATH for this shell."
-    log "      It should be picked up at next login via ~/.profile;"
-    log "      if not, add: export PATH=\"\$HOME/.local/bin:\$PATH\""
+    log "Note: cts-kiosk not yet on \$PATH for this shell; should be available next login."
 fi
 
 # ---------------------------------------------------------------------------
