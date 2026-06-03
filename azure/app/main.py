@@ -9,7 +9,7 @@ import orjson
 import redis.asyncio as redis_async
 import socketio
 from fastapi import FastAPI
-from fastapi.responses import JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import (
@@ -263,6 +263,16 @@ def build_app(
     @fastapi_app.get("/healthz", response_class=PlainTextResponse, include_in_schema=False)
     async def healthz() -> str:
         return "ok"
+
+    @fastapi_app.get("/favicon.ico", include_in_schema=False)
+    async def favicon_ico() -> FileResponse:
+        # Browsers request /favicon.ico by default. Serve the SVG with the
+        # correct MIME type; modern browsers honor the content type rather
+        # than the URL suffix.
+        return FileResponse(
+            str(STATIC_DIR / "favicon.svg"),
+            media_type="image/svg+xml",
+        )
 
     @fastapi_app.get("/readyz", response_class=JSONResponse, include_in_schema=False)
     async def readyz() -> JSONResponse:
