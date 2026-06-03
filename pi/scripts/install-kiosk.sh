@@ -236,6 +236,46 @@ for target in "${DESKTOP_TARGETS[@]}"; do
 done
 
 # ---------------------------------------------------------------------------
+step "Install launcher icon (cts-kiosk.svg) into hicolor icon theme"
+ICON_SRC="$PI_DIR/desktop/cts-kiosk.svg"
+ICON_DEST_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
+ICON_DEST="$ICON_DEST_DIR/cts-kiosk.svg"
+if [ -f "$ICON_SRC" ]; then
+    if (( DRY_RUN )); then
+        log "[dry-run] would install $ICON_SRC -> $ICON_DEST"
+    else
+        mkdir -p "$ICON_DEST_DIR"
+        install -m 0644 "$ICON_SRC" "$ICON_DEST"
+        # Refresh the icon cache so file manager / panel see the new icon.
+        if command -v gtk-update-icon-cache >/dev/null; then
+            gtk-update-icon-cache -q -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+        fi
+    fi
+else
+    log "Note: $ICON_SRC not found; .desktop will fall back to a generic icon."
+fi
+
+# ---------------------------------------------------------------------------
+step "Install 'cts-kiosk' command in ~/.local/bin"
+# Exposing the launcher as a real executable on $PATH lets the .desktop
+# file use Exec=cts-kiosk, which libfm/pcmanfm treats as a normal
+# application launch -- no "execute this script?" prompt, and no need
+# to flip the global libfm quick_exec setting.
+BIN_DIR="$HOME/.local/bin"
+BIN_TARGET="$BIN_DIR/cts-kiosk"
+if (( DRY_RUN )); then
+    log "[dry-run] would symlink $BIN_TARGET -> $PI_DIR/scripts/cts-kiosk.sh"
+else
+    mkdir -p "$BIN_DIR"
+    ln -sfn "$PI_DIR/scripts/cts-kiosk.sh" "$BIN_TARGET"
+    if ! command -v cts-kiosk >/dev/null; then
+        log "Note: $BIN_DIR is not on \$PATH for this shell."
+        log "      It should be picked up at next login via ~/.profile;"
+        log "      if not, add: export PATH=\"\$HOME/.local/bin:\$PATH\""
+    fi
+fi
+
+# ---------------------------------------------------------------------------
 if (( DO_BLANKING )); then
     step "Disable console/X screen blanking via raspi-config"
     if command -v raspi-config >/dev/null; then

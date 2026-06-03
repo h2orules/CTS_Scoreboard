@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a3d62"/>
+      <stop offset="1" stop-color="#0a2a44"/>
+    </linearGradient>
+    <linearGradient id="bezel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3a3a3a"/>
+      <stop offset="1" stop-color="#111111"/>
+    </linearGradient>
+    <linearGradient id="screen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#101820"/>
+      <stop offset="1" stop-color="#05080c"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="1.2" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- background water tile -->
+  <rect x="0" y="0" width="256" height="256" rx="40" ry="40" fill="url(#water)"/>
+  <!-- subtle lane lines -->
+  <g stroke="#1d5b8c" stroke-width="2" opacity="0.55">
+    <line x1="0" y1="60"  x2="256" y2="60"/>
+    <line x1="0" y1="100" x2="256" y2="100"/>
+    <line x1="0" y1="156" x2="256" y2="156"/>
+    <line x1="0" y1="196" x2="256" y2="196"/>
+  </g>
+
+  <!-- scoreboard bezel -->
+  <rect x="28" y="46" width="200" height="164" rx="16" ry="16" fill="url(#bezel)" stroke="#000" stroke-width="2"/>
+  <!-- screen -->
+  <rect x="40" y="58" width="176" height="140" rx="8" ry="8" fill="url(#screen)"/>
+
+  <!-- header strip: PLACE / LANE / TIME -->
+  <g font-family="'Helvetica Neue', Arial, sans-serif" font-weight="700" fill="#9aa6b2" font-size="10">
+    <text x="52"  y="78">PL</text>
+    <text x="86"  y="78">LN</text>
+    <text x="178" y="78" text-anchor="end">TIME</text>
+  </g>
+  <line x1="48" y1="84" x2="208" y2="84" stroke="#1f2a35" stroke-width="1"/>
+
+  <!-- three result rows in classic scoreboard amber -->
+  <g font-family="'Courier New', monospace" font-weight="700" font-size="22" fill="#ffb000" filter="url(#glow)">
+    <text x="56"  y="112">1</text>
+    <text x="92"  y="112">4</text>
+    <text x="208" y="112" text-anchor="end">22.18</text>
+
+    <text x="56"  y="144">2</text>
+    <text x="92"  y="144">3</text>
+    <text x="208" y="144" text-anchor="end">22.41</text>
+
+    <text x="56"  y="176">3</text>
+    <text x="92"  y="176">6</text>
+    <text x="208" y="176" text-anchor="end">22.77</text>
+  </g>
+
+  <!-- stand / mount -->
+  <rect x="116" y="210" width="24" height="14" fill="#222"/>
+  <rect x="92"  y="222" width="72" height="8"  rx="2" ry="2" fill="#2a2a2a"/>
+</svg>
