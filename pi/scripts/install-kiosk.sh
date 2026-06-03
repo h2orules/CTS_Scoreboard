@@ -218,61 +218,77 @@ PYEOF
 fi
 
 # ---------------------------------------------------------------------------
-step "Install desktop launcher icon"
-DESKTOP_NAME="cts-kiosk.desktop"
-DESKTOP_TARGETS=("$HOME/Desktop/$DESKTOP_NAME" "$HOME/.local/share/applications/$DESKTOP_NAME")
-SOURCE_DESKTOP="$PI_DIR/desktop/$DESKTOP_NAME"
-
-for target in "${DESKTOP_TARGETS[@]}"; do
-    run "mkdir -p '$(dirname "$target")'"
-    if (( DRY_RUN )); then
-        log "[dry-run] would write $target"
-    else
-        sed "s|SCOREBOARD_REPO|$REPO_DIR|g" "$SOURCE_DESKTOP" > "$target"
-        chmod +x "$target"
-        # Mark trusted so file-manager double-click works without prompt.
-        gio set "$target" metadata::trusted true 2>/dev/null || true
+step "Install desktop launchers (Kiosk + Settings)"
+DESKTOP_NAMES=("cts-kiosk.desktop" "cts-settings.desktop")
+for desktop_name in "${DESKTOP_NAMES[@]}"; do
+    source_desktop="$PI_DIR/desktop/$desktop_name"
+    if [ ! -f "$source_desktop" ]; then
+        log "Skipping $desktop_name (not found in repo)."
+        continue
     fi
+    for target in "$HOME/Desktop/$desktop_name" "$HOME/.local/share/applications/$desktop_name"; do
+        run "mkdir -p '$(dirname "$target")'"
+        if (( DRY_RUN )); then
+            log "[dry-run] would write $target"
+        else
+            sed "s|SCOREBOARD_REPO|$REPO_DIR|g" "$source_desktop" > "$target"
+            chmod +x "$target"
+            # Mark trusted so file-manager double-click works without prompt.
+            gio set "$target" metadata::trusted true 2>/dev/null || true
+        fi
+    done
 done
 
 # ---------------------------------------------------------------------------
-step "Install launcher icon (cts-kiosk.svg) into hicolor icon theme"
-ICON_SRC="$PI_DIR/desktop/cts-kiosk.svg"
+step "Install launcher icons into hicolor icon theme"
 ICON_DEST_DIR="$HOME/.local/share/icons/hicolor/scalable/apps"
-ICON_DEST="$ICON_DEST_DIR/cts-kiosk.svg"
-if [ -f "$ICON_SRC" ]; then
+ICON_NAMES=("cts-kiosk.svg" "cts-settings.svg")
+installed_any_icon=0
+for icon_name in "${ICON_NAMES[@]}"; do
+    icon_src="$PI_DIR/desktop/$icon_name"
+    icon_dest="$ICON_DEST_DIR/$icon_name"
+    if [ ! -f "$icon_src" ]; then
+        log "Note: $icon_src not found; corresponding .desktop will fall back to a generic icon."
+        continue
+    fi
     if (( DRY_RUN )); then
-        log "[dry-run] would install $ICON_SRC -> $ICON_DEST"
+        log "[dry-run] would install $icon_src -> $icon_dest"
     else
         mkdir -p "$ICON_DEST_DIR"
-        install -m 0644 "$ICON_SRC" "$ICON_DEST"
-        # Refresh the icon cache so file manager / panel see the new icon.
-        if command -v gtk-update-icon-cache >/dev/null; then
-            gtk-update-icon-cache -q -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
-        fi
+        install -m 0644 "$icon_src" "$icon_dest"
+        installed_any_icon=1
     fi
-else
-    log "Note: $ICON_SRC not found; .desktop will fall back to a generic icon."
+done
+if (( installed_any_icon )) && command -v gtk-update-icon-cache >/dev/null; then
+    gtk-update-icon-cache -q -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 fi
 
 # ---------------------------------------------------------------------------
-step "Install 'cts-kiosk' command in ~/.local/bin"
-# Exposing the launcher as a real executable on $PATH lets the .desktop
-# file use Exec=cts-kiosk, which libfm/pcmanfm treats as a normal
-# application launch -- no "execute this script?" prompt, and no need
-# to flip the global libfm quick_exec setting.
+step "Install 'cts-kiosk' / 'cts-settings' commands in ~/.local/bin"
+# Exposing the launchers as real executables on $PATH lets the .desktop
+# files use Exec=cts-kiosk / Exec=cts-settings, which libfm/pcmanfm
+# treats as a normal application launch -- no "execute this script?"
+# prompt, and no need to flip the global libfm quick_exec setting.
 BIN_DIR="$HOME/.local/bin"
-BIN_TARGET="$BIN_DIR/cts-kiosk"
-if (( DRY_RUN )); then
-    log "[dry-run] would symlink $BIN_TARGET -> $PI_DIR/scripts/cts-kiosk.sh"
-else
-    mkdir -p "$BIN_DIR"
-    ln -sfn "$PI_DIR/scripts/cts-kiosk.sh" "$BIN_TARGET"
-    if ! command -v cts-kiosk >/dev/null; then
-        log "Note: $BIN_DIR is not on \$PATH for this shell."
-        log "      It should be picked up at next login via ~/.profile;"
-        log "      if not, add: export PATH=\"\$HOME/.local/bin:\$PATH\""
+declare -a BIN_PAIRS=(
+    "cts-kiosk:$PI_DIR/scripts/cts-kiosk.sh"
+    "cts-settings:$PI_DIR/scripts/cts-settings.sh"
+)
+for pair in "${BIN_PAIRS[@]}"; do
+    bin_name="${pair%%:*}"
+    bin_src="${pair#*:}"
+    bin_target="$BIN_DIR/$bin_name"
+    if (( DRY_RUN )); then
+        log "[dry-run] would symlink $bin_target -> $bin_src"
+    else
+        mkdir -p "$BIN_DIR"
+        ln -sfn "$bin_src" "$bin_target"
     fi
+done
+if ! command -v cts-kiosk >/dev/null; then
+    log "Note: $BIN_DIR is not on \$PATH for this shell."
+    log "      It should be picked up at next login via ~/.profile;"
+    log "      if not, add: export PATH=\"\$HOME/.local/bin:\$PATH\""
 fi
 
 # ---------------------------------------------------------------------------
