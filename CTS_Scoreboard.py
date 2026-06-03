@@ -2090,6 +2090,15 @@ def route_test():
     return flask.render_template("test.html", meet_title=settings.get("meet_title", ""))
 
 
+@app.route("/favicon.ico")
+def route_favicon_ico():
+    # Browsers auto-request /favicon.ico. Serve the SVG with the correct
+    # MIME so they render it correctly regardless of the .ico suffix.
+    return flask.send_from_directory(
+        app.static_folder, "favicon.svg", mimetype="image/svg+xml"
+    )
+
+
 # Scoreboard Templates
 @app.route("/web/<name>")
 def route_web(name):
