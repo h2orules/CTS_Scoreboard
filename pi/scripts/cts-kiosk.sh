@@ -53,5 +53,7 @@ exec "$CHROMIUM" \
     --no-first-run \
     --check-for-update-interval=31536000 \
     --ozone-platform=wayland \
+    --password-store=basic \
+    --use-mock-keychain \
     --user-data-dir="$PROFILE_DIR" \
     --app="$URL"
