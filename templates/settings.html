@@ -2763,6 +2763,9 @@
                         var src = '/azure/qr.png?v=' + token;
                         var img = preview.querySelector('img');
                         if (!img) {
+                            // First time we have a meet URL: drop the
+                            // "No meet ID" placeholder and insert the img.
+                            preview.textContent = '';
                             img = document.createElement('img');
                             img.alt = 'QR code preview';
                             img.style.width = '100%';

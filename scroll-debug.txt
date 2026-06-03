@@ -1,0 +1,74 @@
+// Paste in Chromium DevTools console on the Settings page on the Pi.
+// Let the page sit (don't touch mouse/keyboard) for ~30 seconds while it
+// misbehaves, then run:   console.table(_scrollLog)
+// and send the output back.
+
+(function () {
+    let lastY = window.scrollY;
+    const t0 = performance.now();
+    const log = [];
+
+    function describe(node) {
+        if (!node) return '(none)';
+        const id = node.id ? '#' + node.id : '';
+        const cls = (node.className && typeof node.className === 'string')
+            ? '.' + node.className.split(/\s+/).filter(Boolean).slice(0, 2).join('.')
+            : '';
+        return (node.nodeName || '?') + id + cls;
+    }
+
+    const obs = new MutationObserver(function (muts) {
+        const y = window.scrollY;
+        if (y !== lastY) {
+            const m = muts[0];
+            log.push({
+                dt: ((performance.now() - t0) / 1000).toFixed(2) + 's',
+                from: lastY,
+                to: y,
+                delta: y - lastY,
+                cause: 'mutation',
+                type: m.type,
+                target: describe(m.target),
+                addedNodes: m.addedNodes ? m.addedNodes.length : 0,
+                removedNodes: m.removedNodes ? m.removedNodes.length : 0,
+            });
+            lastY = y;
+        }
+    });
+    obs.observe(document.body, {
+        subtree: true,
+        childList: true,
+        characterData: true,
+        attributes: true,
+        attributeOldValue: true,
+    });
+
+    window.addEventListener('scroll', function () {
+        if (window.scrollY !== lastY) {
+            log.push({
+                dt: ((performance.now() - t0) / 1000).toFixed(2) + 's',
+                from: lastY,
+                to: window.scrollY,
+                delta: window.scrollY - lastY,
+                cause: 'scroll-event',
+                target: describe(document.activeElement),
+            });
+            lastY = window.scrollY;
+        }
+    }, true);
+
+    document.addEventListener('focusin', function (e) {
+        log.push({
+            dt: ((performance.now() - t0) / 1000).toFixed(2) + 's',
+            from: lastY,
+            to: window.scrollY,
+            delta: window.scrollY - lastY,
+            cause: 'focusin',
+            target: describe(e.target),
+        });
+        lastY = window.scrollY;
+    }, true);
+
+    window._scrollLog = log;
+    console.log('Scroll-jump logger armed. Wait ~30s, then run: console.table(_scrollLog)');
+})();
