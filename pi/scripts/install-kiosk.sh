@@ -306,6 +306,38 @@ if ! command -v cts-kiosk >/dev/null; then
 fi
 
 # ---------------------------------------------------------------------------
+step "Silence libfm 'execute this script?' prompt for desktop launchers"
+# Even with a valid Exec= on $PATH, x-bit set, and metadata::trusted=true,
+# libfm on Bookworm still prompts when launching .desktop files from the
+# desktop. The reliable knob is per-user quick_exec=1 in libfm.conf.
+LIBFM_CONF_DIR="$HOME/.config/libfm"
+LIBFM_CONF="$LIBFM_CONF_DIR/libfm.conf"
+if (( DRY_RUN )); then
+    log "[dry-run] would ensure quick_exec=1 in $LIBFM_CONF"
+else
+    mkdir -p "$LIBFM_CONF_DIR"
+    if [ ! -f "$LIBFM_CONF" ]; then
+        printf '[config]\nquick_exec=1\n' > "$LIBFM_CONF"
+    elif ! grep -qE '^\s*quick_exec\s*=' "$LIBFM_CONF"; then
+        if grep -qE '^\s*\[config\]' "$LIBFM_CONF"; then
+            # Insert quick_exec=1 right after the [config] section header.
+            python3 - "$LIBFM_CONF" <<'PYEOF'
+import re, sys, pathlib
+p = pathlib.Path(sys.argv[1])
+text = p.read_text()
+text = re.sub(r'(\[config\][^\n]*\n)', r'\1quick_exec=1\n', text, count=1)
+p.write_text(text)
+PYEOF
+        else
+            printf '\n[config]\nquick_exec=1\n' >> "$LIBFM_CONF"
+        fi
+    else
+        sed -i -E 's/^\s*quick_exec\s*=.*/quick_exec=1/' "$LIBFM_CONF"
+    fi
+    log "quick_exec=1 set in $LIBFM_CONF"
+fi
+
+# ---------------------------------------------------------------------------
 if (( DO_BLANKING )); then
     step "Disable console/X screen blanking via raspi-config"
     if command -v raspi-config >/dev/null; then
