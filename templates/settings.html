@@ -2695,62 +2695,88 @@
             setTimeout(function() { el.style.display = 'none'; }, 4000);
         }
 
+        // Idempotent DOM helpers: only mutate when the new value actually
+        // differs, so the 5 s status poll doesn't cause layout thrash that
+        // visibly jogs the page scroll position.
+        function _setText(el, value) {
+            if (el && el.textContent !== value) el.textContent = value;
+        }
+        function _setDisplay(el, value) {
+            if (el && el.style.display !== value) el.style.display = value;
+        }
+        function _setAttr(el, name, value) {
+            if (el && el.getAttribute(name) !== value) el.setAttribute(name, value);
+        }
+        function _setDisabled(el, value) {
+            if (el && el.disabled !== value) el.disabled = value;
+        }
+
         function applyStatus(snap) {
             if (!snap) return;
             setBadge(snap.state || 'unknown');
-            $('azure-env-badge').textContent =
-                snap.environment ? '(' + snap.environment + ')' : '';
+            _setText($('azure-env-badge'),
+                snap.environment ? '(' + snap.environment + ')' : '');
             if (snap.meet_id) {
-                $('azure-meet-row').style.display = 'inline';
-                $('azure-meet-id').textContent = snap.meet_id;
+                _setDisplay($('azure-meet-row'), 'inline');
+                _setText($('azure-meet-id'), snap.meet_id);
             } else {
-                $('azure-meet-row').style.display = 'none';
+                _setDisplay($('azure-meet-row'), 'none');
             }
             if (snap.public_url && snap.meet_id) {
-                $('azure-url-row').style.display = 'inline';
+                _setDisplay($('azure-url-row'), 'inline');
                 var link = snap.public_url.replace(/\/$/, '') + '/m/' + snap.meet_id;
-                $('azure-public-link').href = link;
-                $('azure-public-link').textContent = link;
+                _setAttr($('azure-public-link'), 'href', link);
+                _setText($('azure-public-link'), link);
             } else {
-                $('azure-url-row').style.display = 'none';
+                _setDisplay($('azure-url-row'), 'none');
             }
             if (snap.last_error) {
-                $('azure-error-row').style.display = 'block';
-                $('azure-error-row').textContent = 'Last error: ' + snap.last_error;
+                _setDisplay($('azure-error-row'), 'block');
+                _setText($('azure-error-row'), 'Last error: ' + snap.last_error);
             } else {
-                $('azure-error-row').style.display = 'none';
+                _setDisplay($('azure-error-row'), 'none');
             }
             // Disable Sign In if the active env's relay URL is empty.
-            $('azure-signin-btn').disabled = !snap.relay_url;
-            $('azure-rotate-btn').disabled = !snap.meet_id;
-            $('azure-friendly-btn').disabled = !snap.meet_id;
+            _setDisabled($('azure-signin-btn'), !snap.relay_url);
+            _setDisabled($('azure-rotate-btn'), !snap.meet_id);
+            _setDisabled($('azure-friendly-btn'), !snap.meet_id);
             // Hint summary on the config details.
-            var cfgStatus = $('azure-config-status');
-            if (cfgStatus) {
-                cfgStatus.textContent = snap.relay_url ? '' : '(setup required)';
-            }
+            _setText($('azure-config-status'), snap.relay_url ? '' : '(setup required)');
 
             // QR code card: visible only when we have a publishable meet URL.
             var qrCard = $('azure-qr-card');
             if (qrCard) {
                 if (snap.meet_id && snap.public_url) {
-                    qrCard.style.display = 'block';
+                    _setDisplay(qrCard, 'block');
                     var preview = $('azure-qr-preview');
                     if (preview) {
                         // Cache-bust per snapshot so URL/env changes refresh
-                        // the preview without a hard reload.
+                        // the preview without a hard reload. Only swap the
+                        // <img> src when the token actually changes, and
+                        // keep the same <img> element across polls so the
+                        // preview box never collapses (which would jog the
+                        // scroll position of everything below it).
                         var token = encodeURIComponent(
                             (snap.environment || '') + '|' +
                             (snap.public_url || '') + '|' +
                             (snap.meet_id || ''));
-                        preview.innerHTML = '<img alt="QR code preview" ' +
-                            'src="/azure/qr.png?v=' + token + '" ' +
-                            'style="width:100%;height:100%;display:block;">';
+                        var src = '/azure/qr.png?v=' + token;
+                        var img = preview.querySelector('img');
+                        if (!img) {
+                            img = document.createElement('img');
+                            img.alt = 'QR code preview';
+                            img.style.width = '100%';
+                            img.style.height = '100%';
+                            img.style.display = 'block';
+                            img.src = src;
+                            preview.appendChild(img);
+                        } else if (img.getAttribute('src') !== src) {
+                            img.setAttribute('src', src);
+                        }
                     }
-                    var dlBtn = $('azure-qr-download-btn');
-                    if (dlBtn) dlBtn.disabled = false;
+                    _setDisabled($('azure-qr-download-btn'), false);
                 } else {
-                    qrCard.style.display = 'none';
+                    _setDisplay(qrCard, 'none');
                 }
             }
         }
