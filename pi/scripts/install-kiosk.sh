@@ -85,7 +85,7 @@ fi
 
 # ---------------------------------------------------------------------------
 step "Make repo scripts executable"
-run "chmod +x '$PI_DIR/scripts/cts-kiosk.sh' '$PI_DIR/scripts/wait-for-server.sh' '$PI_DIR/scripts/install-kiosk.sh' '$PI_DIR/scripts/uninstall-kiosk.sh'"
+run "chmod +x '$PI_DIR/scripts/cts-kiosk.sh' '$PI_DIR/scripts/cts-settings.sh' '$PI_DIR/scripts/wait-for-server.sh' '$PI_DIR/scripts/install-kiosk.sh' '$PI_DIR/scripts/uninstall-kiosk.sh'"
 
 # ---------------------------------------------------------------------------
 step "Install systemd --user service"
