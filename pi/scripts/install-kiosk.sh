@@ -144,45 +144,77 @@ RC_XML="$LABWC_DIR/rc.xml"
 if [ ! -f "$RC_XML" ] && [ -f /etc/xdg/labwc/rc.xml ]; then
     run "cp /etc/xdg/labwc/rc.xml '$RC_XML'"
 fi
-if [ ! -f "$RC_XML" ]; then
-    log "Note: $RC_XML not present and no /etc/xdg/labwc/rc.xml to seed from."
-    log "      Skipping keybind install. You can still exit kiosk via"
-    log "      Ctrl+Alt+F2 (TTY) or by killing chromium over SSH."
-elif (( DRY_RUN )); then
+if (( DRY_RUN )); then
     log "[dry-run] would inject managed keybind block into $RC_XML"
 else
-    # Remove any previous managed block, then inject before </keyboard> if
-    # present, otherwise before </openbox_config> / </labwc_config>.
-    tmp="$(mktemp)"
-    awk -v b="$XML_MARKER_BEGIN" -v e="$XML_MARKER_END" '
-        index($0,b){skip=1; next}
-        index($0,e){skip=0; next}
-        !skip {print}
-    ' "$RC_XML" > "$tmp"
-
     snippet="$(sed "s|SCOREBOARD_REPO|$REPO_DIR|g" "$PI_DIR/labwc/rc.xml.snippet")"
-    block="$(printf '%s\n%s\n%s\n' "$XML_MARKER_BEGIN" "$snippet" "$XML_MARKER_END")"
+    # Use Python so we get correct XML placement (the previous awk-based
+    # approach could leave our <keyboard> block OUTSIDE the root element
+    # when rc.xml had its root tags on a single line, which silently
+    # disables every keybind we install).
+    SNIPPET_FILE="$(mktemp)"
+    printf '%s\n' "$snippet" > "$SNIPPET_FILE"
+    RC_XML="$RC_XML" SNIPPET_FILE="$SNIPPET_FILE" \
+        BEGIN_MARK="$XML_MARKER_BEGIN" END_MARK="$XML_MARKER_END" \
+        python3 - <<'PYEOF'
+import os
+import re
+from pathlib import Path
 
-    if grep -q '</keyboard>' "$tmp"; then
-        awk -v block="$block" '
-            /<\/keyboard>/ && !done { print block; done=1 }
-            { print }
-        ' "$tmp" > "$RC_XML"
-    else
-        # No <keyboard> wrapper; create one before the closing root tag.
-        wrapped="<keyboard>
-$block
-</keyboard>"
-        awk -v block="$wrapped" '
-            /<\/(openbox_config|labwc_config)>/ && !done { print block; done=1 }
-            { print }
-        ' "$tmp" > "$RC_XML"
-        # If neither closing tag exists, append the block.
-        if ! grep -q "$XML_MARKER_BEGIN" "$RC_XML"; then
-            printf '\n%s\n' "$wrapped" >> "$RC_XML"
-        fi
-    fi
-    rm -f "$tmp"
+rc = Path(os.environ["RC_XML"])
+begin = os.environ["BEGIN_MARK"]
+end = os.environ["END_MARK"]
+snippet = Path(os.environ["SNIPPET_FILE"]).read_text()
+
+text = rc.read_text() if rc.exists() else ""
+
+# 1. Strip any previous managed block, regardless of where it sits.
+managed_block_re = re.compile(
+    re.escape(begin) + r".*?" + re.escape(end) + r"\n?",
+    flags=re.DOTALL,
+)
+text = managed_block_re.sub("", text)
+
+# 2. Strip any now-empty <keyboard></keyboard> wrapper left behind by
+#    a previous (buggy) install that placed our block in its own
+#    keyboard tag outside the root element.
+text = re.sub(
+    r"<keyboard>\s*</keyboard>\s*", "", text, flags=re.DOTALL
+)
+
+block = f"{begin}\n{snippet.rstrip()}\n{end}\n"
+
+# 3. Decide where to insert.
+#    Priority: inside an existing <keyboard> inside the root; else as a
+#    new <keyboard> child of the root; else create a fresh labwc_config
+#    root containing our keybinds.
+def insert_before(haystack, needle_re, payload):
+    m = needle_re.search(haystack)
+    if not m:
+        return None
+    return haystack[: m.start()] + payload + haystack[m.start() :]
+
+# Try inside an existing <keyboard>.
+new_text = insert_before(text, re.compile(r"</keyboard>"), block)
+if new_text is None:
+    # Wrap our block in its own <keyboard> and insert before the
+    # closing root tag (openbox_config or labwc_config).
+    wrapped = f"<keyboard>\n{block}</keyboard>\n"
+    root_close_re = re.compile(r"</(openbox_config|labwc_config)>")
+    new_text = insert_before(text, root_close_re, wrapped)
+if new_text is None:
+    # No root present at all — write a complete minimal labwc_config.
+    new_text = (
+        '<?xml version="1.0"?>\n'
+        "<labwc_config>\n"
+        f"<keyboard>\n{block}</keyboard>\n"
+        "</labwc_config>\n"
+    )
+
+rc.parent.mkdir(parents=True, exist_ok=True)
+rc.write_text(new_text)
+PYEOF
+    rm -f "$SNIPPET_FILE"
 fi
 
 # ---------------------------------------------------------------------------
