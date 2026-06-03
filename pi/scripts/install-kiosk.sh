@@ -74,11 +74,11 @@ fi
 
 # ---------------------------------------------------------------------------
 step "Ensure Chromium is installed"
-if command -v chromium-browser >/dev/null || command -v chromium >/dev/null; then
+if command -v chromium >/dev/null || command -v chromium-browser >/dev/null; then
     log "Chromium already installed."
 elif (( DO_APT )); then
     run "sudo apt update"
-    run "sudo apt install -y chromium-browser"
+    run "sudo apt install -y chromium"
 else
     log "Chromium missing and --no-apt was passed. Install it manually."
 fi
