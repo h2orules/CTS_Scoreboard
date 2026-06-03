@@ -561,6 +561,15 @@ def register(flask_app, app_module):
                 except Exception:
                     pass
 
+            # Autosave clients ask for a small JSON ack instead of a
+            # re-rendered 200KB page. Surface any upload errors so the
+            # browser can show them inline.
+            if flask.request.headers.get('X-Autosave') == '1':
+                errors = [e for e in (schedule_error, standards_error, records_error, ad_error) if e]
+                if errors:
+                    return flask.jsonify(ok=False, errors=errors)
+                return flask.jsonify(ok=True)
+
         # --- GET: build template context -------------------------------------
 
         comm_port_list = [(port, "%s: %s" % (port, desc)) for port, desc, id in serial.tools.list_ports.comports()]

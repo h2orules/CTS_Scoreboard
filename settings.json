@@ -18,7 +18,7 @@
         }
     ],
     "ad_max_dimension": "1920",
-    "ad_rotation_interval": 5,
+    "ad_rotation_interval": 30,
     "blank_message": "## Warmups\n**High Woodlands**: 4:30pm-5:00pm\n**Kingsgate**:      5:00pm-5:30pm\n## Meet Start\nPromptly at 6:00pm\n## Volunteer Meetings\n***Timers*** 5:30pm, ***Officials*** 5:45pm, ***Coaches*** 5:30pm",
     "blank_message_align": "center",
     "blank_message_visible": false,
@@ -45,7 +45,7 @@
         {
             "align": "center",
             "enabled": true,
-            "text": "# Kingsgate Invitational 2026\nThe first meet of the year!\n\n## Warmups\n**High Woodlands:** 4:30-5:30pm\n**Kingsgate:** 5:00-5:30pm\n\n## Pre-meet Meetings\n***Timers:*** 5:30pm, ***Officials:*** 5:30pm, ***Coaches:*** 5:45pm"
+            "text": "# Kingsgate Invitational 2026!!!\nThe first meet of the year!\n\n## Warmups\n**High Woodlands:** 4:30-5:30pm\n**Kingsgate:** 5:00-5:30pm\n\n## Pre-meet Meetings\n***Timers:*** 5:30pm, ***Officials:*** 5:30pm, ***Coaches:*** 5:45pm"
         },
         {
             "align": "center",
@@ -53,7 +53,7 @@
             "text": "# Follow the meet on your phone!\n\n[[QR]]\n\nScan to view mobile scoreboard."
         }
     ],
-    "message_rotation_interval": 5,
+    "message_rotation_interval": 15,
     "num_lanes": 4,
     "password": "password",
     "pool_course": "SCY",
