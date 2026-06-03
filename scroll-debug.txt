@@ -1,36 +1,89 @@
-// Paste in Chromium DevTools console on the Settings page on the Pi.
-// Let the page sit (don't touch mouse/keyboard) for ~30 seconds while it
-// misbehaves, then run:   console.table(_scrollLog)
-// and send the output back.
+// Paste in Chromium DevTools console on the Settings page (Pi), then
+// close DevTools. A small overlay in the top-right corner will show the
+// last ~15 scroll/focus/mutation/resize events that moved the page.
+// Take a screenshot of the overlay after ~30 s of misbehavior.
+//
+// To pause: window._scrollLogPaused = true;
+// To clear: window._scrollLogClear();
 
 (function () {
-    let lastY = window.scrollY;
+    if (window._scrollLogOverlay) {
+        window._scrollLogOverlay.remove();
+    }
+
     const t0 = performance.now();
-    const log = [];
+    let lastY = window.scrollY;
+    const entries = [];
+    const MAX = 15;
+
+    const overlay = document.createElement('div');
+    overlay.id = '__scroll_log_overlay';
+    Object.assign(overlay.style, {
+        position: 'fixed',
+        top: '4px',
+        right: '4px',
+        zIndex: '2147483647',
+        background: 'rgba(0,0,0,0.85)',
+        color: '#0f0',
+        font: '11px/1.3 monospace',
+        padding: '6px 8px',
+        maxWidth: '46vw',
+        maxHeight: '60vh',
+        overflow: 'auto',
+        border: '1px solid #0f0',
+        borderRadius: '4px',
+        pointerEvents: 'none',
+        whiteSpace: 'pre',
+    });
+    overlay.textContent = 'scroll-log armed';
+    document.body.appendChild(overlay);
+    window._scrollLogOverlay = overlay;
 
     function describe(node) {
         if (!node) return '(none)';
         const id = node.id ? '#' + node.id : '';
-        const cls = (node.className && typeof node.className === 'string')
-            ? '.' + node.className.split(/\s+/).filter(Boolean).slice(0, 2).join('.')
-            : '';
+        let cls = '';
+        if (node.className && typeof node.className === 'string') {
+            cls = '.' + node.className.split(/\s+/).filter(Boolean).slice(0, 1).join('.');
+        }
         return (node.nodeName || '?') + id + cls;
     }
+
+    function render() {
+        const head = 'scrollY=' + window.scrollY +
+            ' vp=' + window.innerWidth + 'x' + window.innerHeight +
+            ' doc=' + document.documentElement.scrollHeight;
+        const lines = [head];
+        for (const e of entries.slice(-MAX)) {
+            lines.push(
+                e.dt + ' ' + e.cause +
+                ' ' + e.from + '->' + e.to + ' (' + (e.delta >= 0 ? '+' : '') + e.delta + ')' +
+                ' ' + (e.target || '')
+            );
+        }
+        overlay.textContent = lines.join('\n');
+    }
+
+    function push(entry) {
+        if (window._scrollLogPaused) return;
+        entries.push(entry);
+        if (entries.length > 200) entries.shift();
+        render();
+    }
+
+    window._scrollLogClear = function () { entries.length = 0; render(); };
 
     const obs = new MutationObserver(function (muts) {
         const y = window.scrollY;
         if (y !== lastY) {
             const m = muts[0];
-            log.push({
+            push({
                 dt: ((performance.now() - t0) / 1000).toFixed(2) + 's',
+                cause: 'mut(' + m.type + ')',
                 from: lastY,
                 to: y,
                 delta: y - lastY,
-                cause: 'mutation',
-                type: m.type,
                 target: describe(m.target),
-                addedNodes: m.addedNodes ? m.addedNodes.length : 0,
-                removedNodes: m.removedNodes ? m.removedNodes.length : 0,
             });
             lastY = y;
         }
@@ -40,17 +93,16 @@
         childList: true,
         characterData: true,
         attributes: true,
-        attributeOldValue: true,
     });
 
     window.addEventListener('scroll', function () {
         if (window.scrollY !== lastY) {
-            log.push({
+            push({
                 dt: ((performance.now() - t0) / 1000).toFixed(2) + 's',
+                cause: 'scroll',
                 from: lastY,
                 to: window.scrollY,
                 delta: window.scrollY - lastY,
-                cause: 'scroll-event',
                 target: describe(document.activeElement),
             });
             lastY = window.scrollY;
@@ -58,17 +110,32 @@
     }, true);
 
     document.addEventListener('focusin', function (e) {
-        log.push({
+        push({
             dt: ((performance.now() - t0) / 1000).toFixed(2) + 's',
+            cause: 'focusin',
             from: lastY,
             to: window.scrollY,
             delta: window.scrollY - lastY,
-            cause: 'focusin',
             target: describe(e.target),
         });
         lastY = window.scrollY;
     }, true);
 
-    window._scrollLog = log;
-    console.log('Scroll-jump logger armed. Wait ~30s, then run: console.table(_scrollLog)');
+    // Watch for size changes of long-loading images / dynamic boxes,
+    // which is the classic cause of scroll-anchoring jumps in Chromium.
+    new ResizeObserver(function (rEntries) {
+        for (const ent of rEntries) {
+            push({
+                dt: ((performance.now() - t0) / 1000).toFixed(2) + 's',
+                cause: 'resize',
+                from: lastY,
+                to: window.scrollY,
+                delta: window.scrollY - lastY,
+                target: describe(ent.target),
+            });
+        }
+        lastY = window.scrollY;
+    }).observe(document.body);
+
+    render();
 })();
