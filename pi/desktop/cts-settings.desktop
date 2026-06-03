@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=CTS Scoreboard Settings
+GenericName=Scoreboard Settings
+Comment=Open the CTS Scoreboard settings page in a regular browser window
+Exec=cts-settings
+TryExec=cts-settings
+Icon=cts-settings
+Terminal=false
+Categories=Settings;Network;Utility;
+StartupNotify=false
