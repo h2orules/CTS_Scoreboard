@@ -3,12 +3,12 @@
      Ctrl+Alt+S  Open the scoreboard Settings page in a normal Chromium window.
      Ctrl+Alt+R  Re-enter kiosk mode (same as the desktop icon).
      Remove the block between the BEGIN/END markers to uninstall. -->
-<keybind key="C-A-k">
+<keybind key="C-A-k" overrideInhibition="yes" allowWhenLocked="yes">
   <action name="Execute" command="sh -c 'pkill -INT -f cts-kiosk-chromium || pkill -INT chromium'"/>
 </keybind>
-<keybind key="C-A-s">
+<keybind key="C-A-s" overrideInhibition="yes" allowWhenLocked="yes">
   <action name="Execute" command="sh -c 'chromium-browser --new-window http://localhost:5000/settings &amp;'"/>
 </keybind>
-<keybind key="C-A-r">
+<keybind key="C-A-r" overrideInhibition="yes" allowWhenLocked="yes">
   <action name="Execute" command="SCOREBOARD_REPO/pi/scripts/cts-kiosk.sh"/>
 </keybind>
