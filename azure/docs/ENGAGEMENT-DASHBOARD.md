@@ -214,7 +214,58 @@ traces
 | order by unique_viewers desc
 ```
 
-### 7. LCP and connection-type breakdown (grid)
+### 7. Most-watched event attributes (grid)
+
+Which distances, strokes, age groups, and genders drew the most unique viewers.
+Use the **Grid** visualization; sort by `unique_viewers` descending.
+
+```kusto
+traces
+| where customDimensions has 'viewer_event'
+| extend ev          = tostring(customDimensions.viewer_event),
+         meet_id     = tostring(customDimensions.meet_id),
+         pi_date     = tostring(customDimensions.pi_local_date),
+         viewer_id   = tostring(customDimensions.viewer_id),
+         distance    = toint(customDimensions.distance),
+         stroke_name = tostring(customDimensions.stroke_name),
+         age_group   = tostring(customDimensions.age_group),
+         gender      = tostring(customDimensions.gender),
+         relay       = tobool(customDimensions.relay)
+| where meet_id == '{meet_id}' and pi_date == '{pi_local_date}'
+| where ev == 'viewer_event_view'
+| summarize unique_viewers = dcount(viewer_id),
+            total_views    = count()
+        by distance, stroke_name, age_group, gender, relay
+| extend event_label = strcat(tostring(distance), 'y ', gender, ' ', age_group,
+                              ' ', stroke_name,
+                              iff(relay, ' Relay', ''))
+| project event_label, distance, stroke_name, age_group, gender, relay,
+          unique_viewers, total_views
+| order by unique_viewers desc
+```
+
+To rank by a single dimension across a whole season (e.g. "which distances
+are most-watched overall"), drop the per-meet filters and collapse to one
+attribute:
+
+```kusto
+traces
+| where customDimensions has 'viewer_event'
+| extend ev          = tostring(customDimensions.viewer_event),
+         viewer_id   = tostring(customDimensions.viewer_id),
+         distance    = toint(customDimensions.distance),
+         stroke_name = tostring(customDimensions.stroke_name),
+         age_group   = tostring(customDimensions.age_group),
+         gender      = tostring(customDimensions.gender)
+| where ev == 'viewer_event_view'
+| summarize unique_viewers = dcount(viewer_id),
+            total_views    = count()
+        by distance, stroke_name, age_group, gender
+| order by unique_viewers desc
+| take 20
+```
+
+### 8. LCP and connection-type breakdown (grid)
 
 Page-load quality per network type. `effective_type` comes from the
 Network Information API in the browser (`4g`, `3g`, `2g`, `slow-2g`).
