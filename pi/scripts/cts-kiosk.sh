@@ -33,9 +33,8 @@ if [ -f "$PREFS" ]; then
         "$PREFS" || true
 fi
 
-# Pick the chromium binary. Bookworm ships /usr/bin/chromium-browser as a
-# wrapper around /usr/bin/chromium; either works.
-CHROMIUM="$(command -v chromium-browser || command -v chromium || true)"
+# Pick the chromium binary.
+CHROMIUM="$(command -v chromium || command -v chromium-browser || true)"
 if [ -z "$CHROMIUM" ]; then
     echo "cts-kiosk: chromium is not installed. Run pi/scripts/install-kiosk.sh." >&2
     exit 1

@@ -7,7 +7,7 @@
   <action name="Execute" command="sh -c 'pkill -INT -f cts-kiosk-chromium || pkill -INT chromium'"/>
 </keybind>
 <keybind key="C-A-s" overrideInhibition="yes" allowWhenLocked="yes">
-  <action name="Execute" command="sh -c 'chromium-browser --user-data-dir=$HOME/.config/cts-settings-chromium --password-store=basic --use-mock-keychain --new-window http://localhost:5000/settings &amp;'"/>
+  <action name="Execute" command="sh -c 'chromium --user-data-dir=$HOME/.config/cts-settings-chromium --password-store=basic --use-mock-keychain --new-window http://localhost:5000/settings &amp;'"/>
 </keybind>
 <keybind key="C-A-r" overrideInhibition="yes" allowWhenLocked="yes">
   <action name="Execute" command="SCOREBOARD_REPO/pi/scripts/cts-kiosk.sh"/>
