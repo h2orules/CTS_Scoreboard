@@ -95,6 +95,16 @@
         background: #eee;
         color: #c00;
     }
+    .icon-btn {
+        padding: 4px 8px;
+        line-height: 1;
+    }
+    .icon-btn svg {
+        width: 16px;
+        height: 16px;
+        display: block;
+        fill: currentColor;
+    }
 
     /* ── WiFi section ──────────────────────────── */
     .wifi-status-bar {
@@ -268,6 +278,28 @@
         padding: 10px 14px; background: #fcf8e3; border: 1px solid #faebcc;
         border-radius: 4px; color: #8a6d3b; font-size: 13px;
     }
+
+    /* ── Auto-save status pill ─────────────────── */
+    body.autosave-ready form[data-autosave="1"] .autosave-hide {
+        display: none !important;
+    }
+    .autosave-status {
+        display: inline-block;
+        margin-left: 10px;
+        font-size: 13px;
+        line-height: 1.6;
+        min-height: 1em;
+        color: transparent;
+        transition: color 0.2s ease;
+    }
+    .autosave-status.autosave-saving { color: #888; font-style: italic; }
+    .autosave-status.autosave-saved  { color: #3c763d; }
+    .autosave-status.autosave-error  { color: #a94442; font-weight: 600; }
+    .autosave-status.autosave-saving::before,
+    .autosave-status.autosave-saved::before,
+    .autosave-status.autosave-error::before { content: ""; }
+    .autosave-retry-btn { margin-left: 8px; }
+    .autosave-error-hint { font-weight: normal; color: #a94442; }
 </style>
 
 <script>
@@ -302,16 +334,14 @@
         <h3>Meet Settings</h3>
         <div class="row">
             <div class="col-lg-6">
-                <form action="/settings" method="POST">
+                <form action="/settings" method="POST" data-autosave="1">
                     <div class="input-group">
                         <label for="meet_title">Meet Title</label>
                         <div class="input-group">
                             <input id="meet_title" name="meet_title" value="{{ meet_title }}" class="form-control"
-                                aria-label="..."
-                                oninput="document.getElementById('meet_title_submit').disabled=false;"></input>
+                                aria-label="..."></input>
                             <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="meet_title_submit"
-                                    disabled>Update</button>
+                                <button class="btn btn-default autosave-hide" type="submit" id="meet_title_submit">Update</button>
                             </span>
                         </div>
                     </div>
@@ -324,7 +354,7 @@
         <h3>Pool Settings</h3>
         <div class="row">
             <div class="col-lg-6">
-                <form action="/settings" method="POST">
+                <form action="/settings" method="POST" data-autosave="1">
                     <div class="form-group" style="margin-bottom:10px;">
                         <label for="num_lanes">Number of Lanes</label>
                         <select id="num_lanes" name="num_lanes" class="form-control"
@@ -344,7 +374,7 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <button class="btn btn-default" type="submit">Update</button>
+                        <button class="btn btn-default autosave-hide" type="submit">Update</button>
                     </div>
                 </form>
             </div>
@@ -355,7 +385,7 @@
         <h3>Display Options</h3>
         <div class="row">
             <div class="col-lg-6">
-                <form action="/settings" method="POST">
+                <form action="/settings" method="POST" data-autosave="1">
                     <input type="hidden" name="display_options_form" value="1">
                     <div class="form-group" style="margin-bottom:10px;">
                         <label for="seed_time_label">Seed Time Display</label>
@@ -392,7 +422,7 @@
                         <span>Show time decorations (underline/wavy for PR, standards, records)</span>
                     </div>
                     <div class="form-group">
-                        <button class="btn btn-default" type="submit">Update</button>
+                        <button class="btn btn-default autosave-hide" type="submit">Update</button>
                     </div>
                 </form>
             </div>
@@ -401,7 +431,7 @@
 
         <div class="settings-section" id="section-display-style">
             <h3>Display Style</h3>
-            <form action="/settings" method="POST">
+            <form action="/settings" method="POST" data-autosave="1">
                 <input type="hidden" name="ui_style_form" value="1">
                 <style>
                     .style-picker {
@@ -512,8 +542,7 @@
                         'tagline': 'Follows browser light/dark setting.'}
                     ] %}
                     <label>
-                        <input type="radio" name="ui_style" value="{{ opt.value }}" {% if _style==opt.value %}checked{% endif %}
-                            onchange="this.form.submit();">
+                        <input type="radio" name="ui_style" value="{{ opt.value }}" {% if _style==opt.value %}checked{% endif %}>
                         <span class="style-card">
                             <span class="style-preview">
                                 <img src="{{ url_for('static', filename='img/preview-' + opt.slug + '.png') }}"
@@ -880,7 +909,7 @@
                         color: #555;
                     }
                 </style>
-                    <form id="message_pages_form" action="/settings" method="POST">
+                    <form id="message_pages_form" action="/settings" method="POST" data-autosave="1">
                         <input type="hidden" name="message_pages_form" value="1">
                         <input type="hidden" name="page_count" id="page_count" value="{{ message_pages | length }}">
                         <div class="form-group" style="margin-bottom:10px;display:flex;align-items:center;gap:8px;">
@@ -1046,7 +1075,7 @@
                             {% endfor %}
                         </div>
                         <div class="form-group" style="margin-top:8px;">
-                            <button class="btn btn-default" type="submit">Update</button>
+                            <button class="btn btn-default autosave-hide" type="submit">Update</button>
                         </div>
                     </form>
                 <script src="/static/js/msg_formatting.js"></script>
@@ -1270,6 +1299,7 @@
                             '</div>';
                         container.appendChild(panel);
                         msgSelectTab(idx);
+                        if (window.SettingsAutosave) window.SettingsAutosave.save('message_pages_form');
                     };
                     window.msgRemovePage = function (idx) {
                         if (pageCount <= 1) return;
@@ -1348,6 +1378,7 @@
                         }
                         document.getElementById('msg_add_page').disabled = (pageCount >= 5);
                         msgSelectTab(Math.min(idx, pageCount - 1));
+                        if (window.SettingsAutosave) window.SettingsAutosave.save('message_pages_form');
                     }
                             }) ();
                 </script>
@@ -1832,7 +1863,7 @@
         <div class="section-hint">Clear team names to prevent showing scores for that team.</div>
         <div class="row">
             <div class="col-lg-6">
-                <form action="/settings" method="POST">
+                <form action="/settings" method="POST" data-autosave="1">
                     {% for team_key, team_label, team_val, tag_key, tag_val in [
                     ('team_home', 'Home', team_home, 'team_home_tag', team_home_tag),
                     ('team_guest1', 'Guest 1', team_guest1, 'team_guest1_tag', team_guest1_tag),
@@ -1846,11 +1877,11 @@
                         <input id="{{ tag_key }}" name="{{ tag_key }}" value="{{ tag_val }}" class="form-control"
                             maxlength="5" aria-label="Tag" placeholder="TEAM" style="width:8ch;">
                         <button class="team-clear-btn" type="button" title="Clear"
-                            onclick="document.getElementById('{{ team_key }}').value=''; document.getElementById('{{ tag_key }}').value='';">&times;</button>
+                            onclick="var n=document.getElementById('{{ team_key }}'),t=document.getElementById('{{ tag_key }}');n.value='';t.value='';n.dispatchEvent(new Event('input',{bubbles:true}));">&times;</button>
                     </div>
                     {% endfor %}
                     <div class="form-group" style="margin-top:10px;">
-                        <button class="btn btn-default" type="submit">Update</button>
+                        <button class="btn btn-default autosave-hide" type="submit">Update</button>
                     </div>
                 </form>
             </div>
@@ -1921,8 +1952,11 @@
                                 accept=".st2"></input>
                             <span class="input-group-btn">
                                 <button class="btn btn-default" type="submit" id="time_standards_submit">Upload</button>
-                                <button class="btn btn-default" type="button"
-                                    onclick="location.href = '/standards_clear';">Clear</button>
+                                <button class="btn btn-danger icon-btn" type="button"
+                                    title="Clear loaded time standards"
+                                    onclick="if(confirm('Clear loaded time standards?')) location.href='/standards_clear';">
+                                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2h6l1 1h3v2H1V3h3l1-1zm-2 4h10l-1 9H4L3 6z"/></svg>
+                                </button>
                             </span>
                         </div>
                     </div>
@@ -1933,7 +1967,7 @@
         {% if standards_loaded and std_tag_info %}
         <div class="row">
             <div class="col-lg-6">
-                <form action="/settings" method="POST" enctype="multipart/form-data">
+                <form action="/settings" method="POST" enctype="multipart/form-data" data-autosave="1">
                     <table style="width: auto; border-collapse: separate; border-spacing: 2ch 2px;">
                         <tr><th>Tag</th><th>Description</th><th></th></tr>
                         {% for info in std_tag_info %}
@@ -1946,13 +1980,16 @@
                                     class="form-control" style="width: 20ch; display: inline-block;">
                             </td>
                             <td>
-                                <button type="button" class="btn btn-default btn-xs"
-                                    onclick="var inp=this.closest('tr').querySelector('input');inp.value=inp.dataset.original;">Clear</button>
+                                <button type="button" class="btn btn-default icon-btn"
+                                    title="Reset to default"
+                                    onclick="var inp=this.closest('tr').querySelector('input');inp.value=inp.dataset.original;inp.dispatchEvent(new Event('input',{bubbles:true}));">
+                                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3a5 5 0 1 1-3.535 1.464L2.5 6.43V2h4.43L5.464 3.464A5 5 0 0 1 8 3z"/></svg>
+                                </button>
                             </td>
                         </tr>
                         {% endfor %}
                     </table>
-                    <button class="btn btn-default" type="submit" style="margin-top: 4px;">Save Descriptions</button>
+                    <button class="btn btn-default autosave-hide" type="submit" style="margin-top: 4px;">Save Descriptions</button>
                 </form>
             </div>
         </div>
@@ -1998,9 +2035,8 @@
                             <td style="padding-right: 2ch;">{{ rs.set_name or 'Unnamed' }}</td>
                             <td style="padding-right: 2ch;">{{ rs.filename }}</td>
                             <td style="padding-right: 2ch;">
-                                <form action="/settings" method="POST" style="display:inline;">
-                                    <select name="rec_team_{{ rs.set_id }}" class="form-control input-sm" style="width:auto;display:inline-block;"
-                                        onchange="this.form.submit();">
+                                <form action="/settings" method="POST" style="display:inline;" data-autosave="1">
+                                    <select name="rec_team_{{ rs.set_id }}" class="form-control input-sm" style="width:auto;display:inline-block;">
                                         {% for val, label in team_tag_options %}
                                         <option value="{{ val }}" {% if val == rs.team_tag %}selected{% endif %}>{{ label }}</option>
                                         {% endfor %}
@@ -2008,8 +2044,11 @@
                                 </form>
                             </td>
                             <td>
-                                <button class="btn btn-default btn-sm" type="button"
-                                    onclick="location.href = '/records_remove/{{ rs.set_id }}';">Remove</button>
+                                <button class="btn btn-danger icon-btn" type="button"
+                                    title="Remove this record set"
+                                    onclick="if(confirm('Remove this record set?')) location.href='/records_remove/{{ rs.set_id }}';">
+                                    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2h6l1 1h3v2H1V3h3l1-1zm-2 4h10l-1 9H4L3 6z"/></svg>
+                                </button>
                             </td>
                         </tr>
                         {% endfor %}
@@ -2053,7 +2092,7 @@
             </div>
         </div>
 
-        <form action="/settings" method="POST" style="margin-top: 10px;">
+        <form action="/settings" method="POST" style="margin-top: 10px;" data-autosave="1">
             <input type="hidden" name="ad_form" value="1">
             <div class="row">
                 <div class="col-lg-6">
@@ -2066,7 +2105,7 @@
                                 <option value="{{ sec }}" {% if ad_rotation_interval == sec %}selected{% endif %}>{{ sec }}s</option>
                                 {% endfor %}
                             </select>
-                            <button class="btn btn-default" type="submit">Save</button>
+                            <button class="btn btn-default autosave-hide" type="submit">Save</button>
                         </div>
                         <small class="text-muted">Rotation only runs when at least 2 images are enabled.</small>
                     </div>
@@ -2147,12 +2186,14 @@
                                 <td style="white-space:nowrap;">
                                     <button class="btn btn-default btn-sm ad-icon-btn" type="submit"
                                         name="ad_up_{{ loop.index0 }}" value="1"
+                                        data-autosave-reload="1"
                                         title="Move up"
                                         {% if loop.first %}disabled{% endif %}>
                                         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3l6 7H2z"/></svg>
                                     </button>
                                     <button class="btn btn-default btn-sm ad-icon-btn" type="submit"
                                         name="ad_down_{{ loop.index0 }}" value="1"
+                                        data-autosave-reload="1"
                                         title="Move down"
                                         {% if loop.last %}disabled{% endif %}>
                                         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13L2 6h12z"/></svg>
@@ -2161,6 +2202,7 @@
                                 <td class="ad-remove-cell">
                                     <button class="btn btn-danger btn-sm ad-icon-btn" type="submit"
                                         name="ad_remove_{{ loop.index0 }}" value="1"
+                                        data-autosave-reload="1"
                                         title="Remove">
                                         <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 2h6l1 1h3v2H1V3h3l1-1zm-2 4h10l-1 9H4L3 6z"/></svg>
                                     </button>
@@ -2312,12 +2354,11 @@
         <h3>Advanced Settings</h3>
         <div class="row">
             <div class="col-lg-6">
-                <form action="/settings" method="POST">
+                <form action="/settings" method="POST" data-autosave="1">
                     <div class="input-group">
                         <label for="serial_port">Serial Port</label>
                         <div class="input-group">
-                            <select id="serial_port" name="serial_port" class="form-control"
-                                oninput="document.getElementById('serial_port_submit').disabled=false;">
+                            <select id="serial_port" name="serial_port" class="form-control">
                                 {% for port, desc in serial_port_list %}
                                 {% if port == serial_port %}
                                 <option value="{{port}}" selected>{{desc}}</option>
@@ -2327,8 +2368,7 @@
                                 {% endfor %}
                             </select>
                             <span class="input-group-btn">
-                                <button class="btn btn-default" type="submit" id="serial_port_submit"
-                                    disabled>Update</button>
+                                <button class="btn btn-default autosave-hide" type="submit" id="serial_port_submit">Update</button>
                             </span>
                         </div>
                     </div>
@@ -3470,6 +3510,7 @@
         {% endif %}
     })();
     </script>
+    <script src="{{ url_for('static', filename='js/settings_autosave.js') }}"></script>
 </body>
 
 </html>
