@@ -105,27 +105,37 @@ step "Wire labwc autostart"
 LABWC_DIR="$HOME/.config/labwc"
 AUTOSTART="$LABWC_DIR/autostart"
 run "mkdir -p '$LABWC_DIR'"
-if [ ! -f "$AUTOSTART" ] && [ -f /etc/xdg/labwc/autostart ]; then
-    run "cp /etc/xdg/labwc/autostart '$AUTOSTART'"
-fi
+# NOTE: we deliberately do NOT copy /etc/xdg/labwc/autostart into the user's
+# home. On Raspberry Pi OS Bookworm that file launches wf-panel-pi and
+# pcmanfm-desktop; having both the system and a user copy results in two
+# panels / two desktops. labwc still executes the system autostart when no
+# user autostart exists, and on Pi's labwc build it also merges in the user
+# autostart for additions, so we only need to maintain our managed block.
 if (( DRY_RUN )); then
     log "[dry-run] would write managed block to $AUTOSTART"
 else
     touch "$AUTOSTART"
-    # Strip any prior managed block, then append the fresh one.
+    # Strip any prior managed block (and any lines the older installer
+    # copied verbatim from /etc/xdg/labwc/autostart, which is what caused
+    # the duplicate-panel bug), then append the fresh managed block.
     tmp="$(mktemp)"
     awk -v b="$MARKER_BEGIN" -v e="$MARKER_END" '
         $0==b {skip=1; next}
         $0==e {skip=0; next}
         !skip {print}
     ' "$AUTOSTART" > "$tmp"
+    # Drop any lines that look like they were seeded from the system file
+    # (wf-panel-pi, pcmanfm desktop, lxsession, kanshi, etc.). Keep blank
+    # lines and any other user customisations.
+    cleaned="$(mktemp)"
+    grep -Ev '(wf-panel-pi|pcmanfm.*--desktop|lxsession|lxpolkit|^kanshi( |$)|lwrespawn)' "$tmp" > "$cleaned" || true
     {
-        cat "$tmp"
+        cat "$cleaned"
         printf '%s\n' "$MARKER_BEGIN"
         sed "s|SCOREBOARD_REPO|$REPO_DIR|g" "$PI_DIR/labwc/autostart"
         printf '%s\n' "$MARKER_END"
     } > "$AUTOSTART"
-    rm -f "$tmp"
+    rm -f "$tmp" "$cleaned"
 fi
 
 # ---------------------------------------------------------------------------
