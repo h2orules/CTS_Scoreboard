@@ -304,6 +304,13 @@ body.hide-time-decorations .qt-highlight {
     max-width: 24ch;
 }
 
+/* No records loaded: standards-column owns the whole row, so the 24ch
+   cap (which exists to keep descriptions from crowding the records
+   column) just truncates needlessly. Let descriptions size to content. */
+.standards-records-container:not(:has(.records-column)) .qt_desc {
+    max-width: none;
+}
+
 .rec_time,
 .qt_time {
     text-align: right;
