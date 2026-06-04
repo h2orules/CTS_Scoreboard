@@ -69,7 +69,8 @@
     "show_time_decorations": false,
     "standards_filename": "Midlakes-KG-Invite.st2",
     "std_desc_overrides": {
-        "A": "Champs Qual"
+        "A": "Champs Qual",
+        "B": "B Time"
     },
     "team_guest1": "Gators",
     "team_guest1_tag": "KGG",
