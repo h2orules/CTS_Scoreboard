@@ -10,8 +10,10 @@
             "args": [],
             "console": "integratedTerminal",
             "justMyCode": false,
+            "subProcess": true,
             "env": {
-                "SCOREBOARD_MODE": "development"
+                "SCOREBOARD_MODE": "development",
+                "FLASK_DEBUG": "1"
             }
         },
         {
@@ -26,8 +28,10 @@
             ],
             "console": "integratedTerminal",
             "justMyCode": false,
+            "subProcess": true,
             "env": {
-                "SCOREBOARD_MODE": "development"
+                "SCOREBOARD_MODE": "development",
+                "FLASK_DEBUG": "1"
             }
         }
     ],
