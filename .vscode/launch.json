@@ -12,8 +12,7 @@
             "justMyCode": false,
             "subProcess": true,
             "env": {
-                "SCOREBOARD_MODE": "development",
-                "FLASK_DEBUG": "1"
+                "SCOREBOARD_MODE": "development"
             }
         },
         {
@@ -30,8 +29,7 @@
             "justMyCode": false,
             "subProcess": true,
             "env": {
-                "SCOREBOARD_MODE": "development",
-                "FLASK_DEBUG": "1"
+                "SCOREBOARD_MODE": "development"
             }
         }
     ],
