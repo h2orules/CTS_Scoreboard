@@ -10,7 +10,6 @@
             "args": [],
             "console": "integratedTerminal",
             "justMyCode": false,
-            "subProcess": true,
             "env": {
                 "SCOREBOARD_MODE": "development"
             }
@@ -27,7 +26,6 @@
             ],
             "console": "integratedTerminal",
             "justMyCode": false,
-            "subProcess": true,
             "env": {
                 "SCOREBOARD_MODE": "development"
             }
