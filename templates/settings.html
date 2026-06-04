@@ -468,18 +468,13 @@
                         transform: translateY(1px);
                     }
 
-                    .style-picker input[type="radio"]:checked+.style-card {
+                    .style-picker label:has(input[type="radio"]:checked) {
                         border-color: #2f7ab8;
                         box-shadow: 0 0 0 3px rgba(47, 122, 184, 0.25);
                     }
 
                     .style-card {
                         display: block;
-                        border-radius: 6px;
-                        margin: -8px;
-                        padding: 8px;
-                        border: 2px solid transparent;
-                        transition: border-color 0.15s ease, box-shadow 0.15s ease;
                     }
 
                     .style-card .style-preview {
