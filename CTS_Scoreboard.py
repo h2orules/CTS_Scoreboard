@@ -2312,7 +2312,16 @@ def main():
         if not out_file and settings.get("cts_log_file"):
             out_file = settings["cts_log_file"]
         ap.c()
-        socketio.run(app, host="0.0.0.0")
+        # Auto-reload on source change when launched under VS Code / dev mode.
+        # FLASK_DEBUG=1 is the conventional opt-in; SCOREBOARD_MODE=development
+        # implies it too. Reloader is off in production (gunicorn) regardless.
+        dev = is_dev_mode() or os.environ.get("FLASK_DEBUG", "") in ("1", "true", "True")
+        socketio.run(
+            app,
+            host="0.0.0.0",
+            debug=dev,
+            use_reloader=dev,
+        )
     except:
         traceback.print_exc()
     finally:

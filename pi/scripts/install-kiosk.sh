@@ -101,6 +101,41 @@ if (( DO_LINGER )); then
 fi
 
 # ---------------------------------------------------------------------------
+step "Install sb-* shell aliases for managing the service"
+# Convenience aliases for stopping the production server while debugging
+# from VS Code, then restarting it. Written as a managed block in
+# ~/.bashrc so re-running the installer keeps them in sync.
+BASHRC="$HOME/.bashrc"
+if (( DRY_RUN )); then
+    log "[dry-run] would write managed sb-* alias block to $BASHRC"
+else
+    touch "$BASHRC"
+    tmp="$(mktemp)"
+    awk -v b="$MARKER_BEGIN" -v e="$MARKER_END" '
+        $0==b {skip=1; next}
+        $0==e {skip=0; next}
+        !skip {print}
+    ' "$BASHRC" > "$tmp"
+    {
+        cat "$tmp"
+        printf '%s\n' "$MARKER_BEGIN"
+        cat <<'ALIASEOF'
+# Manage the cts-scoreboard --user service (stop for VS Code debugging, etc.)
+alias sb-stop='systemctl --user stop cts-scoreboard.service'
+alias sb-start='systemctl --user start cts-scoreboard.service'
+alias sb-enable='systemctl --user enable --now cts-scoreboard.service'
+alias sb-disable='systemctl --user disable --now cts-scoreboard.service'
+alias sb-status='systemctl --user status cts-scoreboard.service'
+alias sb-log='journalctl --user -u cts-scoreboard.service -f'
+ALIASEOF
+        printf '%s\n' "$MARKER_END"
+    } > "$BASHRC"
+    rm -f "$tmp"
+    log "sb-stop / sb-start / sb-enable / sb-disable / sb-status / sb-log installed."
+    log "Open a new shell or run 'source ~/.bashrc' to pick them up."
+fi
+
+# ---------------------------------------------------------------------------
 step "Wire labwc autostart"
 LABWC_DIR="$HOME/.config/labwc"
 AUTOSTART="$LABWC_DIR/autostart"
@@ -364,6 +399,8 @@ step "Done"
 cat <<EOF
 
   Server:   systemctl --user status cts-scoreboard
+  Aliases:  sb-stop / sb-start / sb-enable / sb-disable / sb-status / sb-log
+            (open a new shell or 'source ~/.bashrc' to use them)
   URL:      http://localhost:5000/web/home
   Re-enter kiosk: double-click "CTS Scoreboard Kiosk" on the desktop,
                   or press Ctrl+Alt+R, or run pi/scripts/cts-kiosk.sh.
