@@ -978,10 +978,12 @@ table.scoreboard_table td[id^="lane_place"] {
         font-size: 0;
         padding-right: 6px;
     }
-    table.scoreboard_table td:last-child > span {
+
+    table.scoreboard_table td:last-child>span {
         font-size: min(24px, 3.5vw);
     }
-    table.scoreboard_table td:last-child > .lane_qt_tag {
+
+    table.scoreboard_table td:last-child>.lane_qt_tag {
         font-size: calc(min(24px, 3.5vw) * 0.75);
     }
 
