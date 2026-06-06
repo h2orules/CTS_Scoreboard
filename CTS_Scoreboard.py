@@ -2312,6 +2312,7 @@ def main():
         if not out_file and settings.get("cts_log_file"):
             out_file = settings["cts_log_file"]
         ap.c()
+
         socketio.run(app, host="0.0.0.0")
     except:
         traceback.print_exc()
