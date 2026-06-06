@@ -874,6 +874,14 @@ table.scoreboard_table td[id^="lane_place"] {
         min-width: 0;
     }
 
+    /* On mobile, stretch the table stack to fill the group so the
+       scoreboard table aligns with the meet-title strip above it.
+       (Desktop uses inline-grid centered by text-align.) */
+    .scoreboard-stack {
+        display: grid;
+        width: 100%;
+    }
+
     .content_title_block {
         min-width: 0;
         width: 100%;
@@ -885,10 +893,19 @@ table.scoreboard_table td[id^="lane_place"] {
 
     .content_scoreboard_table {
         width: 100%;
+        /* As a flex item inside .scoreboard_group, default min-width: auto
+           prevents shrinking below the table's intrinsic min-content width;
+           the qualifying-times / records row can be wider than the phone
+           viewport and push the table past the header's right edge.
+           min-width: 0 lets it shrink to its flex slot. */
+        min-width: 0;
+        max-width: 100%;
+        overflow: hidden;
     }
 
     .scoreboard_table {
         width: 100%;
+        max-width: 100%;
         table-layout: auto;
     }
 
@@ -950,9 +967,22 @@ table.scoreboard_table td[id^="lane_place"] {
         padding: 0 4px;
     }
 
-    /* Time data cell: auto-sized, nowrap */
+    /* Time data cell: auto-sized, nowrap. Zero the cell's own font so
+       the trailing whitespace text node (template uses a literal
+       &nbsp; for right-edge padding) collapses; restore font on the
+       data spans and use an explicit padding-right for breathing room.
+       The .lane_qt_tag min-width: 6ch reservation still fits "AA REC"
+       or "AA PR" indicators. */
     table.scoreboard_table td:last-child {
         white-space: nowrap;
+        font-size: 0;
+        padding-right: 6px;
+    }
+    table.scoreboard_table td:last-child > span {
+        font-size: min(24px, 3.5vw);
+    }
+    table.scoreboard_table td:last-child > .lane_qt_tag {
+        font-size: calc(min(24px, 3.5vw) * 0.75);
     }
 
     .scoreboard_title {
@@ -1104,10 +1134,16 @@ table.scoreboard_table td[id^="lane_place"] {
     }
 
     /* Footer message: shrink the type slightly and keep some breathing
-       room around the edges on small screens. */
+       room around the edges on small screens. Wrap (overriding the
+       table-wide nowrap above) so long notes stay inside the table. */
     .scoreboard_footer_cell {
         font-size: 3vw !important;
         padding: 8px 10px;
+        white-space: normal !important;
+    }
+
+    .scoreboard-footer-message {
+        white-space: normal;
     }
 }
 
