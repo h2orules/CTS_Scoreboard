@@ -72,9 +72,11 @@ persisted). `device_hash` is `sha256(salt|ip|ua)[:16]`; no PII is stored.
    existing infra workbook from DASHBOARD.md).
 2. **Add → Add query**, paste a KQL block below, set the visualization as
    noted in the heading, and click **Done editing**.
-3. For the per-meet panels, first add a **Parameters** step (Text parameters
-   for `meet_id` and `pi_local_date`) so the queries can reference
-   `{meet_id}` and `{pi_local_date}`.
+3. For the per-meet panels, first add a **Parameters** step with the
+   meet-picker dropdowns described under
+   [Meet-picker dropdown parameters](#meet-picker-dropdown-parameters), so
+   the queries can reference `{meet_id}` and `{pi_local_date}` without
+   hand-typing either value.
 4. Set the Workbook **Time Range** to cover the meet you want to inspect
    (e.g. Last 24 hours). This is the most common cause of a per-meet query
    returning 0 rows: the `pi_local_date` filter only narrows *within* the
@@ -154,9 +156,69 @@ traces
 
 ## Per-meet panels
 
-These panels require `meet_id` and `pi_local_date` parameters. In a
-Workbook, add two **Text** parameters bound to those names; in the queries
-below the Workbook substitutes `{meet_id}` and `{pi_local_date}`.
+These panels require `meet_id` and `pi_local_date` parameters; the Workbook
+substitutes `{meet_id}` and `{pi_local_date}` in the queries below. Set
+them up as query-backed dropdowns (next section) rather than Text
+parameters — typing either value by hand is the easiest way to end up with
+0 rows (typo, case mismatch, or a date with no telemetry).
+
+### Meet-picker dropdown parameters
+
+Two cascading dropdowns: pick the meet day first, then the meet on that
+day. Because the second query references `{pi_local_date}`, the meet list
+re-filters automatically when the date changes, and the panel queries below
+work unchanged.
+
+1. **Add → Add parameters** (or edit the existing Parameters step), then
+   **Add Parameter** with:
+   - **Parameter name:** `pi_local_date`
+   - **Parameter type:** *Drop down*
+   - **Required:** checked
+   - **Get data from:** *Query*, with this KQL:
+
+   ```kusto
+   traces
+   | where customDimensions has 'viewer_event'
+   | extend pi_local_date = tostring(customDimensions.pi_local_date)
+   | where isnotempty(pi_local_date)
+   | summarize by pi_local_date
+   | order by pi_local_date desc
+   ```
+
+   In the parameter's **Time Range** setting, pick a fixed long window
+   (e.g. *Last 90 days*) instead of inheriting the workbook time range —
+   otherwise old meets never show up in the dropdown, which is the same
+   0-rows trap described above.
+
+2. **Add Parameter** again for the meet:
+   - **Parameter name:** `meet_id`
+   - **Parameter type:** *Drop down*
+   - **Required:** checked
+   - **Get data from:** *Query*, with this KQL (note it references the
+     first parameter, which is what makes the dropdowns cascade):
+
+   ```kusto
+   traces
+   | where customDimensions has 'viewer_event'
+   | extend meet_id       = tostring(customDimensions.meet_id),
+            pi_local_date = tostring(customDimensions.pi_local_date)
+   | where pi_local_date == '{pi_local_date}' and isnotempty(meet_id)
+   | summarize events = count() by meet_id
+   | order by events desc
+   | project value = meet_id,
+             label = strcat(meet_id, ' (', tostring(events), ' events)')
+   ```
+
+   Workbook dropdowns use the `value` column as the substituted parameter
+   value and `label` as the display text, so `{meet_id}` resolves to the
+   bare meet ID while the dropdown shows the event count alongside it. Set
+   this parameter's **Time Range** to the same long window as the first.
+
+3. Click **Done editing** on the Parameters step. The per-meet panels
+   below will refresh whenever either dropdown changes. (The notebook
+   equivalent is `meet_dropdown()` in
+   `notebooks/_lib/engagement_query.py`, which combines both picks into a
+   single list.)
 
 ### 4. Session summary (stat tiles)
 
