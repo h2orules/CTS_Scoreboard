@@ -30,13 +30,21 @@ traces
          age_group       = tostring(customDimensions.age_group),
          gender          = tostring(customDimensions.gender),
          relay           = tobool(customDimensions.relay),
+         mb_active       = tobool(customDimensions.active),
+         mb_page_index   = toint(customDimensions.page_index),
          tenure_ms       = tolong(customDimensions.tenure_ms),
          lcp_ms          = tolong(customDimensions.lcp_ms),
          effective_type  = tostring(customDimensions.effective_type)
 ```
 
 `ev` values: `viewer_page_load`, `viewer_heartbeat`, `viewer_event_view`,
-`viewer_hidden`, `viewer_visible`, `viewer_unload`.
+`viewer_message_board_view`, `viewer_hidden`, `viewer_visible`,
+`viewer_unload`.
+
+`viewer_message_board_view` fires when the message board overlay turns
+on/off or rotates pages; `mb_active` / `mb_page_index` are only set on
+those rows. It attributes viewing time on the board separately from the
+last race shown.
 
 **Session stitching** uses a 5-minute gap rule: successive rows for the same
 `(viewer_id)` more than 300 seconds apart start a new session. This KQL
@@ -68,7 +76,10 @@ persisted). `device_hash` is `sha256(salt|ip|ua)[:16]`; no PII is stored.
    for `meet_id` and `pi_local_date`) so the queries can reference
    `{meet_id}` and `{pi_local_date}`.
 4. Set the Workbook **Time Range** to cover the meet you want to inspect
-   (e.g. Last 24 hours).
+   (e.g. Last 24 hours). This is the most common cause of a per-meet query
+   returning 0 rows: the `pi_local_date` filter only narrows *within* the
+   time range — it does not extend it — so a meet older than the selected
+   range matches nothing.
 
 ---
 
@@ -90,6 +101,7 @@ traces
          pi_local_date = tostring(customDimensions.pi_local_date),
          viewer_id     = tostring(customDimensions.viewer_id),
          device_hash   = tostring(customDimensions.device_hash),
+         mb_active     = tobool(customDimensions.active),
          lcp_ms        = tolong(customDimensions.lcp_ms)
 | where isnotempty(meet_id) and isnotempty(pi_local_date)
 | summarize
@@ -98,6 +110,7 @@ traces
     page_loads      = countif(ev == 'viewer_page_load'),
     heartbeats      = countif(ev == 'viewer_heartbeat'),
     event_views     = countif(ev == 'viewer_event_view'),
+    message_board_views = countif(ev == 'viewer_message_board_view' and mb_active == true),
     median_lcp_ms   = percentile(lcp_ms, 50),
     p90_lcp_ms      = percentile(lcp_ms, 90)
   by meet_id, pi_local_date
@@ -157,7 +170,7 @@ traces
          meet_id     = tostring(customDimensions.meet_id),
          pi_date     = tostring(customDimensions.pi_local_date),
          viewer_id   = tostring(customDimensions.viewer_id)
-| where meet_id == '{meet_id}' and pi_date == '{pi_local_date}'
+| where meet_id =~ '{meet_id}' and pi_date == '{pi_local_date}'
 | sort by viewer_id asc, timestamp asc
 | serialize
 | extend prev_ts     = prev(timestamp), prev_viewer = prev(viewer_id)
@@ -185,7 +198,7 @@ traces
          meet_id   = tostring(customDimensions.meet_id),
          pi_date   = tostring(customDimensions.pi_local_date),
          viewer_id = tostring(customDimensions.viewer_id)
-| where meet_id == '{meet_id}' and pi_date == '{pi_local_date}'
+| where meet_id =~ '{meet_id}' and pi_date == '{pi_local_date}'
 | where ev == 'viewer_heartbeat'
 | summarize concurrent = dcount(viewer_id) by bin(timestamp, 1m)
 | render timechart
@@ -206,7 +219,7 @@ traces
          stroke_name = tostring(customDimensions.stroke_name),
          age_group   = tostring(customDimensions.age_group),
          gender      = tostring(customDimensions.gender)
-| where meet_id == '{meet_id}' and pi_date == '{pi_local_date}'
+| where meet_id =~ '{meet_id}' and pi_date == '{pi_local_date}'
 | where ev == 'viewer_event_view'
 | summarize unique_viewers = dcount(viewer_id),
             total_views    = count()
@@ -231,7 +244,7 @@ traces
          age_group   = tostring(customDimensions.age_group),
          gender      = tostring(customDimensions.gender),
          relay       = tobool(customDimensions.relay)
-| where meet_id == '{meet_id}' and pi_date == '{pi_local_date}'
+| where meet_id =~ '{meet_id}' and pi_date == '{pi_local_date}'
 | where ev == 'viewer_event_view'
 | summarize unique_viewers = dcount(viewer_id),
             total_views    = count()
@@ -278,7 +291,7 @@ traces
          pi_date        = tostring(customDimensions.pi_local_date),
          lcp_ms         = tolong(customDimensions.lcp_ms),
          effective_type = tostring(customDimensions.effective_type)
-| where meet_id == '{meet_id}' and pi_date == '{pi_local_date}'
+| where meet_id =~ '{meet_id}' and pi_date == '{pi_local_date}'
 | where ev in ('viewer_hidden', 'viewer_unload') and lcp_ms > 0
 | summarize page_loads   = count(),
             median_lcp   = percentile(lcp_ms, 50),

@@ -18,9 +18,14 @@ The workspace GUID is on the Log Analytics resource > Properties >
 
 ## Notebooks
 
-- `per_meet.ipynb` — drill into a single `(meet_id, pi_local_date)`: viewing
+- `per_meet.ipynb` — drill into a single `(meet_id, pi_local_date)`,
+  selected from a dropdown of meets discovered in telemetry: viewing
   sessions stitched with the shared 5-minute gap rule, drop-off curve by
-  event type, concurrent-viewer peak, LCP / connection-type histograms.
+  event type, concurrent-viewer peak, message-board engagement, LCP /
+  connection-type histograms. The query window is derived from the meet's
+  own date (`timespan_for_meet_day`), so meets older than any relative
+  lookback still return data, and the meet ID is matched
+  case-insensitively.
 - `cross_meet.ipynb` — rollup across all meets in the last N days: unique
   viewers per meet, page-load count, LCP p50/p90, sortable table.
 
