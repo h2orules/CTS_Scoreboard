@@ -1,0 +1,36 @@
+{
+    // Dev container for GitHub Codespaces and the VS Code Dev Containers
+    // extension. Focused on the Azure relay + engagement notebooks: the
+    // Pi-side scoreboard app has hardware deps and is best run on a Pi.
+    "name": "CTS Scoreboard (Azure relay + notebooks)",
+    "image": "mcr.microsoft.com/devcontainers/python:3.12",
+    "features": {
+        // `az login --use-device-code` is how DefaultAzureCredential gets a
+        // token for Log Analytics inside the container.
+        "ghcr.io/devcontainers/features/azure-cli:1": {}
+    },
+    "postCreateCommand": "pip install --upgrade pip && pip install -e './azure[dev,notebooks]'",
+    // Codespaces prompts for these on creation (Settings > Codespaces >
+    // Secrets) and injects them as environment variables, so
+    // workspace_id_from_env() works without any in-notebook setup.
+    "secrets": {
+        "AZURE_LOG_ANALYTICS_WORKSPACE_ID": {
+            "description": "Log Analytics workspace GUID for the engagement notebooks (Azure Portal > Log Analytics > Properties > Workspace ID). Optional: you can also `export` it in the terminal."
+        }
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-python.python",
+                "ms-python.vscode-pylance",
+                "ms-toolsai.jupyter",
+                "charliermarsh.ruff"
+            ],
+            "settings": {
+                // Run notebook kernels with CWD = the notebook's folder so
+                // relative paths behave like `jupyter lab notebooks/`.
+                "jupyter.notebookFileRoot": "${fileDirname}"
+            }
+        }
+    }
+}
