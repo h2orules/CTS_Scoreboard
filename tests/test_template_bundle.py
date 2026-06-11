@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import shutil
+from urllib.parse import urlparse
 
 import pytest
 
@@ -121,7 +122,10 @@ def test_bundle_against_real_repo_home_template():
     assert b.bundle_id
     assert "<html" in b.template_text.lower()
     # It references socket.io.4.8.3.min.js as a static file.
-    assert any("socket.io" in p for p in b.static_files)
+    assert any(
+        urlparse(p).path.rsplit("/", 1)[-1] == "socket.io.4.8.3.min.js"
+        for p in b.static_files
+    )
 
 
 def test_bundle_includes_extra_static(fake_tree):
