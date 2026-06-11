@@ -49,7 +49,7 @@ jobs:
       ALERT_SMS_COUNTRY_CODE: ${{ secrets.ALERT_SMS_COUNTRY_CODE }}
       ALERT_SMS_PHONE: ${{ secrets.ALERT_SMS_PHONE }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
 
       - name: Resolve target resource group + Container App name
         id: target
@@ -63,7 +63,7 @@ jobs:
           fi
 
       - name: Azure login (OIDC)
-        uses: azure/login@v3
+        uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43  # v3
         with:
           client-id: ${{ env.AZURE_CLIENT_ID }}
           tenant-id: ${{ env.AZURE_TENANT_ID }}
