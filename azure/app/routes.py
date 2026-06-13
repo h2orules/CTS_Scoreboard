@@ -195,6 +195,8 @@ def _inject_engagement(html: str, *, meet_id: str, pi_local_date: str, device_ha
         .replace("&", "\\u0026")
         .replace("\u2028", "\\u2028")
         .replace("\u2029", "\\u2029")
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
     )
     snippet = (
         "<script>window.__ENGAGEMENT="
