@@ -3,14 +3,19 @@ from pathlib import Path
 
 
 @pytest.fixture(autouse=True)
-def _isolate_settings_file(tmp_path_factory, monkeypatch):
-    """Redirect ``CTS_Scoreboard.settings_file`` to a per-session tmp path
-    so tests that call ``save_settings()`` (directly or via the /settings
-    route) don't churn the repo-tracked ``settings.json``."""
+def _isolate_settings_files(tmp_path_factory, monkeypatch):
+    """Redirect ``CTS_Scoreboard.settings_file`` and
+    ``credentials_store.credentials_file`` to per-session tmp paths so tests
+    that call ``save_settings()`` or change credentials (directly or via the
+    /settings route) don't churn the repo-tracked ``settings.json`` or leave
+    a stray ``credentials.json`` behind."""
+    import credentials_store
     import CTS_Scoreboard as cts
 
-    tmp = tmp_path_factory.mktemp("settings") / "settings.json"
-    monkeypatch.setattr(cts, "settings_file", str(tmp))
+    tmp_dir = tmp_path_factory.mktemp("settings")
+    monkeypatch.setattr(cts, "settings_file", str(tmp_dir / "settings.json"))
+    monkeypatch.setattr(
+        credentials_store, "credentials_file", str(tmp_dir / "credentials.json"))
     yield
 
 

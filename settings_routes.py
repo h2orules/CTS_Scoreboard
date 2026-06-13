@@ -16,6 +16,7 @@ import re
 import serial
 import serial.tools.list_ports
 
+import credentials_store
 import wifi_manager
 import ad_image
 from hytek_st2_parser import parse_st2_file
@@ -332,6 +333,21 @@ def register(flask_app, app_module):
                     if settings.get(tag_key) != tag_val:
                         settings[tag_key] = tag_val
                         modified = True
+
+            # --- Web login credentials (separate hashed store) ----------------
+            # The username form posts only `username`; the password form posts
+            # `password` + `password2`. Neither is a settings key, so the
+            # generic loop below never sees them, and neither change touches
+            # settings.json or triggers a settings broadcast.
+
+            if 'password' in flask.request.form:
+                new_pw = flask.request.form.get('password', '')
+                if new_pw and new_pw == flask.request.form.get('password2', ''):
+                    credentials_store.set_password(new_pw)
+            elif 'username' in flask.request.form:
+                new_user = flask.request.form.get('username', '').strip()
+                if new_user and new_user != credentials_store.get_username():
+                    credentials_store.set_username(new_user)
 
             # --- General settings keys from form -----------------------------
 
@@ -658,7 +674,7 @@ def register(flask_app, app_module):
                     meet_title=settings['meet_title'],
                     serial_port=settings['serial_port'],
                     serial_port_list=comm_port_list,
-                    user_name=settings['username'],
+                    user_name=credentials_store.get_username(),
                     ad_images=ad_images,
                     ad_rotation_interval=settings.get('ad_rotation_interval', 30),
                     ad_max_dimension=int(settings.get('ad_max_dimension', 1920) or 1920),
@@ -1138,8 +1154,9 @@ def register(flask_app, app_module):
     @flask_app.route("/login", methods=["GET", "POST"])
     def route_login():
         if flask.request.method == 'POST':
-            if ((flask.request.form['username'] == _app.settings['username']) and
-                (flask.request.form['password'] == _app.settings['password'])):
+            if credentials_store.verify_login(
+                    flask.request.form.get('username', ''),
+                    flask.request.form.get('password', '')):
                 user = _app.User(0)
                 flask_login.login_user(user)
                 return flask.redirect(flask.request.args.get("next"))

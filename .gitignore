@@ -9,6 +9,8 @@ node_modules/
 # Azure relay credentials (contains OAuth refresh tokens) — never commit
 azure_credentials.json
 azure_session.json
+# Web-login credentials (username + salted PBKDF2 password hash) — never commit
+credentials.json
 # Azure relay configuration (per-deployment tenant/URL values, not secret
 # but environment-specific and operator-supplied via the Settings UI).
 azure_settings.json

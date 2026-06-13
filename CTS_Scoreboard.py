@@ -19,6 +19,7 @@ import serial.tools.list_ports
 from hytek_parser.hy3.enums import GenderAge
 
 import ap
+import credentials_store
 import settings_routes
 import sim
 from azure_relay import AzureRelayClient
@@ -68,8 +69,6 @@ def is_dev_mode():
 settings = {
     "meet_title": "",
     "serial_port": "COM1",
-    "username": "admin",
-    "password": "password",
     # Path to a file that will receive a timestamped log of every CTS serial
     # frame (raw hex + parsed annotation). Empty disables logging. The
     # command-line --out flag overrides this. The file format is the same
@@ -392,6 +391,24 @@ def load_settings():
                 json.dump(cleaned, f, sort_keys=True, indent=4)
         except Exception:
             pass
+    # If settings.json still carries plaintext login credentials (pre-split
+    # installs), hash them into credentials.json and strip from settings.json.
+    if "username" in _raw_settings_on_disk or "password" in _raw_settings_on_disk:
+        if credentials_store.load_store() is None:
+            try:
+                credentials_store.save_credentials(
+                    _raw_settings_on_disk.get(
+                        "username", credentials_store.DEFAULT_USERNAME),
+                    _raw_settings_on_disk.get(
+                        "password", credentials_store.DEFAULT_PASSWORD))
+            except Exception:
+                pass
+        settings.pop("username", None)
+        settings.pop("password", None)
+        try:
+            save_settings()
+        except Exception:
+            pass
 
 
 def save_azure_settings():
@@ -683,8 +700,7 @@ login_manager.login_view = "route_login"
 class User(flask_login.UserMixin):
     def __init__(self, id):
         self.id = id
-        self.name = settings["username"]
-        self.password = settings["password"]
+        self.name = credentials_store.get_username()
 
     def __repr__(self):
         return "%d/%s" % (self.id, self.name)
