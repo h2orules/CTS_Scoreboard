@@ -1237,7 +1237,26 @@
                         tab.innerHTML = '<span class="msg-tab-label">Page ' + (idx + 1) + '</span><button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage(' + idx + ')" title="Remove page">&times;</button>';
                         tab.onclick = function () { msgSelectTab(idx); };
                         // Show close buttons on all tabs now that there are multiple
-                        document.querySelectorAll('.msg-tab').forEach(function (t) { if (!t.querySelector('.msg-tab-close')) { t.innerHTML = '<span class="msg-tab-label">' + t.textContent + '</span><button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage(' + t.getAttribute('data-idx') + ')" title="Remove page">&times;</button>'; } });
+                        document.querySelectorAll('.msg-tab').forEach(function (t) {
+                            if (!t.querySelector('.msg-tab-close')) {
+                                var labelText = t.textContent;
+                                while (t.firstChild) t.removeChild(t.firstChild);
+                                var labelSpan = document.createElement('span');
+                                labelSpan.className = 'msg-tab-label';
+                                labelSpan.textContent = labelText;
+                                var closeBtn = document.createElement('button');
+                                closeBtn.type = 'button';
+                                closeBtn.className = 'msg-tab-close';
+                                closeBtn.title = 'Remove page';
+                                closeBtn.innerHTML = '&times;';
+                                closeBtn.addEventListener('click', function (event) {
+                                    event.stopPropagation();
+                                    msgRemovePage(parseInt(t.getAttribute('data-idx')));
+                                });
+                                t.appendChild(labelSpan);
+                                t.appendChild(closeBtn);
+                            }
+                        });
                         tabBar.insertBefore(tab, addBtn);
                         if (pageCount >= 5) addBtn.disabled = true;
                         // Add panel
