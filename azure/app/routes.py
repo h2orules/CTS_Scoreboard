@@ -17,6 +17,7 @@ import time
 from collections.abc import Callable
 from html import escape
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import APIRouter, Header, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
@@ -180,11 +181,12 @@ def _inject_engagement(html: str, *, meet_id: str, pi_local_date: str, device_ha
     immediately before ``</head>``. No-op if the page has no ``</head>``
     (e.g. a state page); the engagement.js script self-disables when
     ``window.__ENGAGEMENT`` is undefined."""
+    safe_meet_id = quote(meet_id, safe="")
     payload = {
         "meet_id": meet_id,
         "pi_local_date": pi_local_date,
         "device_hash": device_hash,
-        "telemetry_endpoint": f"/m/{meet_id}/api/telemetry",
+        "telemetry_endpoint": f"/m/{safe_meet_id}/api/telemetry",
     }
     bootstrap_json = json.dumps(payload, separators=(",", ":"))
     bootstrap_json = (
