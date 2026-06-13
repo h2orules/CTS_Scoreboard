@@ -944,8 +944,9 @@ def register(flask_app, app_module):
             flow = _app.azure_relay_client.request_login(
                 tenant_id=tenant_id, client_id=client_id, audience=audience,
             )
-        except Exception as e:
-            return flask.jsonify({'error': str(e)}), 500
+        except Exception:
+            logging.exception("Failed to initiate Entra device-code flow")
+            return flask.jsonify({'error': 'Failed to start Azure login flow'}), 500
         # Persist the issuer details so future sign-ins prefill them.
         _app.settings['azure_tenant_id'] = tenant_id
         _app.settings['azure_client_id'] = client_id
