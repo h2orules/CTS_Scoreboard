@@ -1223,6 +1223,27 @@
                             if (panel) panel.hidden = (i !== idx);
                         }
                     };
+                    // Build a tab's contents (label + optional close button) using DOM
+                    // APIs so text is never reinterpreted as HTML.
+                    function msgBuildTab(t, idx, withClose) {
+                        while (t.firstChild) t.removeChild(t.firstChild);
+                        var label = document.createElement('span');
+                        label.className = 'msg-tab-label';
+                        label.textContent = 'Page ' + (idx + 1);
+                        t.appendChild(label);
+                        if (withClose) {
+                            var closeBtn = document.createElement('button');
+                            closeBtn.type = 'button';
+                            closeBtn.className = 'msg-tab-close';
+                            closeBtn.title = 'Remove page';
+                            closeBtn.textContent = '\u00D7';
+                            closeBtn.addEventListener('click', function (event) {
+                                event.stopPropagation();
+                                msgRemovePage(idx);
+                            });
+                            t.appendChild(closeBtn);
+                        }
+                    }
                     window.msgAddPage = function () {
                         if (pageCount >= 5) return;
                         var idx = pageCount;
@@ -1234,10 +1255,14 @@
                         var tab = document.createElement('span');
                         tab.className = 'msg-tab';
                         tab.setAttribute('data-idx', idx);
-                        tab.innerHTML = '<span class="msg-tab-label">Page ' + (idx + 1) + '</span><button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage(' + idx + ')" title="Remove page">&times;</button>';
+                        msgBuildTab(tab, idx, true);
                         tab.onclick = function () { msgSelectTab(idx); };
                         // Show close buttons on all tabs now that there are multiple
-                        document.querySelectorAll('.msg-tab').forEach(function (t) { if (!t.querySelector('.msg-tab-close')) { t.innerHTML = '<span class="msg-tab-label">' + t.textContent + '</span><button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage(' + t.getAttribute('data-idx') + ')" title="Remove page">&times;</button>'; } });
+                        document.querySelectorAll('.msg-tab').forEach(function (t) {
+                            if (!t.querySelector('.msg-tab-close')) {
+                                msgBuildTab(t, parseInt(t.getAttribute('data-idx')), true);
+                            }
+                        });
                         tabBar.insertBefore(tab, addBtn);
                         if (pageCount >= 5) addBtn.disabled = true;
                         // Add panel
@@ -1328,8 +1353,7 @@
                         var panels = document.querySelectorAll('.msg-page-panel');
                         for (var i = 0; i < tabs.length; i++) {
                             tabs[i].setAttribute('data-idx', i);
-                            var closeHtml = pageCount > 1 ? '<button type="button" class="msg-tab-close" onclick="event.stopPropagation();msgRemovePage(' + i + ')" title="Remove page">&times;</button>' : '';
-                            tabs[i].innerHTML = '<span class="msg-tab-label">Page ' + (i + 1) + '</span>' + closeHtml;
+                            msgBuildTab(tabs[i], i, pageCount > 1);
                             tabs[i].onclick = (function (n) { return function () { msgSelectTab(n); }; })(i);
                         }
                         for (var i = 0; i < panels.length; i++) {
