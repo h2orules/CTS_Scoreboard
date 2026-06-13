@@ -186,9 +186,17 @@ def _inject_engagement(html: str, *, meet_id: str, pi_local_date: str, device_ha
         "device_hash": device_hash,
         "telemetry_endpoint": f"/m/{meet_id}/api/telemetry",
     }
+    bootstrap_json = json.dumps(payload, separators=(",", ":"))
+    bootstrap_json = (
+        bootstrap_json.replace("<", "\\u003c")
+        .replace(">", "\\u003e")
+        .replace("&", "\\u0026")
+        .replace("\u2028", "\\u2028")
+        .replace("\u2029", "\\u2029")
+    )
     snippet = (
         "<script>window.__ENGAGEMENT="
-        + json.dumps(payload, separators=(",", ":"))
+        + bootstrap_json
         + ";</script>"
         + '<script src="/static/js/engagement.js" defer></script>'
     )
