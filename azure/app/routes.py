@@ -420,9 +420,10 @@ def build_router(
         # owns the App Insights credential.
         settings = get_settings()
         device_hash = _compute_device_hash(request, settings.azure_telemetry_salt)
+        safe_meet_id = escape(meet_id)
         html = _inject_engagement(
             html,
-            meet_id=meet_id,
+            meet_id=safe_meet_id,
             pi_local_date=str(meta.get("pi_local_date") or ""),
             device_hash=device_hash,
         )
