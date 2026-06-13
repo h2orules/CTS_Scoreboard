@@ -395,7 +395,7 @@ def build_router(
 
         try:
             html = render_meet_page(meet_id=meet_id, bundle=bundle, context=context)
-        except Exception as exc:  # pragma: no cover - render errors are caught for safety
+        except Exception:  # pragma: no cover - render errors are caught for safety
             log.exception("Failed to render meet template for meet_id=%s", meet_id)
             return _state_page(
                 title="Render error",
