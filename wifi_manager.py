@@ -5,6 +5,29 @@ import subprocess
 import time
 
 
+def _is_safe_nmcli_value(value):
+    """Return True if *value* is safe to pass as an nmcli argument value."""
+    if not isinstance(value, str):
+        return False
+    if not value:
+        return False
+    # Prevent option-style injection and control-character parsing issues.
+    if value.startswith('-'):
+        return False
+    if any(ch in value for ch in ('\x00', '\n', '\r')):
+        return False
+    return True
+
+
+def _normalize_secret(value):
+    """Return a password string if valid, else None."""
+    if not isinstance(value, str):
+        return None
+    if any(ch in value for ch in ('\x00', '\n', '\r')):
+        return None
+    return value
+
+
 def is_available():
     """Return True if nmcli is present on this system."""
     return shutil.which('nmcli') is not None
@@ -159,7 +182,13 @@ def connect(ssid, password=None):
 
     Returns (success: bool, message: str).
     """
+    if not _is_safe_nmcli_value(ssid):
+        return False, 'Invalid SSID'
+
     if password:
+        password = _normalize_secret(password)
+        if password is None:
+            return False, 'Invalid password'
         code, out, err = _run([
             'dev', 'wifi', 'connect', ssid, 'password', password,
         ])
@@ -176,6 +205,8 @@ def forget(ssid):
 
     Returns (success: bool, message: str).
     """
+    if not _is_safe_nmcli_value(ssid):
+        return False, 'Invalid SSID'
     code, out, err = _run(['con', 'delete', 'id', ssid])
     if code == 0:
         return True, 'Forgot %s' % ssid
@@ -187,6 +218,11 @@ def update_password(ssid, password):
 
     Returns (success: bool, message: str).
     """
+    if not _is_safe_nmcli_value(ssid):
+        return False, 'Invalid SSID'
+    password = _normalize_secret(password)
+    if password is None:
+        return False, 'Invalid password'
     code, out, err = _run([
         'con', 'modify', 'id', ssid, 'wifi-sec.psk', password,
     ])
