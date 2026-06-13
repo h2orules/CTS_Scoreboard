@@ -13,6 +13,7 @@ import logging
 import os
 import os.path
 import re
+from urllib.parse import urlparse
 import serial
 import serial.tools.list_ports
 
@@ -1141,7 +1142,11 @@ def register(flask_app, app_module):
                 (flask.request.form['password'] == _app.settings['password'])):
                 user = _app.User(0)
                 flask_login.login_user(user)
-                return flask.redirect(flask.request.args.get("next"))
+                next_url = (flask.request.args.get("next") or "").replace('\\', '/')
+                parsed_next = urlparse(next_url)
+                if parsed_next.scheme or parsed_next.netloc or not next_url.startswith('/'):
+                    next_url = '/'
+                return flask.redirect(next_url)
             else:
                 return flask.abort(401)
         else:
