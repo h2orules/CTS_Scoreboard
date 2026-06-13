@@ -19,6 +19,21 @@ def _is_safe_nmcli_value(value):
     return True
 
 
+def _is_safe_nmcli_arg_list(args):
+    """Return True if *args* is a safe nmcli argument list."""
+    if not isinstance(args, list):
+        return False
+    allowed_flags = {'-t', '-f'}
+    for arg in args:
+        if not isinstance(arg, str) or not arg:
+            return False
+        if any(ch in arg for ch in ('\x00', '\n', '\r')):
+            return False
+        if arg.startswith('-') and arg not in allowed_flags:
+            return False
+    return True
+
+
 def _normalize_secret(value):
     """Return a password string if valid, else None."""
     if not isinstance(value, str):
@@ -35,6 +50,8 @@ def is_available():
 
 def _run(args, timeout=30):
     """Run an nmcli command and return (returncode, stdout, stderr)."""
+    if not _is_safe_nmcli_arg_list(args):
+        return -1, '', 'Invalid nmcli arguments'
     try:
         r = subprocess.run(
             ['sudo', 'nmcli'] + args,
