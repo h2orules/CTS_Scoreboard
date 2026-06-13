@@ -22,6 +22,10 @@ logger = logging.getLogger(__name__)
 # CTS_Scoreboard.py). Module-level so tests can monkeypatch.
 _REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 credentials_file = os.path.join(_REPO_DIR, "credentials.json")
+# Flask session-signing key. Generated once per install and persisted (so
+# sessions survive restarts) in a git-ignored, mode-0600 file next to the
+# credential store. Module-level so tests can monkeypatch.
+secret_key_file = os.path.join(_REPO_DIR, "secret_key")
 
 DEFAULT_USERNAME = "admin"
 DEFAULT_PASSWORD = "password"
@@ -83,6 +87,39 @@ def save_credentials(username, password):
     record = {"username": username}
     record.update(hash_record(password))
     _write_store(record)
+
+
+def get_or_create_secret_key():
+    """Return this install's Flask secret key, generating it on first use.
+
+    The key is persisted in ``secret_key_file`` (git-ignored, mode 0600) so
+    that signed session cookies survive process restarts. A fresh random key
+    is created the first time the app starts on a given install, replacing
+    the formerly hard-coded value.
+    """
+    try:
+        with open(secret_key_file, "rt") as f:
+            key = f.read().strip()
+        if key:
+            return key
+    except OSError:
+        pass
+    key = secrets.token_hex(32)
+    tmp = secret_key_file + ".tmp"
+    try:
+        with open(tmp, "wt") as f:
+            f.write(key)
+        try:
+            os.chmod(tmp, 0o600)
+        except OSError:
+            # Windows test envs may not honour chmod; ignore.
+            pass
+        os.replace(tmp, secret_key_file)
+    except OSError as e:
+        # If we can't persist (e.g. read-only fs), fall back to an
+        # in-memory key for this process rather than failing to start.
+        logger.warning("could not persist secret key to %s: %s", secret_key_file, e)
+    return key
 
 
 def get_username():

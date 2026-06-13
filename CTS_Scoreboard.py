@@ -158,7 +158,7 @@ app = flask.Flask(__name__)
 # config
 app.config.update(
     DEBUG=False,
-    SECRET_KEY="redacted-secret-key",
+    SECRET_KEY=credentials_store.get_or_create_secret_key(),
     MAX_CONTENT_LENGTH=5 * 1024 * 1024,
 )
 socketio = flask_socketio.SocketIO(app)
@@ -398,9 +398,12 @@ def load_settings():
             try:
                 credentials_store.save_credentials(
                     _raw_settings_on_disk.get(
-                        "username", credentials_store.DEFAULT_USERNAME),
+                        "username", credentials_store.DEFAULT_USERNAME
+                    ),
                     _raw_settings_on_disk.get(
-                        "password", credentials_store.DEFAULT_PASSWORD))
+                        "password", credentials_store.DEFAULT_PASSWORD
+                    ),
+                )
             except Exception:
                 pass
         settings.pop("username", None)

@@ -83,6 +83,35 @@ class TestCredentialsStore:
         assert credentials_store.verify_login("admin", "password")
 
 
+class TestSecretKey:
+    def test_generates_and_persists(self):
+        assert not os.path.exists(credentials_store.secret_key_file)
+        key = credentials_store.get_or_create_secret_key()
+        assert key
+        assert os.path.exists(credentials_store.secret_key_file)
+        # Stable across calls (sessions survive restarts).
+        assert credentials_store.get_or_create_secret_key() == key
+
+    def test_key_is_random_per_install(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(
+            credentials_store, "secret_key_file", str(tmp_path / "a"))
+        first = credentials_store.get_or_create_secret_key()
+        monkeypatch.setattr(
+            credentials_store, "secret_key_file", str(tmp_path / "b"))
+        second = credentials_store.get_or_create_secret_key()
+        assert first != second
+        assert len(first) >= 32
+
+    def test_file_mode_is_0600(self):
+        credentials_store.get_or_create_secret_key()
+        mode = stat.S_IMODE(os.stat(credentials_store.secret_key_file).st_mode)
+        assert mode == 0o600
+
+    def test_no_hardcoded_key_in_use(self):
+        assert app.config["SECRET_KEY"] != (
+            "rimnqiuqnewiornhf7nfwenjmqvliwynhtmlfnlsklrmqwe")
+
+
 class TestCredentialMigration:
     def test_plaintext_settings_migrate_to_store(self, monkeypatch):
         target = CTS_Scoreboard.settings_file
