@@ -77,11 +77,9 @@ def register(flask_app, app_module):
                 if file and file.filename and file.filename.endswith('.hy3'):
                     try:
                         _app.event_info.load_from_bytestream(file.stream)
-                    except Exception as e:
-                        detail = str(e)
+                    except Exception:
+                        logging.exception('Failed to parse schedule file upload')
                         schedule_error = 'Failed to parse the schedule file'
-                        if detail:
-                            schedule_error += ': ' + detail
                     else:
                         settings['event_info'] = _app.event_info.to_object()
                         settings['schedule_filename'] = file.filename
@@ -98,11 +96,9 @@ def register(flask_app, app_module):
                             tmp.write(file.stream.read())
                             tmp_path = tmp.name
                         _app.time_standards = parse_st2_file(tmp_path)
-                    except Exception as e:
-                        detail = str(e)
+                    except Exception:
+                        logging.exception('Failed to parse time standards file upload')
                         standards_error = 'Failed to parse the time standards file'
-                        if detail:
-                            standards_error += ': ' + detail
                     else:
                         settings['time_standards'] = base64.b64encode(pickle.dumps(_app.time_standards)).decode('ascii')
                         settings['standards_filename'] = file.filename
@@ -129,11 +125,9 @@ def register(flask_app, app_module):
                             tmp.write(file.stream.read())
                             tmp_path = tmp.name
                         new_rec = parse_rec_file(tmp_path)
-                    except Exception as e:
-                        detail = str(e)
+                    except Exception:
+                        logging.exception('Failed to parse records file upload')
                         records_error = 'Failed to parse the records file'
-                        if detail:
-                            records_error += ': ' + detail
                     else:
                         _app.swim_record_sets.append({
                             'rec_file': new_rec,
@@ -178,11 +172,13 @@ def register(flask_app, app_module):
                     try:
                         raw = upload.stream.read()
                         out_bytes, out_ext, info = ad_image.process_upload(raw, ext, max_dim)
-                    except ad_image.AdImageError as e:
-                        ad_errors.append('Rejected %s (%s)' % (upload.filename, e))
+                    except ad_image.AdImageError:
+                        logging.exception('Rejected ad image upload during validation/processing: %s', upload.filename)
+                        ad_errors.append('Rejected %s (invalid image)' % upload.filename)
                         continue
-                    except Exception as e:
-                        ad_errors.append('Failed to process %s: %s' % (upload.filename, e))
+                    except Exception:
+                        logging.exception('Failed to process ad image upload: %s', upload.filename)
+                        ad_errors.append('Failed to process %s' % upload.filename)
                         continue
                     # Use a UUID-based filename so uploads never collide with
                     # existing files (regardless of the user's original name).
@@ -190,8 +186,9 @@ def register(flask_app, app_module):
                     try:
                         with open(os.path.join(AD_DIR, final_name), 'wb') as fh:
                             fh.write(out_bytes)
-                    except Exception as e:
-                        ad_errors.append('Failed to save %s: %s' % (upload.filename, e))
+                    except Exception:
+                        logging.exception('Failed to save processed ad image: %s', upload.filename)
+                        ad_errors.append('Failed to save %s' % upload.filename)
                         continue
                     ad_list.append({'filename': final_name, 'enabled': True})
                     ad_changed = True
