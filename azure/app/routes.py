@@ -352,6 +352,11 @@ def build_router(
                 kind="danger",
                 footer="Double-check the URL and try again.",
             )
+        # The validated meet_id only contains [A-Za-z0-9_-], so escaping is a
+        # no-op behaviorally, but it sanitizes the request-derived value before
+        # it is reflected into the rendered page (JS auth, rewritten API/static
+        # URLs) and the engagement bootstrap below.
+        meet_id = escape(meet_id)
 
         meta = await store.get_metadata(meet_id)
         if not meta:
