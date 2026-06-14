@@ -1,8 +1,13 @@
 """WiFi network management via NetworkManager (nmcli)."""
 
+import re
 import shutil
 import subprocess
 import time
+
+
+_SAFE_NMCLI_TOKEN_RE = re.compile(r'^[A-Za-z0-9 _.:/@+=\-,]{1,64}$')
+_SAFE_NMCLI_SECRET_RE = re.compile(r'^[A-Za-z0-9 _.:/@+=!?\-#$%^&*(){}\[\],;]{1,128}$')
 
 
 def _is_safe_nmcli_value(value):
@@ -15,6 +20,8 @@ def _is_safe_nmcli_value(value):
     if value.startswith('-'):
         return False
     if any(ch in value for ch in ('\x00', '\n', '\r')):
+        return False
+    if not _SAFE_NMCLI_TOKEN_RE.fullmatch(value):
         return False
     return True
 
@@ -39,6 +46,8 @@ def _normalize_secret(value):
     if not isinstance(value, str):
         return None
     if any(ch in value for ch in ('\x00', '\n', '\r')):
+        return None
+    if not _SAFE_NMCLI_SECRET_RE.fullmatch(value):
         return None
     return value
 
