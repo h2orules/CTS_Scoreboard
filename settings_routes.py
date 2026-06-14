@@ -1037,6 +1037,18 @@ def register(flask_app, app_module):
             pass
         return flask.jsonify({'ok': True, 'meet_id': new_id, 'status': _azure_status_payload()})
 
+    @flask_app.route('/azure/end_meet', methods=['POST'])
+    @flask_login.login_required
+    def route_azure_end_meet():
+        """End the current cloud meet without rotating the ID or signing out.
+
+        Viewers see the friendly "no meet in session" page; the same meet ID
+        is reused when the next meet opens."""
+        ok = _app.azure_relay_client.end_meet()
+        if not ok:
+            return flask.jsonify({'error': 'not signed in to Azure'}), 400
+        return flask.jsonify({'ok': True, 'status': _azure_status_payload()})
+
     @flask_app.route('/azure/check_meet_id', methods=['POST'])
     @flask_login.login_required
     def route_azure_check_meet_id():

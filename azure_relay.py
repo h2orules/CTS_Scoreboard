@@ -566,6 +566,20 @@ class AzureRelayClient:
         self.force_reconnect()
         return new_id
 
+    def end_meet(self) -> bool:
+        """End the current meet on the cloud without rotating the ID or
+        signing out.
+
+        Emits ``meet_close`` (best-effort) so the relay flips the meet to the
+        ``closed`` state, showing viewers the friendly "no meet in session"
+        page. The meet ID and credentials are preserved, so opening the next
+        meet reuses the same season-long link. Returns False if not signed in.
+        """
+        with self._lock:
+            if not self._creds:
+                return False
+        return self.forward_event("meet_close", {})
+
     def set_meet_id(self, new_id: str) -> tuple[bool, str]:
         """Set the meet ID to a host-chosen friendly name.
 

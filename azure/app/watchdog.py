@@ -49,7 +49,7 @@ class MeetWatchdog:
         store: MeetStateStore,
         emitter: Callable[..., Awaitable[None]],
         degraded_after_s: int = 60,
-        close_after_s: int = 8 * 3600,
+        close_after_s: int = 2 * 3600,
         tick_interval_s: int = 30,
         clock: Callable[[], float] = time.time,
     ) -> None:

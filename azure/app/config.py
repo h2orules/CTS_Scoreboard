@@ -59,7 +59,7 @@ class Settings(BaseSettings):
     # ---- meet lifecycle ----
     meet_id_length: int = Field(default=15, ge=8, le=32)
     heartbeat_degraded_seconds: int = Field(default=60)
-    heartbeat_close_seconds: int = Field(default=8 * 3600)
+    heartbeat_close_seconds: int = Field(default=2 * 3600)
 
     # ---- relay performance ----
     # Per-meet coalescing window for high-frequency Pi events. Incoming
