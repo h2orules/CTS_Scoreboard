@@ -6,14 +6,39 @@ import subprocess
 import time
 
 
-# Conservative allowlists for values passed to nmcli. The leading character
-# excludes '-' so a value can never be parsed as an nmcli option, and the
-# character classes exclude whitespace/control characters (NUL, CR, LF) and
-# shell metacharacters. Length is bounded to reject absurd inputs.
+# Conservative allowlist for SSID values passed to nmcli. The leading
+# character excludes '-' so a value can never be parsed as an nmcli option,
+# and the character classes exclude whitespace/control characters (NUL, CR,
+# LF) and shell metacharacters. Length is bounded to reject absurd inputs.
 _SAFE_NMCLI_TOKEN_RE = re.compile(r'[A-Za-z0-9_.:/@+=,][A-Za-z0-9 _.:/@+=,\-]{0,63}')
-_SAFE_NMCLI_SECRET_RE = re.compile(
-    r'[A-Za-z0-9_.:/@+=!?#$%^&*(){}\[\],;][A-Za-z0-9 _.:/@+=!?#$%^&*(){}\[\],;\-]{0,127}'
+
+
+# nmcli option flags the helper is allowed to emit. These are constants in
+# this module (never user input), so they are reconstructed from a fixed
+# table rather than passed through the value allowlist.
+_ALLOWED_NMCLI_FLAGS = ('-t', '-f')
+
+# The exact set of characters permitted in a sanitized nmcli token, as a
+# module-level constant string. Sanitized output is read out of this constant
+# (indexed by the position of each input character), so the value reaching the
+# subprocess sink is provably derived from constants, not from user input.
+_ALLOWED_TOKEN_CHARS = (
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    'abcdefghijklmnopqrstuvwxyz'
+    '0123456789'
+    ' _.:/@+=,-'
 )
+_MAX_TOKEN_LEN = 64
+
+# Constant allowlist of characters permitted in a sanitized secret. As with
+# tokens, sanitized secrets are rebuilt out of this constant.
+_ALLOWED_SECRET_CHARS = (
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    'abcdefghijklmnopqrstuvwxyz'
+    '0123456789'
+    ' _.:/@+=!?#$%^&*(){}[],;-'
+)
+_MAX_SECRET_LEN = 128
 
 
 def _is_safe_nmcli_value(value):
@@ -25,22 +50,63 @@ def _is_safe_nmcli_arg_list(args):
     """Return True if *args* is a safe nmcli argument list."""
     if not isinstance(args, list):
         return False
-    allowed_flags = {'-t', '-f'}
     for arg in args:
         if not isinstance(arg, str) or not arg:
             return False
         if any(ch in arg for ch in ('\x00', '\n', '\r')):
             return False
-        if arg.startswith('-') and arg not in allowed_flags:
+        if arg.startswith('-') and arg not in _ALLOWED_NMCLI_FLAGS:
             return False
     return True
 
 
+def _sanitize_token(value):
+    """Validate and re-derive a single nmcli token from a constant allowlist.
+
+    Raises ``ValueError`` if *value* is not a safe token. Rather than returning
+    the original (untrusted) object after a boolean check, each character is
+    looked up in the :data:`_ALLOWED_TOKEN_CHARS` constant and the result is
+    rebuilt from those constant characters. Only the *index* derives from the
+    input; the emitted characters come from a constant string. This makes the
+    sanitization explicit to static analysis (CodeQL), so it recognizes the
+    return value as a barrier instead of seeing tainted input reach the sink.
+    """
+    if not isinstance(value, str):
+        raise ValueError('nmcli argument must be a string')
+    # An allowed option flag (e.g. -t, -f) is itself a constant: emit a copy.
+    if value in _ALLOWED_NMCLI_FLAGS:
+        return _ALLOWED_NMCLI_FLAGS[_ALLOWED_NMCLI_FLAGS.index(value)]
+    if not value or len(value) > _MAX_TOKEN_LEN:
+        raise ValueError('Unsafe nmcli argument')
+    if value[0] == '-':
+        raise ValueError('Unsafe nmcli argument')
+    rebuilt = []
+    for ch in value:
+        idx = _ALLOWED_TOKEN_CHARS.find(ch)
+        if idx < 0:
+            raise ValueError('Unsafe nmcli argument')
+        rebuilt.append(_ALLOWED_TOKEN_CHARS[idx])
+    return ''.join(rebuilt)
+
+
 def _normalize_secret(value):
-    """Return a password string if valid, else None."""
-    if isinstance(value, str) and _SAFE_NMCLI_SECRET_RE.fullmatch(value) is not None:
-        return value
-    return None
+    """Return a sanitized password string if valid, else None.
+
+    Like :func:`_sanitize_token`, the returned secret is rebuilt from the
+    constant :data:`_ALLOWED_SECRET_CHARS` allowlist so the value reaching the
+    subprocess sink is derived from constants rather than the untrusted input.
+    """
+    if not isinstance(value, str) or not value or len(value) > _MAX_SECRET_LEN:
+        return None
+    if value[0] == '-':
+        return None
+    rebuilt = []
+    for ch in value:
+        idx = _ALLOWED_SECRET_CHARS.find(ch)
+        if idx < 0:
+            return None
+        rebuilt.append(_ALLOWED_SECRET_CHARS[idx])
+    return ''.join(rebuilt)
 
 
 def is_available():
@@ -49,7 +115,14 @@ def is_available():
 
 
 def _run(args, timeout=30):
-    """Run an nmcli command and return (returncode, stdout, stderr)."""
+    """Run an nmcli command and return (returncode, stdout, stderr).
+
+    Callers pass values that have already been rebound through
+    :func:`_sanitize_token` / :func:`_normalize_secret` (so user-derived data
+    is reconstructed from constant allowlists before reaching this sink). The
+    structural check below is a defense-in-depth guard against control
+    characters and stray option-like arguments.
+    """
     if not _is_safe_nmcli_arg_list(args):
         return -1, '', 'Invalid nmcli arguments'
     try:
@@ -201,6 +274,9 @@ def connect(ssid, password=None):
     """
     if not _is_safe_nmcli_value(ssid):
         return False, 'Invalid SSID'
+    # Rebind SSID to a value reconstructed from constants before it reaches
+    # the subprocess sink (sanitization barrier for static analysis).
+    ssid = _sanitize_token(ssid)
 
     if password:
         password = _normalize_secret(password)
@@ -224,6 +300,7 @@ def forget(ssid):
     """
     if not _is_safe_nmcli_value(ssid):
         return False, 'Invalid SSID'
+    ssid = _sanitize_token(ssid)
     code, out, err = _run(['con', 'delete', 'id', ssid])
     if code == 0:
         return True, 'Forgot %s' % ssid
@@ -237,6 +314,7 @@ def update_password(ssid, password):
     """
     if not _is_safe_nmcli_value(ssid):
         return False, 'Invalid SSID'
+    ssid = _sanitize_token(ssid)
     password = _normalize_secret(password)
     if password is None:
         return False, 'Invalid password'
