@@ -6,24 +6,19 @@ import subprocess
 import time
 
 
-_SAFE_NMCLI_TOKEN_RE = re.compile(r'^[A-Za-z0-9 _.:/@+=\-,]{1,64}$')
-_SAFE_NMCLI_SECRET_RE = re.compile(r'^[A-Za-z0-9 _.:/@+=!?\-#$%^&*(){}\[\],;]{1,128}$')
+# Conservative allowlists for values passed to nmcli. The leading character
+# excludes '-' so a value can never be parsed as an nmcli option, and the
+# character classes exclude whitespace/control characters (NUL, CR, LF) and
+# shell metacharacters. Length is bounded to reject absurd inputs.
+_SAFE_NMCLI_TOKEN_RE = re.compile(r'[A-Za-z0-9_.:/@+=,][A-Za-z0-9 _.:/@+=,\-]{0,63}')
+_SAFE_NMCLI_SECRET_RE = re.compile(
+    r'[A-Za-z0-9_.:/@+=!?#$%^&*(){}\[\],;][A-Za-z0-9 _.:/@+=!?#$%^&*(){}\[\],;\-]{0,127}'
+)
 
 
 def _is_safe_nmcli_value(value):
     """Return True if *value* is safe to pass as an nmcli argument value."""
-    if not isinstance(value, str):
-        return False
-    if not value:
-        return False
-    # Prevent option-style injection and control-character parsing issues.
-    if value.startswith('-'):
-        return False
-    if any(ch in value for ch in ('\x00', '\n', '\r')):
-        return False
-    if not _SAFE_NMCLI_TOKEN_RE.fullmatch(value):
-        return False
-    return True
+    return isinstance(value, str) and _SAFE_NMCLI_TOKEN_RE.fullmatch(value) is not None
 
 
 def _is_safe_nmcli_arg_list(args):
@@ -43,13 +38,9 @@ def _is_safe_nmcli_arg_list(args):
 
 def _normalize_secret(value):
     """Return a password string if valid, else None."""
-    if not isinstance(value, str):
-        return None
-    if any(ch in value for ch in ('\x00', '\n', '\r')):
-        return None
-    if not _SAFE_NMCLI_SECRET_RE.fullmatch(value):
-        return None
-    return value
+    if isinstance(value, str) and _SAFE_NMCLI_SECRET_RE.fullmatch(value) is not None:
+        return value
+    return None
 
 
 def is_available():
