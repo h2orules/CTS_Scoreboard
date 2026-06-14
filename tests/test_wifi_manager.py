@@ -1,3 +1,5 @@
+import pytest
+
 import wifi_manager
 
 
@@ -49,3 +51,40 @@ class TestNormalizeSecret:
 
     def test_rejects_overlong_secret(self):
         assert wifi_manager._normalize_secret("a" * 129) is None
+
+
+class TestSanitizeToken:
+    def test_returns_equal_value_for_valid_token(self):
+        assert wifi_manager._sanitize_token("MyWiFi") == "MyWiFi"
+        assert wifi_manager._sanitize_token("Home_Network 5G") == "Home_Network 5G"
+
+    def test_returned_value_is_rebuilt_from_constants(self):
+        # The sanitized output must equal the input but be a distinct object,
+        # i.e. reconstructed from the allowlist rather than passed through.
+        token = "cafe-net.5g"
+        out = wifi_manager._sanitize_token(token)
+        assert out == token
+        assert all(ch in wifi_manager._ALLOWED_TOKEN_CHARS for ch in out)
+
+    def test_raises_on_non_string(self):
+        for bad in (None, 123, ["x"]):
+            with pytest.raises(ValueError):
+                wifi_manager._sanitize_token(bad)
+
+    def test_raises_on_empty(self):
+        with pytest.raises(ValueError):
+            wifi_manager._sanitize_token("")
+
+    def test_raises_on_leading_dash(self):
+        for bad in ("-rf", "--help"):
+            with pytest.raises(ValueError):
+                wifi_manager._sanitize_token(bad)
+
+    def test_raises_on_control_and_metacharacters(self):
+        for bad in ("a\nb", "a\rb", "a\x00b", "$(rm -rf)", "a & b", "a | b", "a; b"):
+            with pytest.raises(ValueError):
+                wifi_manager._sanitize_token(bad)
+
+    def test_raises_on_overlong_value(self):
+        with pytest.raises(ValueError):
+            wifi_manager._sanitize_token("a" * 65)
