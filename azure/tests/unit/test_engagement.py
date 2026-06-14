@@ -183,6 +183,24 @@ async def test_telemetry_post_drops_non_viewer_names(client, app_with_store, cap
     assert r.json()["accepted"] == 1
 
 
+async def test_telemetry_post_accepts_message_board_event(client, app_with_store, caplog):
+    _, store = app_with_store
+    await _seed(store)
+    caplog.set_level(logging.INFO, logger="cts.viewer")
+    r = client.post(f"/m/{MEET}/api/telemetry", json={
+        "events": [{
+            "name": "viewer_message_board_view",
+            "props": {"viewer_id": "v1", "active": True, "page_index": 0, "tenure_ms": 1234},
+        }]
+    })
+    assert r.status_code == 200
+    assert r.json()["accepted"] == 1
+    rec = next(rec for rec in caplog.records if rec.name == "cts.viewer")
+    assert rec.message == "viewer_message_board_view"
+    assert rec.__dict__.get("active") is True
+    assert rec.__dict__.get("page_index") == 0
+
+
 async def test_telemetry_post_caps_at_50_events(client, app_with_store):
     _, store = app_with_store
     await _seed(store)

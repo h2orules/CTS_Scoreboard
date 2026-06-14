@@ -136,6 +136,19 @@
     });
   });
 
+  // --- message board overlay --------------------------------------------------
+  // The scoreboard page dispatches this when the message board overlay turns
+  // on/off or rotates pages, so time spent watching the board is recorded as
+  // its own event instead of being attributed to the last race shown.
+  window.addEventListener('scoreboard:message-board', function (ev) {
+    var d = (ev && ev.detail) || {};
+    enqueue('viewer_message_board_view', {
+      active: !!d.active,
+      page_index: (typeof d.page_index === 'number') ? d.page_index : -1,
+      tenure_ms: Date.now() - loadedAt,
+    });
+  });
+
   // --- visibility / unload ---------------------------------------------------
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'hidden') {

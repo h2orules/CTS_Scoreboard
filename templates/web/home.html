@@ -658,6 +658,23 @@
     var _activeTxt = document.getElementById('blank_message_text_a');
     var _nextTxt = document.getElementById('blank_message_text_b');
 
+    // Engagement hook: notify the optional engagement.js telemetry when the
+    // message board overlay turns on/off or switches pages, so viewing time
+    // on the board is attributed to a dedicated "message board" event
+    // instead of the last race shown. Deduped on (active, page) so the
+    // resize/settings re-render paths don't emit repeats.
+    var _lastMsgBoardKey = 'off';
+    function notifyMessageBoardState(active, pageIdx) {
+        var key = active ? ('on/' + pageIdx) : 'off';
+        if (_lastMsgBoardKey === key) return;
+        _lastMsgBoardKey = key;
+        try {
+            window.dispatchEvent(new CustomEvent('scoreboard:message-board', {
+                detail: { active: active, page_index: pageIdx }
+            }));
+        } catch (e) { /* ignore */ }
+    }
+
     // Render the message overlay (sits above blank clock & scoreboard).
     // Uses two stacked text containers for blink-free crossfade.
     function renderMessageOverlay() {
@@ -671,6 +688,7 @@
         var stackEl = document.querySelector('.scoreboard-stack');
 
         if (!show) {
+            notifyMessageBoardState(false, -1);
             overlay.style.opacity = '0';
             if (stackEl) {
                 if (isTotalBlank) {
@@ -715,10 +733,14 @@
                 }
             }
         }
-        if (!page) return;
+        if (!page) {
+            notifyMessageBoardState(false, -1);
+            return;
+        }
 
         var needsCrossfade = (_lastRenderedPageIdx !== -1 && _lastRenderedPageIdx !== pageIdx);
         _lastRenderedPageIdx = pageIdx;
+        notifyMessageBoardState(true, pageIdx);
 
         // Set content (with crossfade only when switching pages)
         var pageKey = page.key;
