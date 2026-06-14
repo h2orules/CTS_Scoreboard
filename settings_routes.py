@@ -900,9 +900,9 @@ def register(flask_app, app_module):
                         'relay_url_prod', 'public_url_prod'):
                 if key in body:
                     updates['azure_' + key] = _norm_url(body.get(key))
-        except ValueError:
+        except ValueError as exc:
             logging.warning("Invalid Azure settings payload.", exc_info=True)
-            return flask.jsonify({'error': 'Invalid Azure settings payload'}), 400
+            return flask.jsonify({'error': str(exc) or 'Invalid Azure settings payload'}), 400
 
         _app.settings.update(updates)
         _app.save_azure_settings()
