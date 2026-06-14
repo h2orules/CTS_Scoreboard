@@ -1,6 +1,7 @@
 """Tests for the UI style picker (Classic vs Modern)."""
 import pytest
 
+import credentials_store
 from CTS_Scoreboard import app, settings
 
 
@@ -16,8 +17,8 @@ def logged_in_client():
     app.config["TESTING"] = True
     with app.test_client() as c:
         c.post("/login", data={
-            "username": settings["username"],
-            "password": settings["password"],
+            "username": credentials_store.DEFAULT_USERNAME,
+            "password": credentials_store.DEFAULT_PASSWORD,
         })
         yield c
 

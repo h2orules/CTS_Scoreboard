@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 import azure_relay
+import credentials_store
 import CTS_Scoreboard
 from azure_relay import (
     STATE_BACKOFF,
@@ -93,8 +94,8 @@ def logged_in_client(isolated_settings, monkeypatch):
     app.config["TESTING"] = True
     with app.test_client() as c:
         c.post("/login", data={
-            "username": settings["username"],
-            "password": settings["password"],
+            "username": credentials_store.DEFAULT_USERNAME,
+            "password": credentials_store.DEFAULT_PASSWORD,
         })
         yield c
 
@@ -266,7 +267,7 @@ class TestAzureSettingsFileSplit:
         target = tmp_path / "settings.json"
         azure_target = tmp_path / "azure_settings.json"
         target.write_text(json.dumps({
-            "username": "u",
+            "meet_title": "u",
             "azure_tenant_id": "tid-x",
             "azure_client_id": "cid-x",
             "azure_environment": "preprod",
@@ -291,7 +292,7 @@ class TestAzureSettingsFileSplit:
     ):
         target = tmp_path / "settings.json"
         azure_target = tmp_path / "azure_settings.json"
-        target.write_text(json.dumps({"username": "u"}))
+        target.write_text(json.dumps({"meet_title": "u"}))
         azure_target.write_text(json.dumps({
             "azure_tenant_id": "from-azure-file",
             "azure_environment": "prod",
@@ -314,12 +315,12 @@ class TestAzureSettingsFileSplit:
         try:
             settings["azure_tenant_id"] = "tid-out"
             settings["azure_client_id"] = "cid-out"
-            settings["username"] = "should-not-appear"
+            settings["meet_title"] = "should-not-appear"
             CTS_Scoreboard.save_azure_settings()
             on_disk = json.loads(azure_target.read_text())
             assert on_disk["azure_tenant_id"] == "tid-out"
             assert on_disk["azure_client_id"] == "cid-out"
-            assert "username" not in on_disk
+            assert "meet_title" not in on_disk
             assert all(k.startswith("azure_") for k in on_disk)
         finally:
             settings.clear()
