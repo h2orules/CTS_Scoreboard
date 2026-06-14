@@ -4,6 +4,7 @@ All secrets and Azure resource connection strings are sourced from environment
 variables (set by Container Apps from Key Vault refs or plain env). Nothing is
 hard-coded.
 """
+
 from __future__ import annotations
 
 from functools import lru_cache
