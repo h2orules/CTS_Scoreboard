@@ -972,8 +972,11 @@ table.scoreboard_table td[id^="lane_place"] {
        &nbsp; for right-edge padding) collapses; restore font on the
        data spans and use an explicit padding-right for breathing room.
        The .lane_qt_tag min-width: 6ch reservation still fits "AA REC"
-       or "AA PR" indicators. */
-    table.scoreboard_table td:last-child {
+       or "AA PR" indicators.
+       Exclude the qualifying/records row: its single colspan'd cell is
+       also a td:last-child, and zeroing its font collapses the grids'
+       1ch column-gap (ch resolves against the container font-size). */
+    table.scoreboard_table tr:not(.qualifying_time_row)>td:last-child {
         white-space: nowrap;
         font-size: 0;
         padding-right: 6px;
@@ -1018,7 +1021,9 @@ table.scoreboard_table td[id^="lane_place"] {
     .qt_desc,
     .qt_qualifiers,
     .grid-subheader,
-    .rec_subheader {
+    .rec_subheader,
+    .standards-grid,
+    .records-grid {
         font-size: min(24px, 3.5vw);
     }
 
