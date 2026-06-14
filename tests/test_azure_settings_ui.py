@@ -155,7 +155,7 @@ class TestAzureConfigPost:
             json={"relay_url_preprod": "ftp://nope.example.com"},
         )
         assert resp.status_code == 400
-        assert "http" in resp.get_json()["error"]
+        assert resp.get_json()["error"] == "Invalid Azure settings payload"
 
     def test_persists_and_strips_trailing_slash(
         self, logged_in_client, isolated_settings
