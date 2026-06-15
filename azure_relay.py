@@ -29,6 +29,7 @@ Design constraints
 * Credentials live in a 0600-mode JSON file (default ``azure_credentials.json``)
   that is in ``.gitignore``. They are never written to ``settings.json``.
 """
+
 from __future__ import annotations
 
 import json
@@ -36,7 +37,6 @@ import logging
 import os
 import re
 import secrets
-import string
 import threading
 import time
 from dataclasses import asdict, dataclass, field
@@ -55,6 +55,7 @@ def _today_local_iso() -> str:
     still rolls up per day.
     """
     return date.today().isoformat()
+
 
 # Backoff schedule in seconds. Caps at 300s. Reset on successful connect.
 BACKOFF_SCHEDULE: tuple[int, ...] = (1, 2, 4, 8, 16, 32, 60, 120, 300)
@@ -106,7 +107,9 @@ def validate_meet_id(name: str) -> tuple[bool, str | None]:
     return True, None
 
 
-def derive_meet_id_default(team_home: str, *, _rng: Callable[[], str] | None = None) -> str:
+def derive_meet_id_default(
+    team_home: str, *, _rng: Callable[[], str] | None = None
+) -> str:
     """Derive a friendly default meet ID from the host team name.
 
     Replaces whitespace runs with ``-``, strips disallowed characters,
@@ -265,7 +268,9 @@ class AzureRelayClient:
 
         # Public state (read under self._lock or via snapshot()).
         self._creds = load_credentials(creds_file)
-        self._state: str = STATE_NEEDS_AUTH if self._creds is None else STATE_DISCONNECTED
+        self._state: str = (
+            STATE_NEEDS_AUTH if self._creds is None else STATE_DISCONNECTED
+        )
         self._last_error: str | None = None
         self._last_connected_at: float | None = None
         self._last_heartbeat_at: float | None = None
@@ -381,7 +386,9 @@ class AzureRelayClient:
                 return False
             self.relay_url = new_url
             connected_states = (
-                STATE_CONNECTING, STATE_CONNECTED, STATE_DEGRADED,
+                STATE_CONNECTING,
+                STATE_CONNECTED,
+                STATE_DEGRADED,
             )
             need_reconnect = self._state in connected_states
         if need_reconnect:
@@ -412,7 +419,8 @@ class AzureRelayClient:
             # token after the device flow completes. The default in-memory
             # TokenCache has no .serialize() method.
             app = PublicClientApplication(
-                client_id, authority=authority,
+                client_id,
+                authority=authority,
                 token_cache=SerializableTokenCache(),
             )
         else:
@@ -532,9 +540,10 @@ class AzureRelayClient:
         its next poll. Returns True if a flow was actually in progress.
         """
         with self._lock:
-            had_flow = self._device_flow is not None or getattr(
-                self, "_pending_msal", None
-            ) is not None
+            had_flow = (
+                self._device_flow is not None
+                or getattr(self, "_pending_msal", None) is not None
+            )
             # Tell any in-flight acquire_token_by_device_flow loop to exit
             # at its next poll (MSAL checks expires_at against time.time()).
             if self._device_flow is not None:
@@ -565,6 +574,20 @@ class AzureRelayClient:
             save_credentials(self.creds_file, self._creds)
         self.force_reconnect()
         return new_id
+
+    def end_meet(self) -> bool:
+        """End the current meet on the cloud without rotating the ID or
+        signing out.
+
+        Emits ``meet_close`` (best-effort) so the relay flips the meet to the
+        ``closed`` state, showing viewers the friendly "no meet in session"
+        page. The meet ID and credentials are preserved, so opening the next
+        meet reuses the same season-long link. Returns False if not signed in.
+        """
+        with self._lock:
+            if not self._creds:
+                return False
+        return self.forward_event("meet_close", {})
 
     def set_meet_id(self, new_id: str) -> tuple[bool, str]:
         """Set the meet ID to a host-chosen friendly name.
@@ -605,16 +628,28 @@ class AzureRelayClient:
         with self._lock:
             creds = self._creds
         if not creds:
-            return {"ok": False, "available": False, "owner": None,
-                    "error": "Not signed in to Azure."}
+            return {
+                "ok": False,
+                "available": False,
+                "owner": None,
+                "error": "Not signed in to Azure.",
+            }
         if not self.relay_url:
-            return {"ok": False, "available": False, "owner": None,
-                    "error": "Relay URL not configured."}
+            return {
+                "ok": False,
+                "available": False,
+                "owner": None,
+                "error": "Relay URL not configured.",
+            }
         try:
             access_token = self._acquire_access_token(creds)
         except Exception as exc:  # pragma: no cover - network/msal errors
-            return {"ok": False, "available": False, "owner": None,
-                    "error": f"Could not acquire access token: {exc}"}
+            return {
+                "ok": False,
+                "available": False,
+                "owner": None,
+                "error": f"Could not acquire access token: {exc}",
+            }
         # Lazy import: keep ``requests`` out of import time so unit tests
         # that don't exercise this path don't pull in the dependency.
         import requests  # type: ignore[import-not-found]
@@ -627,16 +662,28 @@ class AzureRelayClient:
                 timeout=10,
             )
         except Exception as exc:  # pragma: no cover - network errors
-            return {"ok": False, "available": False, "owner": None,
-                    "error": f"Could not reach relay: {exc}"}
+            return {
+                "ok": False,
+                "available": False,
+                "owner": None,
+                "error": f"Could not reach relay: {exc}",
+            }
         if resp.status_code != 200:
-            return {"ok": False, "available": False, "owner": None,
-                    "error": f"Relay returned HTTP {resp.status_code}."}
+            return {
+                "ok": False,
+                "available": False,
+                "owner": None,
+                "error": f"Relay returned HTTP {resp.status_code}.",
+            }
         try:
             body = resp.json()
         except ValueError:
-            return {"ok": False, "available": False, "owner": None,
-                    "error": "Relay returned non-JSON response."}
+            return {
+                "ok": False,
+                "available": False,
+                "owner": None,
+                "error": "Relay returned non-JSON response.",
+            }
         return {
             "ok": True,
             "available": bool(body.get("available")),
@@ -672,7 +719,9 @@ class AzureRelayClient:
                 if state != _last_logged_state:
                     logger.info(
                         "relay: loop tick state=%s creds=%s next_retry=%s",
-                        state, "yes" if creds else "no", next_retry,
+                        state,
+                        "yes" if creds else "no",
+                        next_retry,
                     )
                     _last_logged_state = state
 
@@ -719,11 +768,15 @@ class AzureRelayClient:
         if not self.relay_url:
             raise ConnectionError("relay_url is not configured")
 
-        logger.info("relay: acquiring access token (tenant=%s, audience=%s)",
-                    creds.tenant_id, creds.audience)
+        logger.info(
+            "relay: acquiring access token (tenant=%s, audience=%s)",
+            creds.tenant_id,
+            creds.audience,
+        )
         access_token = self._acquire_access_token(creds)
-        logger.info("relay: connecting to %s (meet_id=%s)",
-                    self.relay_url, creds.meet_id)
+        logger.info(
+            "relay: connecting to %s (meet_id=%s)", self.relay_url, creds.meet_id
+        )
         client = self._socketio_client_factory()
 
         connected_evt = threading.Event()
@@ -781,12 +834,16 @@ class AzureRelayClient:
                 host_team_name = self._host_team_name_provider() or ""
             except Exception:
                 logger.exception("relay: host_team_name_provider raised")
-        client.emit("meet_open", {
-            "meet_id": creds.meet_id,
-            "host_team_name": host_team_name,
-            "protocol_version": self.protocol_version,
-            "pi_local_date": _today_local_iso(),
-        }, namespace="/pi")
+        client.emit(
+            "meet_open",
+            {
+                "meet_id": creds.meet_id,
+                "host_team_name": host_team_name,
+                "protocol_version": self.protocol_version,
+                "pi_local_date": _today_local_iso(),
+            },
+            namespace="/pi",
+        )
 
         # Push the current template bundle, if a provider is registered. The
         # bundle is content-addressed; Azure will skip re-storing if the
@@ -815,9 +872,11 @@ class AzureRelayClient:
         # Clear any pending reconnect signal now that we have a fresh socket.
         self._force_reconnect.clear()
         try:
-            while (not self._stop.is_set()
-                   and connected_evt.is_set()
-                   and not self._force_reconnect.is_set()):
+            while (
+                not self._stop.is_set()
+                and connected_evt.is_set()
+                and not self._force_reconnect.is_set()
+            ):
                 # Drain the outbound queue.
                 try:
                     name, payload = self._queue.get(timeout=0.5)
@@ -864,7 +923,9 @@ class AzureRelayClient:
     def _acquire_access_token(self, creds: AzureCredentials) -> str:
         """Use the cached refresh token to mint a fresh access token."""
         if self._msal_factory is not None:
-            app = self._msal_factory(client_id=creds.client_id, tenant_id=creds.tenant_id)
+            app = self._msal_factory(
+                client_id=creds.client_id, tenant_id=creds.tenant_id
+            )
         else:
             from msal import PublicClientApplication
 
@@ -886,4 +947,3 @@ class AzureRelayClient:
         import socketio  # type: ignore[import-not-found]
 
         return socketio.Client(reconnection=False, logger=False, engineio_logger=False)
-

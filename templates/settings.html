@@ -2325,6 +2325,8 @@
                         onclick="azureReconnect()">Reconnect</button>
                     <button class="btn btn-warning" type="button" id="azure-rotate-btn"
                         onclick="document.getElementById('azure-rotate-overlay').style.display='flex';">Rotate Meet ID</button>
+                    <button class="btn btn-default" type="button" id="azure-endmeet-btn"
+                        onclick="document.getElementById('azure-endmeet-overlay').style.display='flex';">End Meet</button>
                     <button class="btn btn-default" type="button" id="azure-friendly-btn"
                         onclick="azureOpenFriendlyOverlay()">Pick friendly name&hellip;</button>
 
@@ -2631,9 +2633,24 @@
         </div>
     </div>
 
+    <!-- Azure end-meet confirmation overlay -->
+    <div id="azure-endmeet-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
+        <div style="background:#fff; padding:24px 32px; border-radius:6px; max-width:460px; text-align:left;">
+            <h4 style="margin-top:0;">End Meet?</h4>
+            <p>This closes the meet on the cloud now. Viewers will see a friendly &ldquo;no meet in session &mdash; check back at the next scheduled meet&rdquo; page.</p>
+            <div style="background:#dff0d8; border:1px solid #d6e9c6; color:#3c763d; padding:10px 14px; border-radius:4px; margin:12px 0; font-size:13px;">
+                <strong>&#x2713; The same URL and QR code keep working.</strong>
+                Your meet ID is preserved and you stay signed in, so the next meet reuses the same season-long link &mdash; no need to reprint anything.
+            </div>
+            <div style="text-align:right;">
+                <button class="btn btn-default" type="button" onclick="document.getElementById('azure-endmeet-overlay').style.display='none';">Cancel</button>
+                <button class="btn btn-primary" type="button" onclick="azureEndMeet()">End Meet</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Azure pick-friendly-meet-id overlay -->
-    <div id="azure-friendly-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">
-        <div style="background:#fff; padding:24px 32px; border-radius:6px; max-width:520px; text-align:left;">
+    <div id="azure-friendly-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:9999; align-items:center; justify-content:center;">        <div style="background:#fff; padding:24px 32px; border-radius:6px; max-width:520px; text-align:left;">
             <h4 style="margin-top:0;">Pick a friendly meet name</h4>
             <p style="font-size:14px;">Choose a memorable name for your meet's scoreboard URL.
             Allowed: letters, digits, <code>-</code>, and <code>_</code>. Length 10&ndash;20.</p>
@@ -2758,6 +2775,7 @@
             // Disable Sign In if the active env's relay URL is empty.
             _setDisabled($('azure-signin-btn'), !snap.relay_url);
             _setDisabled($('azure-rotate-btn'), !snap.meet_id);
+            _setDisabled($('azure-endmeet-btn'), !snap.meet_id);
             _setDisabled($('azure-friendly-btn'), !snap.meet_id);
             // Hint summary on the config details.
             _setText($('azure-config-status'), snap.relay_url ? '' : '(setup required)');
@@ -3024,6 +3042,13 @@
             postJSON('/azure/rotate_id', {})
                 .then(function(r) { applyStatus(r.status); showToast('New meet ID issued.'); })
                 .catch(function(err) { showToast('Rotate failed: ' + err.message, 'error'); });
+        };
+
+        window.azureEndMeet = function() {
+            $('azure-endmeet-overlay').style.display = 'none';
+            postJSON('/azure/end_meet', {})
+                .then(function(r) { applyStatus(r.status); showToast('Meet ended.'); })
+                .catch(function(err) { showToast('End meet failed: ' + err.message, 'error'); });
         };
 
         // ----- Friendly meet-id picker -----

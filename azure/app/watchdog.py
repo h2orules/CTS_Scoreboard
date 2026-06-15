@@ -9,6 +9,7 @@ The watchdog is intentionally driven by ``time.time()``-derived deltas rather
 than wall-clock comparisons of heartbeats, so the Pi clock and the relay clock
 need only be roughly in sync.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -49,7 +50,7 @@ class MeetWatchdog:
         store: MeetStateStore,
         emitter: Callable[..., Awaitable[None]],
         degraded_after_s: int = 60,
-        close_after_s: int = 8 * 3600,
+        close_after_s: int = 2 * 3600,
         tick_interval_s: int = 30,
         clock: Callable[[], float] = time.time,
     ) -> None:
@@ -89,7 +90,8 @@ class MeetWatchdog:
                 )
                 log.warning(
                     "watchdog: closed meet=%s after %.1fs without heartbeat",
-                    meet_id, age,
+                    meet_id,
+                    age,
                 )
             elif age >= self.degraded_after_s and status != "degraded":
                 await self.store.mark_status(meet_id, "degraded")
@@ -102,12 +104,17 @@ class MeetWatchdog:
                 )
                 log.info(
                     "watchdog: meet=%s degraded after %.1fs without heartbeat",
-                    meet_id, age,
+                    meet_id,
+                    age,
                 )
 
     async def _run(self) -> None:
-        log.info("watchdog: starting (degraded=%ds close=%ds tick=%ds)",
-                 self.degraded_after_s, self.close_after_s, self.tick_interval_s)
+        log.info(
+            "watchdog: starting (degraded=%ds close=%ds tick=%ds)",
+            self.degraded_after_s,
+            self.close_after_s,
+            self.tick_interval_s,
+        )
         while not self._stop.is_set():
             try:
                 await self.tick()
