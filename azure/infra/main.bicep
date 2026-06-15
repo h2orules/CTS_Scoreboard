@@ -17,10 +17,10 @@ param containerImage string
 @description('TCP port the container listens on. Defaults to 8000 (the relay app). For the very first bootstrap deploy, set this to whatever your placeholder image listens on (e.g. 80 for mcr.microsoft.com/azuredocs/aci-helloworld).')
 param targetPort int = 8000
 
-@description('Min replicas for the Container App. 0 enables scale-to-zero (preprod).')
+@description('Idle floor for the Container App. preprod scales to zero; prod holds 1 replica at idle and ramps to >=2 automatically while a Pi is connected (see pi-active-rule below).')
 @minValue(0)
 @maxValue(10)
-param minReplicas int = environmentName == 'preprod' ? 0 : 2
+param minReplicas int = environmentName == 'preprod' ? 0 : 1
 
 @description('Max replicas for the Container App.')
 @minValue(1)
@@ -272,8 +272,8 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
           name: 'relay'
           image: containerImage
           resources: {
-            cpu: json(environmentName == 'prod' ? '2.0' : '0.5')
-            memory: environmentName == 'prod' ? '4Gi' : '1Gi'
+            cpu: json(environmentName == 'prod' ? '1.0' : '0.5')
+            memory: environmentName == 'prod' ? '2Gi' : '1Gi'
           }
           env: [
             { name: 'ENVIRONMENT', value: environmentName }
@@ -355,6 +355,41 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
                 metricAggregationType: 'Average'
                 metricAggregationInterval: '0:1:0'
                 targetValue: '100'
+                activationTargetValue: '0'
+              }
+              identity: uami.id
+            }
+          }
+          {
+            name: 'pi-active-rule'
+            custom: {
+              // Dynamic floor: hold >=2 replicas whenever at least one Pi is
+              // connected (i.e. a meet is live and sending data), so an
+              // in-progress meet always keeps a warm spare for failover and
+              // zero-downtime rolling revisions. `pi_connections` is the
+              // up-down counter published by app/telemetry.py (+1 on /pi
+              // connect, -1 on disconnect). With Total aggregation it sums to
+              // the global connected-Pi count across replicas; targetValue
+              // 0.5 maps the first connected Pi to ceil(1 / 0.5) = 2 desired
+              // replicas. When all Pis disconnect the count returns to 0,
+              // this rule yields 0, and the replica count falls back to
+              // minReplicas (1) with the sockets-* rules governing any
+              // residual viewer load.
+              //
+              // Note: a Pi that stays connected after an operator "End Meet"
+              // still counts here until it actually disconnects; the floor
+              // returns to 1 once the Pi drops its /pi socket.
+              type: 'azure-monitor'
+              metadata: {
+                tenantId: subscription().tenantId
+                subscriptionId: subscription().subscriptionId
+                resourceGroupName: resourceGroup().name
+                resourceURI: 'microsoft.insights/components/${aiName}'
+                metricName: 'pi_connections'
+                metricNamespace: 'azure.applicationinsights'
+                metricAggregationType: 'Total'
+                metricAggregationInterval: '0:1:0'
+                targetValue: '0.5'
                 activationTargetValue: '0'
               }
               identity: uami.id
