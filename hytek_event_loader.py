@@ -1,16 +1,22 @@
-import pickle
 import copy
-import tempfile
 import os
-
-from hytek_parser.hy3_parser import parse_hy3
-from hytek_parser.hy3.enums import Stroke, Gender, GenderAge, Course, ReplacedTimeTimeCode
+import pickle
+import tempfile
+from datetime import datetime as _datetime
 
 # Monkey-patch e2_parser to handle empty/invalid date fields in .hy3 files
 import hytek_parser.hy3.line_parsers.e_event_parsers as _e_parsers
-from datetime import datetime as _datetime
+from hytek_parser.hy3.enums import (
+    Course,
+    Gender,
+    GenderAge,
+    ReplacedTimeTimeCode,
+    Stroke,
+)
+from hytek_parser.hy3_parser import parse_hy3
 
 _original_e2_parser = _e_parsers.e2_parser
+
 
 def _patched_e2_parser(line, file, opts):
     try:
@@ -30,9 +36,39 @@ def _patched_e2_parser(line, file, opts):
                 setattr(entry, f"{prefix}_date", None)
         return result
 
+
 _e_parsers.e2_parser = _patched_e2_parser
 from hytek_parser.hy3 import HY3_LINE_PARSERS
+
 HY3_LINE_PARSERS["E2"] = _patched_e2_parser
+
+# Monkey-patch f2_parser to handle empty/invalid date fields in relay result lines
+import hytek_parser.hy3.line_parsers.f_relay_parsers as _f_parsers
+
+_original_f2_parser = _f_parsers.f2_parser
+
+
+def _patched_f2_parser(line, file, opts):
+    try:
+        return _original_f2_parser(line, file, opts)
+    except (ValueError, IndexError):
+        # Handle lines with missing/invalid date fields by injecting a valid placeholder.
+        # extract() uses 1-based indexing: extract(line, 103, 8) reads line[102:110]
+        padded = line.ljust(110)
+        patched = padded[:102] + "01011900" + padded[110:]
+        result = _original_f2_parser(patched, file, opts)
+        # Clear the placeholder date on the entry
+        event_num, event = result.meet.last_event
+        entry = event.last_entry
+        placeholder = _datetime(1900, 1, 1).date()
+        for prefix in ("prelim", "swimoff", "finals"):
+            if getattr(entry, f"{prefix}_date", None) == placeholder:
+                setattr(entry, f"{prefix}_date", None)
+        return result
+
+
+_f_parsers.f2_parser = _patched_f2_parser
+HY3_LINE_PARSERS["F2"] = _patched_f2_parser
 
 
 STROKE_NAMES = {
@@ -110,14 +146,18 @@ def _get_age_code(entry, gender_age):
     if entry.relay or not entry.swimmers:
         return ""
     swimmer = entry.swimmers[0]
-    age = getattr(swimmer, 'age', None)
+    age = getattr(swimmer, "age", None)
     if age is None:
         return ""
     gender = swimmer.gender
     if gender_age in (GenderAge.MEN_S, GenderAge.WOMEN_S):
-        letter = 'M' if gender == Gender.MALE else 'W' if gender == Gender.FEMALE else ''
+        letter = (
+            "M" if gender == Gender.MALE else "W" if gender == Gender.FEMALE else ""
+        )
     else:
-        letter = 'B' if gender == Gender.MALE else 'G' if gender == Gender.FEMALE else ''
+        letter = (
+            "B" if gender == Gender.MALE else "G" if gender == Gender.FEMALE else ""
+        )
     return "%d%s" % (age, letter) if letter else ""
 
 
@@ -133,7 +173,7 @@ def _get_seed_time_seconds(entry):
     return None
 
 
-class HytekEventLoader():
+class HytekEventLoader:
     max_display_string_length = 0
 
     def __init__(self, file_name=None):
@@ -187,7 +227,7 @@ class HytekEventLoader():
 
     def load_from_bytestream(self, stream):
         self.clear()
-        with tempfile.NamedTemporaryFile(suffix='.hy3', delete=False) as tmp:
+        with tempfile.NamedTemporaryFile(suffix=".hy3", delete=False) as tmp:
             tmp.write(stream.read())
             tmp_path = tmp.name
         try:
@@ -211,9 +251,9 @@ class HytekEventLoader():
             for entry in event.entries:
                 for swimmer in entry.swimmers:
                     if swimmer.gender == Gender.MALE:
-                        swimmer_genders.add('M')
+                        swimmer_genders.add("M")
                     elif swimmer.gender == Gender.FEMALE:
-                        swimmer_genders.add('F')
+                        swimmer_genders.add("F")
 
             # Map hy3 stroke enum to st2 stroke code
             stroke_map = {
@@ -230,24 +270,24 @@ class HytekEventLoader():
                 sex_codes = [1]
             elif event.gender_age in FEMALE_GENDERS:
                 sex_codes = [2]
-            elif 'M' in swimmer_genders and 'F' in swimmer_genders:
+            elif "M" in swimmer_genders and "F" in swimmer_genders:
                 sex_codes = [1, 2]  # Mixed
-            elif 'M' in swimmer_genders:
+            elif "M" in swimmer_genders:
                 sex_codes = [1]
-            elif 'F' in swimmer_genders:
+            elif "F" in swimmer_genders:
                 sex_codes = [2]
             else:
                 sex_codes = []
 
             self.event_meta[event_number] = {
-                'stroke_code': stroke_code,
-                'distance': event.distance,
-                'relay': event.relay,
-                'age_min': event.age_min,
-                'age_max': event.age_max,
-                'sex_codes': sex_codes,
-                'is_mixed': len(sex_codes) > 1,
-                'gender_age': event.gender_age,
+                "stroke_code": stroke_code,
+                "distance": event.distance,
+                "relay": event.relay,
+                "age_min": event.age_min,
+                "age_max": event.age_max,
+                "sex_codes": sex_codes,
+                "is_mixed": len(sex_codes) > 1,
+                "gender_age": event.gender_age,
             }
 
             for entry in event.entries:
@@ -260,7 +300,8 @@ class HytekEventLoader():
                 display_string = _build_display_string(entry)
                 team_code = _get_team_code(entry)
                 self.max_display_string_length = max(
-                    self.max_display_string_length, len(display_string))
+                    self.max_display_string_length, len(display_string)
+                )
 
                 if (event_number, heat) not in self.events:
                     self.events[(event_number, heat)] = {}
@@ -270,8 +311,12 @@ class HytekEventLoader():
 
                 self.events[(event_number, heat)][lane] = display_string
                 self.teams[(event_number, heat)][lane] = team_code
-                self.age_codes[(event_number, heat)][lane] = _get_age_code(entry, event.gender_age)
-                self.seed_times[(event_number, heat)][lane] = _get_seed_time_seconds(entry)
+                self.age_codes[(event_number, heat)][lane] = _get_age_code(
+                    entry, event.gender_age
+                )
+                self.seed_times[(event_number, heat)][lane] = _get_seed_time_seconds(
+                    entry
+                )
 
         self.events_uncombined = copy.deepcopy(self.events)
         self.teams_uncombined = copy.deepcopy(self.teams)
@@ -288,15 +333,32 @@ class HytekEventLoader():
         self.seed_times = copy.deepcopy(self.seed_times_uncombined)
 
         for combine_source, combine_destination in self.combined.items():
-            if (combine_source != combine_destination):
+            if combine_source != combine_destination:
                 for lane in self.events[combine_source]:
-                    self.events[combine_destination][lane] = self.events[combine_source][lane] + '*'
-                    if combine_source in self.teams and lane in self.teams[combine_source]:
-                        self.teams[combine_destination][lane] = self.teams[combine_source][lane]
-                    if combine_source in self.age_codes and lane in self.age_codes[combine_source]:
-                        self.age_codes[combine_destination][lane] = self.age_codes[combine_source][lane]
-                    if combine_source in self.seed_times and lane in self.seed_times[combine_source]:
-                        self.seed_times[combine_destination][lane] = self.seed_times[combine_source][lane]
+                    self.events[combine_destination][lane] = (
+                        self.events[combine_source][lane] + "*"
+                    )
+                    if (
+                        combine_source in self.teams
+                        and lane in self.teams[combine_source]
+                    ):
+                        self.teams[combine_destination][lane] = self.teams[
+                            combine_source
+                        ][lane]
+                    if (
+                        combine_source in self.age_codes
+                        and lane in self.age_codes[combine_source]
+                    ):
+                        self.age_codes[combine_destination][lane] = self.age_codes[
+                            combine_source
+                        ][lane]
+                    if (
+                        combine_source in self.seed_times
+                        and lane in self.seed_times[combine_source]
+                    ):
+                        self.seed_times[combine_destination][lane] = self.seed_times[
+                            combine_source
+                        ][lane]
                 del self.events[combine_source]
                 self.events[combine_source] = self.events[combine_destination]
                 if combine_source in self.teams:
@@ -307,7 +369,9 @@ class HytekEventLoader():
                     self.age_codes[combine_source] = self.age_codes[combine_destination]
                 if combine_source in self.seed_times:
                     del self.seed_times[combine_source]
-                    self.seed_times[combine_source] = self.seed_times[combine_destination]
+                    self.seed_times[combine_source] = self.seed_times[
+                        combine_destination
+                    ]
         self._compute_has_names()
 
     def get_event_name(self, event_number):
@@ -323,31 +387,34 @@ class HytekEventLoader():
         meta = self.event_meta.get(event_number)
         if not meta:
             return None
-        ga = meta.get('gender_age')
-        sex_codes = meta.get('sex_codes') or []
+        ga = meta.get("gender_age")
+        sex_codes = meta.get("sex_codes") or []
         if ga in MALE_GENDERS:
-            gender_agnostic = 'M'
+            gender_agnostic = "M"
         elif ga in FEMALE_GENDERS:
-            gender_agnostic = 'F'
+            gender_agnostic = "F"
         elif len(sex_codes) > 1:
-            gender_agnostic = 'X'
+            gender_agnostic = "X"
         elif sex_codes == [1]:
-            gender_agnostic = 'M'
+            gender_agnostic = "M"
         elif sex_codes == [2]:
-            gender_agnostic = 'F'
+            gender_agnostic = "F"
         else:
-            gender_agnostic = ''
-        stroke_code = meta.get('stroke_code') or 0
-        stroke_name = ''
+            gender_agnostic = ""
+        stroke_code = meta.get("stroke_code") or 0
+        stroke_name = ""
         for s, code in {
-            Stroke.FREESTYLE: 1, Stroke.BACKSTROKE: 2, Stroke.BREASTSTROKE: 3,
-            Stroke.BUTTERFLY: 4, Stroke.MEDLEY: 5,
+            Stroke.FREESTYLE: 1,
+            Stroke.BACKSTROKE: 2,
+            Stroke.BREASTSTROKE: 3,
+            Stroke.BUTTERFLY: 4,
+            Stroke.MEDLEY: 5,
         }.items():
             if code == stroke_code:
-                stroke_name = STROKE_NAMES.get(s, '')
+                stroke_name = STROKE_NAMES.get(s, "")
                 break
-        age_min = meta.get('age_min')
-        age_max = meta.get('age_max')
+        age_min = meta.get("age_min")
+        age_max = meta.get("age_max")
         if age_min and age_max and age_min != age_max:
             age_group_label = "%d-%d" % (age_min, age_max)
         elif age_min and age_max and age_min == age_max:
@@ -355,16 +422,16 @@ class HytekEventLoader():
         elif age_min:
             age_group_label = "%d & Over" % age_min
         else:
-            age_group_label = 'Open'
+            age_group_label = "Open"
         return {
-            'distance': meta.get('distance') or 0,
-            'stroke_code': stroke_code,
-            'stroke_name': stroke_name,
-            'age_min': age_min,
-            'age_max': age_max,
-            'age_group_label': age_group_label,
-            'gender_agnostic': gender_agnostic,
-            'relay': bool(meta.get('relay')),
+            "distance": meta.get("distance") or 0,
+            "stroke_code": stroke_code,
+            "stroke_name": stroke_name,
+            "age_min": age_min,
+            "age_max": age_max,
+            "age_group_label": age_group_label,
+            "gender_agnostic": gender_agnostic,
+            "relay": bool(meta.get("relay")),
         }
 
     def get_display_string(self, event_number, heat_number, lane):
@@ -403,38 +470,42 @@ class HytekEventLoader():
         return ""
 
     def to_object(self):
-        return pickle.dumps({
-            "event_names": self.event_names,
-            "event_meta": self.event_meta,
-            "events": self.events,
-            "events_uncombined": self.events_uncombined,
-            "teams": self.teams,
-            "teams_uncombined": self.teams_uncombined,
-            "age_codes": self.age_codes,
-            "age_codes_uncombined": self.age_codes_uncombined,
-            "seed_times": self.seed_times,
-            "seed_times_uncombined": self.seed_times_uncombined,
-            "combined": self.combined,
-        }, protocol=0).decode('utf8')
+        return pickle.dumps(
+            {
+                "event_names": self.event_names,
+                "event_meta": self.event_meta,
+                "events": self.events,
+                "events_uncombined": self.events_uncombined,
+                "teams": self.teams,
+                "teams_uncombined": self.teams_uncombined,
+                "age_codes": self.age_codes,
+                "age_codes_uncombined": self.age_codes_uncombined,
+                "seed_times": self.seed_times,
+                "seed_times_uncombined": self.seed_times_uncombined,
+                "combined": self.combined,
+            },
+            protocol=0,
+        ).decode("utf8")
 
     def from_object(self, p):
-        o = pickle.loads(p.encode('utf8'))
-        self.event_names = o['event_names']
-        self.event_meta = o.get('event_meta', {})
-        self.events = o['events']
-        self.events_uncombined = o['events_uncombined']
-        self.teams = o.get('teams', {})
-        self.teams_uncombined = o.get('teams_uncombined', {})
-        self.age_codes = o.get('age_codes', {})
-        self.age_codes_uncombined = o.get('age_codes_uncombined', {})
-        self.seed_times = o.get('seed_times', {})
-        self.seed_times_uncombined = o.get('seed_times_uncombined', {})
-        self.combined = o['combined']
+        o = pickle.loads(p.encode("utf8"))
+        self.event_names = o["event_names"]
+        self.event_meta = o.get("event_meta", {})
+        self.events = o["events"]
+        self.events_uncombined = o["events_uncombined"]
+        self.teams = o.get("teams", {})
+        self.teams_uncombined = o.get("teams_uncombined", {})
+        self.age_codes = o.get("age_codes", {})
+        self.age_codes_uncombined = o.get("age_codes_uncombined", {})
+        self.seed_times = o.get("seed_times", {})
+        self.seed_times_uncombined = o.get("seed_times_uncombined", {})
+        self.combined = o["combined"]
         self._compute_has_names()
 
 
 if __name__ == "__main__":
     import sys
+
     event_info = HytekEventLoader(sys.argv[1])
 
     event_heat = list(event_info.events.keys())
