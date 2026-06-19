@@ -34,6 +34,32 @@ _e_parsers.e2_parser = _patched_e2_parser
 from hytek_parser.hy3 import HY3_LINE_PARSERS
 HY3_LINE_PARSERS["E2"] = _patched_e2_parser
 
+# Monkey-patch f2_parser to handle empty/invalid date fields in relay result lines
+import hytek_parser.hy3.line_parsers.f_relay_parsers as _f_parsers
+
+_original_f2_parser = _f_parsers.f2_parser
+
+def _patched_f2_parser(line, file, opts):
+    try:
+        return _original_f2_parser(line, file, opts)
+    except (ValueError, IndexError):
+        # Handle lines with missing/invalid date fields by injecting a valid placeholder.
+        # extract() uses 1-based indexing: extract(line, 103, 8) reads line[102:110]
+        padded = line.ljust(110)
+        patched = padded[:102] + "01011900" + padded[110:]
+        result = _original_f2_parser(patched, file, opts)
+        # Clear the placeholder date on the entry
+        event_num, event = result.meet.last_event
+        entry = event.last_entry
+        placeholder = _datetime(1900, 1, 1).date()
+        for prefix in ("prelim", "swimoff", "finals"):
+            if getattr(entry, f"{prefix}_date", None) == placeholder:
+                setattr(entry, f"{prefix}_date", None)
+        return result
+
+_f_parsers.f2_parser = _patched_f2_parser
+HY3_LINE_PARSERS["F2"] = _patched_f2_parser
+
 
 STROKE_NAMES = {
     Stroke.FREESTYLE: "Freestyle",
