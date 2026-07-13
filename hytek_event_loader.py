@@ -6,6 +6,7 @@ from datetime import datetime as _datetime
 
 # Monkey-patch e2_parser to handle empty/invalid date fields in .hy3 files
 import hytek_parser.hy3.line_parsers.e_event_parsers as _e_parsers
+from hytek_parser._utils import extract
 from hytek_parser.hy3.enums import (
     Course,
     Gender,
@@ -45,7 +46,16 @@ HY3_LINE_PARSERS["E2"] = _patched_e2_parser
 # Monkey-patch f2_parser to handle empty/invalid date fields in relay result lines
 import hytek_parser.hy3.line_parsers.f_relay_parsers as _f_parsers
 
+_original_f1_parser = _f_parsers.f1_parser
 _original_f2_parser = _f_parsers.f2_parser
+_relay_team_ids = {}
+
+
+def _patched_f1_parser(line, file, opts):
+    result = _original_f1_parser(line, file, opts)
+    _, event = result.meet.last_event
+    _relay_team_ids[id(event.last_entry)] = extract(line, 8, 1)
+    return result
 
 
 def _patched_f2_parser(line, file, opts):
@@ -67,7 +77,9 @@ def _patched_f2_parser(line, file, opts):
         return result
 
 
+_f_parsers.f1_parser = _patched_f1_parser
 _f_parsers.f2_parser = _patched_f2_parser
+HY3_LINE_PARSERS["F1"] = _patched_f1_parser
 HY3_LINE_PARSERS["F2"] = _patched_f2_parser
 
 
@@ -98,6 +110,8 @@ GENDER_AGE_NAMES = {
 
 MALE_GENDERS = {GenderAge.BOY_S, GenderAge.MEN_S}
 FEMALE_GENDERS = {GenderAge.GIRL_S, GenderAge.WOMEN_S}
+HYTEK_OPEN_AGE_MAX = 109
+MAX_RELAY_DISPLAY_LENGTH = 44
 
 
 def _build_event_name(event):
@@ -108,18 +122,21 @@ def _build_event_name(event):
         has_female = Gender.FEMALE in genders
         if has_male and has_female:
             gender = "Mixed"
-    if event.age_min and event.age_max:
+    if event.age_min and event.age_max and event.age_max != HYTEK_OPEN_AGE_MAX:
         age = "%d-%d" % (event.age_min, event.age_max)
     elif event.age_min:
         age = "%d & Over" % event.age_min
-    elif event.age_max:
+    elif event.age_max and event.age_max != HYTEK_OPEN_AGE_MAX:
         age = "%d & Under" % event.age_max
     else:
         age = "Open"
 
     distance = str(event.distance)
     course = COURSE_NAMES.get(event.course, "")
-    stroke = STROKE_NAMES.get(event.stroke, "")
+    if event.stroke == Stroke.MEDLEY and not event.relay:
+        stroke = "Individual Medley"
+    else:
+        stroke = STROKE_NAMES.get(event.stroke, "")
     relay = "Relay" if event.relay else ""
 
     parts = [p for p in [gender, age, distance, course, stroke, relay] if p]
@@ -128,7 +145,25 @@ def _build_event_name(event):
 
 def _build_display_string(entry):
     if entry.relay:
-        return ""
+        relay_id = _relay_team_ids.get(id(entry), "")
+        prefix = "Relay%s" % (" %s" % relay_id if relay_id else "")
+        swimmer_names = []
+        for swimmer in entry.swimmers:
+            name = swimmer.first_name
+            if swimmer.last_name:
+                name += " %s." % swimmer.last_name[0]
+            if name.strip():
+                swimmer_names.append(name.strip())
+
+        display = prefix
+        for index, swimmer_name in enumerate(swimmer_names):
+            separator = ": " if index == 0 else ", "
+            candidate = display + separator + swimmer_name
+            has_more = index < len(swimmer_names) - 1
+            if len(candidate) + (5 if has_more else 0) > MAX_RELAY_DISPLAY_LENGTH:
+                return display + (": ..." if index == 0 else ", ...")
+            display = candidate
+        return display
     elif entry.swimmers:
         swimmer = entry.swimmers[0]
         return "%s %s" % (swimmer.first_name, swimmer.last_name)
@@ -222,11 +257,16 @@ class HytekEventLoader:
 
     def load(self, file_name):
         self.clear()
-        parsed = parse_hy3(file_name)
-        self._load_from_parsed(parsed)
+        _relay_team_ids.clear()
+        try:
+            parsed = parse_hy3(file_name)
+            self._load_from_parsed(parsed)
+        finally:
+            _relay_team_ids.clear()
 
     def load_from_bytestream(self, stream):
         self.clear()
+        _relay_team_ids.clear()
         with tempfile.NamedTemporaryFile(suffix=".hy3", delete=False) as tmp:
             tmp.write(stream.read())
             tmp_path = tmp.name
@@ -234,6 +274,7 @@ class HytekEventLoader:
             parsed = parse_hy3(tmp_path)
             self._load_from_parsed(parsed)
         finally:
+            _relay_team_ids.clear()
             os.unlink(tmp_path)
 
     def _load_from_parsed(self, parsed):
@@ -415,9 +456,9 @@ class HytekEventLoader:
                 break
         age_min = meta.get("age_min")
         age_max = meta.get("age_max")
-        if age_min and age_max and age_min != age_max:
+        if age_min and age_max and age_min != age_max and age_max != HYTEK_OPEN_AGE_MAX:
             age_group_label = "%d-%d" % (age_min, age_max)
-        elif age_min and age_max and age_min == age_max:
+        elif age_min and age_max == age_min:
             age_group_label = "%d" % age_min
         elif age_min:
             age_group_label = "%d & Over" % age_min
