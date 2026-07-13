@@ -215,6 +215,15 @@
         return /^lane_time\d+$/.test(key) || /^lane_place\d+$/.test(key);
     }
 
+    function shouldAllowLaneConfetti(lane, update, eventOrHeatChanged) {
+        if (!update || eventOrHeatChanged) return false;
+        if (Object.prototype.hasOwnProperty.call(update, 'current_event') ||
+            Object.prototype.hasOwnProperty.call(update, 'current_heat')) {
+            return false;
+        }
+        return Object.prototype.hasOwnProperty.call(update, 'lane_time' + lane);
+    }
+
     // Export all functions
     exports.parseTimeToSeconds = parseTimeToSeconds;
     exports.getThresholdsForLane = getThresholdsForLane;
@@ -223,5 +232,6 @@
     exports.evaluateLaneResult = evaluateLaneResult;
     exports.isServerOwnedLaneDisplay = isServerOwnedLaneDisplay;
     exports.shouldSuppressLaneField = shouldSuppressLaneField;
+    exports.shouldAllowLaneConfetti = shouldAllowLaneConfetti;
 
 })(typeof module !== 'undefined' && module.exports ? module.exports : window);
