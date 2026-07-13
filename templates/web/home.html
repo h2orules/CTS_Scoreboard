@@ -455,7 +455,7 @@
     }
 
     // Evaluate a lane's time against standards and records
-    function evaluateLaneTime(lane, timeText, isRunning) {
+    function evaluateLaneTime(lane, timeText, isRunning, allowConfetti) {
         var timeEl = document.getElementById("lane_time" + lane);
         if (!timeEl) return;
 
@@ -483,7 +483,7 @@
                 timeEl.classList.add(result.classes[i]);
             }
             if (tagEl) tagEl.textContent = result.tag;
-            spawnConfetti(lane, timeEl.parentElement);
+            if (allowConfetti) spawnConfetti(lane, timeEl.parentElement);
         }
     }
 
@@ -1036,7 +1036,6 @@
         }
 
         // Track race state from server FSM and handle transitions
-        var eventHeatChanged = false;
         var raceStateChanged = ("race_state" in s && s["race_state"] !== raceState);
         if (raceStateChanged) {
             var prevState = raceState;
@@ -1055,6 +1054,13 @@
         var newEv = ("current_event" in new_s) ? (parseInt(new_s["current_event"]) || currentEvent) : currentEvent;
         var newHt = ("current_heat" in new_s) ? (parseInt(new_s["current_heat"]) || currentHeat) : currentHeat;
         var eventOrHeatChanged = (newEv !== currentEvent) || (newHt !== currentHeat);
+        var eventHeatChanged = eventOrHeatChanged;
+        if (eventOrHeatChanged) {
+            laneTimes = {};
+            resetLaneQualifications();
+            confettiFired = {};
+            document.querySelectorAll('.confetti-particle').forEach(function (el) { el.remove(); });
+        }
 
         // Apply lane-cell display rules whenever the server-declared
         // ownership changes OR the heat changes within the same mode.
@@ -1065,9 +1071,6 @@
         if (raceStateChanged || qualifyingKeyChanged || eventOrHeatChanged ||
             laneDisplayMode !== prevLaneDisplayMode) {
             applyLaneDisplay(s);
-            if (laneDisplayMode === "seed_times" || laneDisplayMode === "clear") {
-                eventHeatChanged = true;
-            }
         }
 
         if (qrChanged) updateQrOverlay();
@@ -1274,7 +1277,12 @@
         // Evaluate all lanes for time standard qualifications (skip if event/heat just changed with stale times)
         if (!eventHeatChanged) {
             for (var i = 1; i <= {{ num_lanes }}; i++) {
-                evaluateLaneTime(i, laneTimes[i] || "", lane_running[i] || false);
+                evaluateLaneTime(
+                    i,
+                    laneTimes[i] || "",
+                    lane_running[i] || false,
+                    window.shouldAllowLaneConfetti(i, new_s, eventOrHeatChanged)
+                );
             }
         }
 

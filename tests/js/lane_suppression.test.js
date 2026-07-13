@@ -48,3 +48,22 @@ describe('shouldSuppressLaneField', () => {
         }
     });
 });
+
+describe('shouldAllowLaneConfetti', () => {
+    it('allows confetti for a fresh lane-time payload', () => {
+        expect(sb.shouldAllowLaneConfetti(2, { lane_time2: '   29.45' }, false)).toBe(true);
+    });
+
+    it('rejects cached times on unrelated payloads', () => {
+        expect(sb.shouldAllowLaneConfetti(2, { score_home: '42' }, false)).toBe(false);
+    });
+
+    it('rejects event and heat transition payloads', () => {
+        expect(sb.shouldAllowLaneConfetti(2, { lane_time2: '   29.45' }, true)).toBe(false);
+        expect(sb.shouldAllowLaneConfetti(2, {
+            current_event: '12',
+            current_heat: '2',
+            lane_time2: '   29.45',
+        }, false)).toBe(false);
+    });
+});

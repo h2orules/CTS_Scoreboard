@@ -1,5 +1,9 @@
-import pytest
+from types import SimpleNamespace
 
+import pytest
+from hytek_parser.hy3.enums import Course, GenderAge, Stroke
+
+import hytek_event_loader
 from hytek_event_loader import HytekEventLoader
 
 
@@ -28,6 +32,59 @@ class TestLoad:
             assert "distance" in meta
             assert "relay" in meta
             assert isinstance(meta["distance"], int)
+
+    def test_individual_medley_and_open_ended_age_names(self):
+        event = SimpleNamespace(
+            gender_age=GenderAge.GIRL_S,
+            entries=[],
+            age_min=15,
+            age_max=109,
+            distance=100,
+            course=Course.SCY,
+            stroke=Stroke.MEDLEY,
+            relay=False,
+        )
+        assert hytek_event_loader._build_event_name(event) == (
+            "Girls 15 & Over 100 Yard Individual Medley"
+        )
+
+        loader = HytekEventLoader()
+        loader.event_meta[25] = {
+            "stroke_code": 5,
+            "distance": 100,
+            "relay": False,
+            "age_min": 15,
+            "age_max": 109,
+            "sex_codes": [2],
+            "gender_age": GenderAge.GIRL_S,
+        }
+        assert loader.get_event_dims(25)["age_group_label"] == "15 & Over"
+
+        event.relay = True
+        event.age_min = 0
+        event.age_max = 8
+        assert hytek_event_loader._build_event_name(event) == (
+            "Girls 8 & Under 100 Yard Medley Relay"
+        )
+
+    def test_relay_name_includes_id_and_truncated_roster(self):
+        swimmers = [
+            SimpleNamespace(
+                first_name="Madeline", last_name="Lindberg", team_code="HW"
+            ),
+            SimpleNamespace(first_name="Lucy", last_name="Miller", team_code="HW"),
+            SimpleNamespace(
+                first_name="Alexandria", last_name="Robertson", team_code="HW"
+            ),
+            SimpleNamespace(first_name="Sophie", last_name="Johnson", team_code="HW"),
+        ]
+        entry = SimpleNamespace(relay=True, swimmers=swimmers)
+        hytek_event_loader._relay_team_ids[id(entry)] = "B"
+
+        assert hytek_event_loader._build_display_string(entry) == (
+            "Relay B: Madeline L., Lucy M., ..."
+        )
+        assert hytek_event_loader._get_team_code(entry) == "HW"
 
 
 class TestGetters:
