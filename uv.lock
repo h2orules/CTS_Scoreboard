@@ -329,7 +329,7 @@ requires-dist = [
     { name = "gevent" },
     { name = "gevent-websocket" },
     { name = "gunicorn" },
-    { name = "hytek-parser" },
+    { name = "hytek-parser", specifier = ">=3.0.0,<4.0.0" },
     { name = "msal" },
     { name = "pillow", specifier = ">=10.0" },
     { name = "pyserial" },
@@ -496,16 +496,16 @@ wheels = [
 
 [[package]]
 name = "hytek-parser"
-version = "1.2.0"
+version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aenum" },
     { name = "attrs" },
     { name = "xlrd" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d5/e3/d2dd330415fcb3319cb14410c8db2e6922012857a9a1593d5d74e70bb867/hytek_parser-1.2.0.tar.gz", hash = "sha256:97a4713e6b9364562ccf9885ceadf6d65bd8e35ee90825d42bf5ab39942ea4d1", size = 17871, upload-time = "2025-06-14T22:42:11.128Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/70/ff/2dc50eb40f77576a9d2921bd0486f702115b6e78fee199c243c0152026be/hytek_parser-3.0.0.tar.gz", hash = "sha256:7cad661a62b9e7c9fd79e1a6cb5121077547ca70e713ae33337752e659b8f17a", size = 23283, upload-time = "2026-09-05T18:49:52.325Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5f/ea/b4d303881d240394b8bafa9116c87a8e8bbbad311ceea0ec27c9dce6988a/hytek_parser-1.2.0-py3-none-any.whl", hash = "sha256:e05d1225792ec2302759d2d2044d4b5147e844fe2ee0bbb84e157fe1e74e398b", size = 25492, upload-time = "2025-06-14T22:42:10.003Z" },
+    { url = "https://files.pythonhosted.org/packages/0c/c8/d0e356e4f3d3a5c9f5dcaf582f030278d9e8f5dda0a07bd00cdcd7f9fff2/hytek_parser-3.0.0-py3-none-any.whl", hash = "sha256:0386407096011967aa8a52b4177e2a8fa693c139d23ca8bc05af6fa88d1120d5", size = 31617, upload-time = "2026-09-05T18:49:51.366Z" },
 ]
 
 [[package]]

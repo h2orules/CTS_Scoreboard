@@ -8,7 +8,7 @@ dependencies = [
     "flask-login",
     "flask-socketio",
     "pyserial",
-    "hytek-parser",
+    "hytek-parser>=3.0.0,<4.0.0",
     "transitions",
     "gunicorn",
     "gevent",
