@@ -54,16 +54,19 @@ param alertSmsCountryCode string
 @minLength(7)
 param alertSmsPhone string
 
+@description('Optional suffix appended ONLY to the three globally-unique-name resources (ACR, Storage, Redis). Leave blank for normal deploys. Use this for a zero-downtime subscription migration: deploy the new stack side-by-side under e.g. nameSuffix=\'2\' while the old subscription still owns the canonical global names, then redeploy with an empty suffix (and re-import/re-migrate those 3 resources) once the old subscription\'s resource group has been deleted and the canonical names are free again. Every other resource (Container App, its environment, Log Analytics, App Insights, UAMI, alerts) is only unique per-resource-group, so those never need suffixing.')
+param nameSuffix string = ''
+
 // ---------- naming ----------
 var prefix = 'cts-sb-${environmentName}'
-var acrName = replace('${prefix}acr', '-', '')
+var acrName = replace('${prefix}acr${nameSuffix}', '-', '')
 var laName = '${prefix}-la'
 var aiName = '${prefix}-ai'
 var caEnvName = '${prefix}-cae'
 var caName = '${prefix}-app'
 var uamiName = '${prefix}-uami'
-var redisName = '${prefix}-redis'
-var storageName = take(replace('${prefix}st', '-', ''), 24)
+var redisName = '${prefix}-redis${nameSuffix}'
+var storageName = take(replace('${prefix}st${nameSuffix}', '-', ''), 24)
 var actionGroupName = '${prefix}-ag'
 
 // ---------- observability ----------
