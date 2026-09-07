@@ -1,0 +1,367 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "## Prod Performance Dashboard\n---\n\nThe queries below identify how the service is performing as it hosts traffic.  This includes detailed counters for app internals."
+      },
+      "name": "Prod Performance Dashboard"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customMetrics\n| where timestamp > ago(6h)\n| where name == \"event_handler_seconds\"\n| extend event = tostring(customDimensions.event)\n| summarize p50=percentile(value, 50),\n            p95=percentile(value, 95),\n            p99=percentile(value, 99)\n          by event, bin(timestamp, 1m)\n| render timechart",
+        "size": 1,
+        "title": "Per-event handler p50/p95/p99 (last hour)",
+        "timeContext": {
+          "durationMs": 3600000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "Per-event handler p50/p95/p99 (last hour)"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customMetrics\n| where name == \"active_sockets\"\n| extend ns = tostring(customDimensions.namespace)\n| summarize sockets = sum(valueSum) by ns, bin(timestamp, 1m)\n| render timechart",
+        "size": 0,
+        "title": "Active sockets per namespace (rolling sum of up-down deltas)",
+        "timeContext": {
+          "durationMs": 3600000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "Active sockets per namespace (rolling sum of up-down deltas)"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "let fanout = customMetrics\n  | where name == \"emit_fanout_seconds\" and timestamp > ago(1h)\n  | summarize p95=percentile(value, 95) by bin(timestamp, 1m);\nlet sockets = customMetrics\n  | where name == \"active_sockets\"\n        and tostring(customDimensions.namespace) == \"/scoreboard\"\n        and timestamp > ago(1h)\n  | summarize sockets = sum(valueSum) by bin(timestamp, 1m);\nfanout\n| join sockets on timestamp\n| project timestamp, p95, sockets\n| render timechart",
+        "size": 0,
+        "title": "Fan-out latency vs. concurrent viewer count (correlation)",
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "Fan-out latency vs. concurrent viewer count (correlation)"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customMetrics\n| where name == \"active_sockets\"\n| extend ns = tostring(customDimensions.namespace), replica = cloud_RoleInstance\n| where ns == \"/scoreboard\"\n| summarize sockets = sum(valueSum) by replica, bin(timestamp, 30s)\n| render timechart",
+        "size": 0,
+        "title": "Active socket distribution across replicas",
+        "timeContext": {
+          "durationMs": 3600000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "Active socket distribution across replicas"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customMetrics\n| where name in (\"coalescer_events_in\", \"coalescer_batches_flushed\")\n| extend event = tostring(customDimensions[\"event\"])\n| summarize events_in = sumif(value, name == \"coalescer_events_in\"),\n            batches  = sumif(value, name == \"coalescer_batches_flushed\")\n        by bin(timestamp, 30s), event\n| extend compression = todouble(events_in) / todouble(batches)\n| project timestamp, event, compression\n| render timechart",
+        "size": 0,
+        "title": "[Coalescer] Compression ratio",
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "[Coalescer] Compression ratio"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customMetrics\n| where name == \"coalescer_batch_size\"\n| extend event = tostring(customDimensions[\"event\"])\n| summarize avg_batch = sum(valueSum) / sum(valueCount),\n            max_batch = max(valueMax),\n            min_batch = min(valueMin),\n            batches   = sum(valueCount)\n        by bin(timestamp, 1m), event\n| render timechart",
+        "size": 0,
+        "title": "[Coalescer] Batch size distribution",
+        "timeContext": {
+          "durationMs": 3600000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "tileSettings": {
+          "showBorder": false,
+          "titleContent": {
+            "columnMatch": "event",
+            "formatter": 1
+          },
+          "leftContent": {
+            "columnMatch": "p50",
+            "formatter": 12,
+            "formatOptions": {
+              "palette": "auto"
+            },
+            "numberFormat": {
+              "unit": 17,
+              "options": {
+                "maximumSignificantDigits": 3,
+                "maximumFractionDigits": 2
+              }
+            }
+          }
+        },
+        "graphSettings": {
+          "type": 0,
+          "topContent": {
+            "columnMatch": "event",
+            "formatter": 1
+          },
+          "centerContent": {
+            "columnMatch": "p50",
+            "formatter": 1,
+            "numberFormat": {
+              "unit": 17,
+              "options": {
+                "maximumSignificantDigits": 3,
+                "maximumFractionDigits": 2
+              }
+            }
+          }
+        },
+        "mapSettings": {
+          "locInfo": "LatLong",
+          "sizeSettings": "p50",
+          "sizeAggregation": "Sum",
+          "legendMetric": "p50",
+          "legendAggregation": "Sum",
+          "itemColorSettings": {
+            "type": "heatmap",
+            "colorAggregation": "Sum",
+            "nodeColorField": "p50",
+            "heatmapPalette": "greenRed"
+          }
+        }
+      },
+      "name": "[Coalescer] Batch size distribution"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "customMetrics\n| where name == \"emit_fanout_seconds\"\n| summarize avg_s = sum(valueSum) / sum(valueCount),\n            max_s = max(valueMax),\n            emits = sum(valueCount)\n        by bin(timestamp, 30s)\n| render timechart",
+        "size": 0,
+        "title": "Socket.IO pub/sub depth (proxy)",
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "Socket.IO pub/sub depth (proxy)"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "title": "Redis metrics",
+        "items": [
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "customMetrics\n| where name == \"redis_op_seconds\"\n| extend op = tostring(customDimensions.op)\n| summarize p95=percentile(value, 95) by op, bin(timestamp, 1m)\n| render timechart",
+              "size": 0,
+              "title": "Redis op p95 latency by op",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components"
+            },
+            "name": "Redis op p95 latency by op"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "let writes = dynamic([\"put_state\",\"put_fragment\",\"put_template\",\n                      \"put_context\",\"open_meet\",\"close_meet\",\n                      \"heartbeat\",\"mark_status\"]);\ncustomMetrics\n| where name == \"redis_op_seconds\"\n| extend op = tostring(customDimensions[\"op\"])\n| extend op_kind = iff(op in (writes), \"write\", \"read\")\n| summarize ops = sum(valueCount) by bin(timestamp, 10s), op_kind\n| render timechart",
+              "size": 0,
+              "title": "Redis op rate split by read vs write",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components"
+            },
+            "name": "Redis op rate split by read vs write"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "customMetrics\n| where name == \"redis_memory_bytes\"\n| extend mem_kind = tostring(customDimensions[\"kind\"])\n| summarize bytes = avg(value) by bin(timestamp, 30s), mem_kind\n| render timechart",
+              "size": 0,
+              "title": "Redis Memory Usage",
+              "timeContext": {
+                "durationMs": 86400000
+              },
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components"
+            },
+            "name": "Redis server-side memory & evictions"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "customMetrics\n| where name == \"redis_keys_lifecycle_total\"\n| extend key_kind = tostring(customDimensions[\"kind\"])\n| summarize last_v = max(value), first_v = min(value) by key_kind\n| extend delta = last_v - first_v\n| project key_kind, delta",
+              "size": 4,
+              "title": "Redis eviction & expiration counters",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components",
+              "visualization": "tiles",
+              "tileSettings": {
+                "showBorder": false,
+                "titleContent": {
+                  "columnMatch": "key_kind",
+                  "formatter": 1
+                },
+                "leftContent": {
+                  "columnMatch": "delta",
+                  "formatter": 12,
+                  "formatOptions": {
+                    "palette": "auto"
+                  },
+                  "numberFormat": {
+                    "unit": 17,
+                    "options": {
+                      "maximumSignificantDigits": 3,
+                      "maximumFractionDigits": 2
+                    }
+                  }
+                }
+              }
+            },
+            "name": "Redis eviction & expiration counters"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "customMetrics\n| where name in (\"redis_clients\", \"redis_instantaneous_ops_per_sec\")\n| extend label = strcat(name, \":\", tostring(customDimensions[\"state\"]))\n| summarize avg(value) by bin(timestamp, 30s), label\n| render timechart",
+              "size": 0,
+              "title": "Redis clients & ops/sec",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components"
+            },
+            "name": "Redis clients & ops/sec"
+          }
+        ]
+      },
+      "name": "Redis metrics"
+    },
+    {
+      "type": 12,
+      "content": {
+        "version": "NotebookGroup/1.0",
+        "groupType": "editable",
+        "title": "Per-replica memory cache",
+        "items": [
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "customMetrics\n| where name in (\"cache_hits\", \"cache_misses\")\n| extend op = tostring(customDimensions[\"op\"])\n| summarize hits   = sumif(value, name == \"cache_hits\"),\n            misses = sumif(value, name == \"cache_misses\")\n        by bin(timestamp, 1m), op\n| extend hit_rate = todouble(hits) / todouble(hits + misses)\n| project timestamp, op, hit_rate\n| render timechart",
+              "size": 0,
+              "title": "Cache hit rate per op",
+              "timeContext": {
+                "durationMs": 86400000
+              },
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components"
+            },
+            "name": "Cache hit rate per op"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "customMetrics\n| where name == \"cache_size_entries\"\n| extend cache = tostring(customDimensions[\"cache\"])\n| summarize entries = avg(value) by bin(timestamp, 30s),\n                                     cache,\n                                     cloud_RoleInstance\n| render timechart",
+              "size": 0,
+              "title": "Per-replica fragment cache occupancy",
+              "timeContext": {
+                "durationMs": 3600000
+              },
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components"
+            },
+            "name": "Per-replica fragment cache occupancy"
+          },
+          {
+            "type": 3,
+            "content": {
+              "version": "KqlItem/1.0",
+              "query": "customMetrics\n| where name == \"cache_max_entries\"\n| summarize max(value) by tostring(customDimensions[\"cache\"])",
+              "size": 4,
+              "title": "Configured per-replica memory cache cap",
+              "timeContext": {
+                "durationMs": 86400000
+              },
+              "queryType": 0,
+              "resourceType": "microsoft.insights/components"
+            },
+            "name": "Configured per-replica memory cache cap"
+          }
+        ]
+      },
+      "name": "Per-replica memory cache"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| summarize p50 = percentile(duration, 50),\n            p95 = percentile(duration, 95),\n            p99 = percentile(duration, 99),\n            cnt = count()\n        by bin(timestamp, 30s), name\n| render timechart",
+        "size": 0,
+        "title": "HTTP route latency",
+        "timeContext": {
+          "durationMs": 3600000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "HTTP route latency"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "requests\n| where name matches regex @\"/m/\\{meet_id\\}(/|$)\"\n| summarize p95 = percentile(duration, 95) by bin(timestamp, 30s), name\n| render timechart",
+        "size": 0,
+        "title": "Viewer page loads and per-meet API fragments",
+        "timeContext": {
+          "durationMs": 3600000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "Viewer page loads and per-meet API fragments"
+    }
+  ],
+  "isLocked": true,
+  "fallbackResourceIds": [
+    "__APP_INSIGHTS_RESOURCE_ID__"
+  ]
+}

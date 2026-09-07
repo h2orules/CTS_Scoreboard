@@ -207,16 +207,21 @@ jobs:
           echo "Cert id: $NEW_CERT_ID"
 
           # Poll for up to 15 minutes.
+          #
+          # NOTE: `az containerapp env certificate` has no `show --ids`
+          # subcommand (only create/delete/list/upload), so status has to be
+          # read back via `list` filtered to this cert's id.
           for i in $(seq 1 30); do
-            STATE=$(az containerapp env certificate show --ids "$NEW_CERT_ID" \
-              --query properties.provisioningState -o tsv)
+            STATE=$(az containerapp env certificate list -g "$RG" --name "$CAE" \
+              --query "[?id=='$NEW_CERT_ID'].properties.provisioningState | [0]" -o tsv)
             echo "  attempt $i: $STATE"
             if [[ "$STATE" == "Succeeded" ]]; then
               break
             fi
             if [[ "$STATE" == "Failed" || "$STATE" == "Canceled" ]]; then
               echo "::error::Managed cert provisioning ended in state $STATE"
-              az containerapp env certificate show --ids "$NEW_CERT_ID" -o json
+              az containerapp env certificate list -g "$RG" --name "$CAE" \
+                --query "[?id=='$NEW_CERT_ID']" -o json
               exit 1
             fi
             sleep 30

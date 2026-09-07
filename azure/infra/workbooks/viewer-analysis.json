@@ -1,0 +1,207 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "## Viewer Metrics\n---\n\nSee how users engage with the meets."
+      },
+      "name": "text - 2"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where customDimensions has 'viewer_event'\n| extend ev            = tostring(customDimensions.viewer_event),\n         meet_id       = tostring(customDimensions.meet_id),\n         pi_local_date = tostring(customDimensions.pi_local_date),\n         viewer_id     = tostring(customDimensions.viewer_id),\n         device_hash   = tostring(customDimensions.device_hash),\n         mb_active     = tobool(customDimensions.active),\n         lcp_ms        = tolong(customDimensions.lcp_ms)\n| where isnotempty(meet_id) and isnotempty(pi_local_date)\n| summarize\n    unique_viewers  = dcount(viewer_id),\n    unique_devices  = dcount(device_hash),\n    page_loads      = countif(ev == 'viewer_page_load'),\n    heartbeats      = countif(ev == 'viewer_heartbeat'),\n    event_views     = countif(ev == 'viewer_event_view'),\n    message_board_views = countif(ev == 'viewer_message_board_view' and mb_active == true),\n    median_lcp_ms   = percentile(lcp_ms, 50),\n    p90_lcp_ms      = percentile(lcp_ms, 90)\n  by meet_id, pi_local_date\n| order by pi_local_date desc, unique_viewers desc",
+        "size": 1,
+        "title": "Meets summary",
+        "timeContext": {
+          "durationMs": 2592000000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "Meets summary"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where customDimensions has 'viewer_event'\n| extend meet_id       = tostring(customDimensions.meet_id),\n         pi_local_date = tostring(customDimensions.pi_local_date),\n         viewer_id     = tostring(customDimensions.viewer_id)\n| where isnotempty(meet_id) and isnotempty(pi_local_date)\n| summarize unique_viewers = dcount(viewer_id) by pi_local_date\n| order by pi_local_date asc\n| render barchart",
+        "size": 0,
+        "title": "Unique viewers per meet day",
+        "timeContext": {
+          "durationMs": 2592000000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "Unique viewers per meet day"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where customDimensions has 'viewer_event'\n| extend ev            = tostring(customDimensions.viewer_event),\n         pi_local_date = tostring(customDimensions.pi_local_date),\n         lcp_ms        = tolong(customDimensions.lcp_ms)\n| where ev in ('viewer_hidden', 'viewer_unload') and lcp_ms > 0\n| summarize p50 = percentile(lcp_ms, 50),\n            p90 = percentile(lcp_ms, 90)\n        by pi_local_date\n| order by pi_local_date asc\n| render timechart",
+        "size": 0,
+        "title": "LCP p50 / p90 trend across meets",
+        "timeContext": {
+          "durationMs": 2592000000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "LCP p50 / p90 trend across meets"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where customDimensions has 'viewer_event'\n| extend ev          = tostring(customDimensions.viewer_event),\n         viewer_id   = tostring(customDimensions.viewer_id),\n         distance    = toint(customDimensions.distance),\n         stroke_name = tostring(customDimensions.stroke_name),\n         age_group   = tostring(customDimensions.age_group),\n         gender      = tostring(customDimensions.gender)\n| where ev == 'viewer_event_view'\n| summarize unique_viewers = dcount(viewer_id),\n            total_views    = count()\n        by distance, stroke_name, age_group, gender\n| order by unique_viewers desc\n| take 20",
+        "size": 0,
+        "title": "Most-watched event attributes ",
+        "timeContext": {
+          "durationMs": 2592000000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "Most-watched event attributes "
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "# Per-Meet Data"
+      },
+      "name": "text - 4"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "93c6b5a8-33c7-44ca-940b-0752a1ecc530",
+            "version": "KqlParameterItem/1.0",
+            "name": "pi_local_date",
+            "type": 2,
+            "isRequired": true,
+            "query": "   traces\n   | where customDimensions has 'viewer_event'\n   | extend pi_local_date = tostring(customDimensions.pi_local_date)\n   | where isnotempty(pi_local_date)\n   | summarize by pi_local_date\n   | order by pi_local_date desc",
+            "typeSettings": {
+              "additionalResourceOptions": []
+            },
+            "timeContext": {
+              "durationMs": 2592000000
+            },
+            "queryType": 0,
+            "resourceType": "microsoft.insights/components",
+            "value": "2026-06-06T00:00:00.0000000Z"
+          },
+          {
+            "id": "bde47427-82ec-4a1f-8365-c11a16c2e152",
+            "version": "KqlParameterItem/1.0",
+            "name": "meet_id",
+            "type": 2,
+            "isRequired": true,
+            "query": "traces\n   | where customDimensions has 'viewer_event'\n   | extend meet_id       = tostring(customDimensions.meet_id),\n            pi_local_date = tostring(customDimensions.pi_local_date)\n   | where pi_local_date == '{pi_local_date}' and isnotempty(meet_id)\n   | summarize events = count() by meet_id\n   | order by events desc\n   | project value = meet_id, label = strcat(meet_id, ' (', tostring(events), ' events)')",
+            "typeSettings": {
+              "additionalResourceOptions": []
+            },
+            "timeContext": {
+              "durationMs": 2592000000
+            },
+            "queryType": 0,
+            "resourceType": "microsoft.insights/components",
+            "value": "HWDolphins"
+          }
+        ],
+        "style": "pills",
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "parameters - 5"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where customDimensions has 'viewer_event'\n| extend ev          = tostring(customDimensions.viewer_event),\n         meet_id     = tostring(customDimensions.meet_id),\n         pi_date     = tostring(customDimensions.pi_local_date),\n         viewer_id   = tostring(customDimensions.viewer_id)\n| where meet_id =~ '{meet_id}' and pi_date == '{pi_local_date}'\n| sort by viewer_id asc, timestamp asc\n| serialize\n| extend prev_ts     = prev(timestamp), prev_viewer = prev(viewer_id)\n| extend new_session = iff(viewer_id != prev_viewer\n                           or datetime_diff('second', timestamp, prev_ts) > 300,\n                           1, 0)\n| extend session_idx = row_cumsum(new_session)\n| summarize start_ts = min(timestamp), end_ts = max(timestamp)\n        by viewer_id, session_idx\n| extend duration_s = datetime_diff('second', end_ts, start_ts)\n| summarize total_sessions  = count(),\n            median_dur_s    = percentile(duration_s, 50),\n            p90_dur_s       = percentile(duration_s, 90)",
+        "size": 4,
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components",
+        "tileSettings": {
+          "titleContent": {},
+          "showBorder": false
+        }
+      },
+      "name": "query - 6"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where customDimensions has 'viewer_event'\n| extend ev        = tostring(customDimensions.viewer_event),\n         meet_id   = tostring(customDimensions.meet_id),\n         pi_date   = tostring(customDimensions.pi_local_date),\n         viewer_id = tostring(customDimensions.viewer_id)\n| where meet_id =~ '{meet_id}' and pi_date == '{pi_local_date}'\n| where ev == 'viewer_heartbeat'\n| summarize concurrent = dcount(viewer_id) by bin(timestamp, 1m)\n| render timechart",
+        "size": 0,
+        "title": "Concurrent viewers per minute",
+        "timeContext": {
+          "durationMs": 2592000000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "Concurrent viewers per minute"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where customDimensions has 'viewer_event'\n| extend ev          = tostring(customDimensions.viewer_event),\n         meet_id     = tostring(customDimensions.meet_id),\n         pi_date     = tostring(customDimensions.pi_local_date),\n         viewer_id   = tostring(customDimensions.viewer_id),\n         stroke_name = tostring(customDimensions.stroke_name),\n         age_group   = tostring(customDimensions.age_group),\n         gender      = tostring(customDimensions.gender)\n| where meet_id =~ '{meet_id}' and pi_date == '{pi_local_date}'\n| where ev == 'viewer_event_view'\n| summarize unique_viewers = dcount(viewer_id),\n            total_views    = count()\n        by stroke_name, age_group, gender\n| order by unique_viewers desc",
+        "size": 0,
+        "title": "Drop-off by event type",
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "Drop-off by event type"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where customDimensions has 'viewer_event'\n| extend ev             = tostring(customDimensions.viewer_event),\n         meet_id        = tostring(customDimensions.meet_id),\n         pi_date        = tostring(customDimensions.pi_local_date),\n         lcp_ms         = tolong(customDimensions.lcp_ms),\n         effective_type = tostring(customDimensions.effective_type)\n| where meet_id =~ '{meet_id}' and pi_date == '{pi_local_date}'\n| where ev in ('viewer_hidden', 'viewer_unload') and lcp_ms > 0\n| summarize page_loads   = count(),\n            median_lcp   = percentile(lcp_ms, 50),\n            p90_lcp      = percentile(lcp_ms, 90),\n            p99_lcp      = percentile(lcp_ms, 99)\n        by effective_type\n| order by median_lcp asc",
+        "size": 1,
+        "title": "LCP and connection-type breakdown",
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "LCP and connection-type breakdown"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "traces\n| where customDimensions has 'viewer_event'\n| extend ev          = tostring(customDimensions.viewer_event),\n         meet_id     = tostring(customDimensions.meet_id),\n         pi_date     = tostring(customDimensions.pi_local_date),\n         viewer_id   = tostring(customDimensions.viewer_id),\n         distance    = toint(customDimensions.distance),\n         stroke_name = tostring(customDimensions.stroke_name),\n         age_group   = tostring(customDimensions.age_group),\n         gender      = tostring(customDimensions.gender),\n         relay       = tobool(customDimensions.relay)\n| where meet_id =~ '{meet_id}' and pi_date == '{pi_local_date}'\n| where ev == 'viewer_event_view'\n| summarize unique_viewers = dcount(viewer_id),\n            total_views    = count()\n        by distance, stroke_name, age_group, gender, relay\n| extend event_label = strcat(tostring(distance), 'y ', gender, ' ', age_group,\n                              ' ', stroke_name,\n                              iff(relay, ' Relay', ''))\n| project event_label, distance, stroke_name, age_group, gender, relay,\n          unique_viewers, total_views\n| order by unique_viewers desc",
+        "size": 0,
+        "title": "Most-watched event attributes",
+        "timeContext": {
+          "durationMs": 86400000
+        },
+        "queryType": 0,
+        "resourceType": "microsoft.insights/components"
+      },
+      "name": "Most-watched event attributes"
+    }
+  ],
+  "isLocked": false,
+  "fallbackResourceIds": [
+    "__APP_INSIGHTS_RESOURCE_ID__"
+  ]
+}
