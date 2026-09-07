@@ -43,7 +43,7 @@ notebooks = [
     "azure-monitor-query>=1.3",
     "pandas>=2.2",
     "ipywidgets>=8.1",
-    "jupyterlab>=4.5.9",
+    "jupyterlab>=4.5.10",
 ]
 
 [build-system]
