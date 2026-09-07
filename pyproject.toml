@@ -17,7 +17,7 @@ dependencies = [
     "python-socketio[client]>=5.16.2",
     "requests",
     "segno",
-    "pillow>=10.0",
+    "pillow>=12.3.0",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
 ]
