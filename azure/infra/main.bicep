@@ -482,6 +482,55 @@ resource alertReconnects 'Microsoft.Insights/scheduledQueryRules@2023-03-15-prev
   }
 }
 
+// ---------- analytics workbooks ----------
+// Source-controlled copies of the Azure Monitor workbooks originally built
+// by hand in the portal (see azure/infra/workbooks/*.json). Deploying them
+// from Bicep means a fresh subscription/environment gets the same
+// dashboards automatically instead of someone having to recreate them by
+// hand. Each JSON file has its App Insights resource ID templated out as
+// the literal placeholder `__APP_INSIGHTS_RESOURCE_ID__`, substituted below
+// with this environment's `ai.id` so the "Pin"/fallback resource picker
+// works out of the box in both preprod and prod.
+resource workbookPerformanceDashboard 'microsoft.insights/workbooks@2022-04-01' = {
+  name: guid(resourceGroup().id, '${prefix}-performance-dashboard')
+  location: location
+  kind: 'shared'
+  tags: {
+    'hidden-title': '${environmentName} Performance Dashboard'
+  }
+  properties: {
+    displayName: '${environmentName} Performance Dashboard'
+    category: 'workbook'
+    sourceId: ai.id
+    version: '1.0'
+    serializedData: replace(
+      loadTextContent('workbooks/performance-dashboard.json'),
+      '__APP_INSIGHTS_RESOURCE_ID__',
+      ai.id
+    )
+  }
+}
+
+resource workbookViewerAnalysis 'microsoft.insights/workbooks@2022-04-01' = {
+  name: guid(resourceGroup().id, '${prefix}-viewer-analysis')
+  location: location
+  kind: 'shared'
+  tags: {
+    'hidden-title': '${environmentName} Viewer Analysis'
+  }
+  properties: {
+    displayName: '${environmentName} Viewer Analysis'
+    category: 'workbook'
+    sourceId: ai.id
+    version: '1.0'
+    serializedData: replace(
+      loadTextContent('workbooks/viewer-analysis.json'),
+      '__APP_INSIGHTS_RESOURCE_ID__',
+      ai.id
+    )
+  }
+}
+
 // ---------- outputs ----------
 output containerAppFqdn string = containerApp.properties.configuration.ingress.fqdn
 output acrLoginServer string = '${acrName}.azurecr.io'

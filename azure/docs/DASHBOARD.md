@@ -6,6 +6,20 @@ step-by-step instructions for assembling them into an Azure Workbook /
 Dashboard so you can watch a stress test live without round-tripping
 through code changes.
 
+> **The two production workbooks built from these queries — "Performance
+> Dashboard" and "Viewer Analysis" — are now source-controlled and
+> deployed automatically by Bicep.** See
+> [`azure/infra/workbooks/`](../infra/workbooks/) (raw exported workbook
+> JSON, with the App Insights resource ID templated out) and the
+> `workbookPerformanceDashboard` / `workbookViewerAnalysis` resources in
+> [`azure/infra/main.bicep`](../infra/main.bicep). Every `azure-infra-deploy`
+> run (preprod or prod) re-applies them idempotently, so a fresh
+> environment/subscription gets the same dashboards without anyone
+> rebuilding them by hand in the portal. The manual steps below are still
+> useful for prototyping a *new* panel — once it's good, export its
+> workbook JSON and fold it into the Bicep-managed files instead of
+> leaving it portal-only.
+
 > All queries target the **Application Insights** resource configured by
 > `applicationinsights_connection_string`. Custom metrics land in the
 > `customMetrics` table; the dimension you'll filter on most is
