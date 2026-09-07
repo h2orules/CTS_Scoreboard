@@ -14,7 +14,7 @@ dependencies = [
     "gevent",
     "gevent-websocket",
     "msal",
-    "python-socketio[client]",
+    "python-socketio[client]>=5.16.2",
     "requests",
     "segno",
     "pillow>=10.0",
