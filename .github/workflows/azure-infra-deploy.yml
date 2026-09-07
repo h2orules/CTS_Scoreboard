@@ -29,6 +29,10 @@ on:
         type: choice
         options: [what-if, apply]
         default: what-if
+      name_suffix:
+        description: 'Optional suffix for ACR/Storage/Redis only (globally-unique names). Leave blank for normal deploys; use e.g. "2" for a zero-downtime side-by-side subscription migration while the old subscription still owns the canonical names.'
+        required: false
+        default: ''
 
 permissions:
   id-token: write   # OIDC federated credential
@@ -82,11 +86,12 @@ jobs:
                   --query "properties.template.containers[0].image" \
                   -o tsv 2>/dev/null)
           set -e
+          SUFFIX="${{ github.event.inputs.name_suffix }}"
           if [[ -z "$IMG" ]]; then
             if [[ "${{ github.event.inputs.environment }}" == "prod" ]]; then
-              IMG="ctssbprodacr.azurecr.io/cts-relay:bootstrap"
+              IMG="ctssbprodacr${SUFFIX}.azurecr.io/cts-relay:bootstrap"
             else
-              IMG="ctssbpreprodacr.azurecr.io/cts-relay:bootstrap"
+              IMG="ctssbpreprodacr${SUFFIX}.azurecr.io/cts-relay:bootstrap"
             fi
             echo "::warning title=No running image::Falling back to $IMG"
           fi
@@ -130,7 +135,8 @@ jobs:
                 entraAudience="api://$RELAY_APP_ID" \
                 alertEmail="$ALERT_EMAIL" \
                 alertSmsCountryCode="$ALERT_SMS_COUNTRY_CODE" \
-                alertSmsPhone="$ALERT_SMS_PHONE"
+                alertSmsPhone="$ALERT_SMS_PHONE" \
+                nameSuffix="${{ github.event.inputs.name_suffix }}"
 
       - name: Bicep deploy
         if: github.event.inputs.mode == 'apply'
@@ -147,7 +153,8 @@ jobs:
                 entraAudience="api://$RELAY_APP_ID" \
                 alertEmail="$ALERT_EMAIL" \
                 alertSmsCountryCode="$ALERT_SMS_COUNTRY_CODE" \
-                alertSmsPhone="$ALERT_SMS_PHONE"
+                alertSmsPhone="$ALERT_SMS_PHONE" \
+                nameSuffix="${{ github.event.inputs.name_suffix }}"
           FQDN=$(az containerapp show \
                   -g "${{ steps.target.outputs.rg }}" \
                   -n "${{ steps.target.outputs.app }}" \
