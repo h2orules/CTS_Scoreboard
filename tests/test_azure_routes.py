@@ -57,6 +57,52 @@ class TestAzureLogin:
         assert "tenant_id" in resp.get_json()["error"]
 
 
+class TestAzureLoginComplete:
+    def test_save_failure_does_not_expose_exception(
+        self, logged_in_client, monkeypatch
+    ):
+        monkeypatch.setattr(
+            CTS_Scoreboard.azure_relay_client, "complete_login", lambda: True
+        )
+        monkeypatch.setattr(
+            CTS_Scoreboard,
+            "save_azure_settings",
+            lambda: (_ for _ in ()).throw(RuntimeError("sensitive path")),
+        )
+        monkeypatch.setattr(
+            CTS_Scoreboard.azure_relay_client, "update_relay_url", lambda _: None
+        )
+        monkeypatch.setattr(CTS_Scoreboard.azure_relay_client, "start", lambda: None)
+
+        resp = logged_in_client.post("/azure/login/complete")
+
+        assert resp.status_code == 200
+        assert resp.get_json()["warning"] == "failed to persist azure_settings.json"
+        assert "sensitive path" not in resp.get_data(as_text=True)
+
+    def test_relay_failure_does_not_expose_exception(
+        self, logged_in_client, monkeypatch
+    ):
+        monkeypatch.setattr(
+            CTS_Scoreboard.azure_relay_client, "complete_login", lambda: True
+        )
+        monkeypatch.setattr(CTS_Scoreboard, "save_azure_settings", lambda: None)
+        monkeypatch.setattr(
+            CTS_Scoreboard.azure_relay_client, "update_relay_url", lambda _: None
+        )
+        monkeypatch.setattr(
+            CTS_Scoreboard.azure_relay_client,
+            "start",
+            lambda: (_ for _ in ()).throw(RuntimeError("internal endpoint")),
+        )
+
+        resp = logged_in_client.post("/azure/login/complete")
+
+        assert resp.status_code == 200
+        assert resp.get_json()["warning"] == "failed to start relay worker"
+        assert "internal endpoint" not in resp.get_data(as_text=True)
+
+
 class TestAzureRotateId:
     def test_rotate_when_not_signed_in_returns_400(self, logged_in_client):
         resp = logged_in_client.post("/azure/rotate_id")
