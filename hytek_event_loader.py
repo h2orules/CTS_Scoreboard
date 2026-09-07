@@ -4,9 +4,10 @@ import pickle
 import tempfile
 from datetime import datetime as _datetime
 
-# Monkey-patch e2_parser to handle empty/invalid date fields in .hy3 files
+# Last tested with hytek-parser 3.0.0. It handles blank result dates natively,
+# but still rejects malformed nonblank dates. Keep these E2/F2 compatibility
+# patches until upstream accepts invalid dates as missing.
 import hytek_parser.hy3.line_parsers.e_event_parsers as _e_parsers
-from hytek_parser._utils import extract
 from hytek_parser.hy3.enums import (
     Course,
     Gender,
@@ -22,14 +23,11 @@ _original_e2_parser = _e_parsers.e2_parser
 def _patched_e2_parser(line, file, opts):
     try:
         return _original_e2_parser(line, file, opts)
-    except (ValueError, IndexError):
-        # Handle lines with missing/invalid date fields by injecting a valid placeholder
-        # extract() uses 1-based indexing: extract(line, 88, 8) reads line[87:95]
+    except ValueError:
         padded = line.ljust(96)
         patched = padded[:87] + "01011900" + padded[95:]
         result = _original_e2_parser(patched, file, opts)
-        # Clear the placeholder date on the entry
-        event_num, event = result.meet.last_event
+        _, event = result.meet.last_event
         entry = event.last_entry
         placeholder = _datetime(1900, 1, 1).date()
         for prefix in ("prelim", "swimoff", "finals"):
@@ -43,32 +41,21 @@ from hytek_parser.hy3 import HY3_LINE_PARSERS
 
 HY3_LINE_PARSERS["E2"] = _patched_e2_parser
 
-# Monkey-patch f2_parser to handle empty/invalid date fields in relay result lines
+# The former F1 relay-ID patch is unnecessary as of the last-tested 3.0.0;
+# relay_team_id and relay_swim_team_code are now populated upstream.
 import hytek_parser.hy3.line_parsers.f_relay_parsers as _f_parsers
 
-_original_f1_parser = _f_parsers.f1_parser
 _original_f2_parser = _f_parsers.f2_parser
-_relay_team_ids = {}
-
-
-def _patched_f1_parser(line, file, opts):
-    result = _original_f1_parser(line, file, opts)
-    _, event = result.meet.last_event
-    _relay_team_ids[id(event.last_entry)] = extract(line, 8, 1)
-    return result
 
 
 def _patched_f2_parser(line, file, opts):
     try:
         return _original_f2_parser(line, file, opts)
-    except (ValueError, IndexError):
-        # Handle lines with missing/invalid date fields by injecting a valid placeholder.
-        # extract() uses 1-based indexing: extract(line, 103, 8) reads line[102:110]
+    except ValueError:
         padded = line.ljust(110)
         patched = padded[:102] + "01011900" + padded[110:]
         result = _original_f2_parser(patched, file, opts)
-        # Clear the placeholder date on the entry
-        event_num, event = result.meet.last_event
+        _, event = result.meet.last_event
         entry = event.last_entry
         placeholder = _datetime(1900, 1, 1).date()
         for prefix in ("prelim", "swimoff", "finals"):
@@ -77,9 +64,7 @@ def _patched_f2_parser(line, file, opts):
         return result
 
 
-_f_parsers.f1_parser = _patched_f1_parser
 _f_parsers.f2_parser = _patched_f2_parser
-HY3_LINE_PARSERS["F1"] = _patched_f1_parser
 HY3_LINE_PARSERS["F2"] = _patched_f2_parser
 
 
@@ -114,10 +99,21 @@ HYTEK_OPEN_AGE_MAX = 109
 MAX_RELAY_DISPLAY_LENGTH = 44
 
 
+def _entry_swimmers(entry):
+    swimmers = entry.swimmers
+    return swimmers.values() if isinstance(swimmers, dict) else swimmers
+
+
+def _normalize_distance(distance):
+    if isinstance(distance, float) and distance.is_integer():
+        return int(distance)
+    return distance
+
+
 def _build_event_name(event):
     gender = GENDER_AGE_NAMES.get(event.gender_age, "")
     if not gender and event.entries:
-        genders = {s.gender for e in event.entries for s in e.swimmers}
+        genders = {s.gender for e in event.entries for s in _entry_swimmers(e)}
         has_male = Gender.MALE in genders
         has_female = Gender.FEMALE in genders
         if has_male and has_female:
@@ -131,7 +127,7 @@ def _build_event_name(event):
     else:
         age = "Open"
 
-    distance = str(event.distance)
+    distance = str(_normalize_distance(event.distance))
     course = COURSE_NAMES.get(event.course, "")
     if event.stroke == Stroke.MEDLEY and not event.relay:
         stroke = "Individual Medley"
@@ -145,10 +141,10 @@ def _build_event_name(event):
 
 def _build_display_string(entry):
     if entry.relay:
-        relay_id = _relay_team_ids.get(id(entry), "")
+        relay_id = getattr(entry, "relay_team_id", None) or ""
         prefix = "Relay%s" % (" %s" % relay_id if relay_id else "")
         swimmer_names = []
-        for swimmer in entry.swimmers:
+        for swimmer in _entry_swimmers(entry):
             name = swimmer.first_name
             if swimmer.last_name:
                 name += " %s." % swimmer.last_name[0]
@@ -165,14 +161,17 @@ def _build_display_string(entry):
             display = candidate
         return display
     elif entry.swimmers:
-        swimmer = entry.swimmers[0]
+        swimmer = next(iter(_entry_swimmers(entry)))
         return "%s %s" % (swimmer.first_name, swimmer.last_name)
     return ""
 
 
 def _get_team_code(entry):
+    relay_team_code = getattr(entry, "relay_swim_team_code", None)
+    if entry.relay and relay_team_code:
+        return relay_team_code
     if entry.swimmers:
-        return entry.swimmers[0].team_code
+        return next(iter(_entry_swimmers(entry))).team_code
     return ""
 
 
@@ -180,7 +179,7 @@ def _get_age_code(entry, gender_age):
     """Build abbreviated age+gender code like '8B', '12G'."""
     if entry.relay or not entry.swimmers:
         return ""
-    swimmer = entry.swimmers[0]
+    swimmer = next(iter(_entry_swimmers(entry)))
     age = getattr(swimmer, "age", None)
     if age is None:
         return ""
@@ -257,16 +256,11 @@ class HytekEventLoader:
 
     def load(self, file_name):
         self.clear()
-        _relay_team_ids.clear()
-        try:
-            parsed = parse_hy3(file_name)
-            self._load_from_parsed(parsed)
-        finally:
-            _relay_team_ids.clear()
+        parsed = parse_hy3(file_name)
+        self._load_from_parsed(parsed)
 
     def load_from_bytestream(self, stream):
         self.clear()
-        _relay_team_ids.clear()
         with tempfile.NamedTemporaryFile(suffix=".hy3", delete=False) as tmp:
             tmp.write(stream.read())
             tmp_path = tmp.name
@@ -274,7 +268,6 @@ class HytekEventLoader:
             parsed = parse_hy3(tmp_path)
             self._load_from_parsed(parsed)
         finally:
-            _relay_team_ids.clear()
             os.unlink(tmp_path)
 
     def _load_from_parsed(self, parsed):
@@ -290,7 +283,7 @@ class HytekEventLoader:
             # Determine swimmer genders for this event
             swimmer_genders = set()
             for entry in event.entries:
-                for swimmer in entry.swimmers:
+                for swimmer in _entry_swimmers(entry):
                     if swimmer.gender == Gender.MALE:
                         swimmer_genders.add("M")
                     elif swimmer.gender == Gender.FEMALE:
@@ -322,7 +315,7 @@ class HytekEventLoader:
 
             self.event_meta[event_number] = {
                 "stroke_code": stroke_code,
-                "distance": event.distance,
+                "distance": _normalize_distance(event.distance),
                 "relay": event.relay,
                 "age_min": event.age_min,
                 "age_max": event.age_max,
