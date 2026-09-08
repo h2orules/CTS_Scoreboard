@@ -14,6 +14,10 @@ on:
         description: 'Optional revision suffix (defaults to short SHA)'
         required: false
         default: ''
+      acr_suffix:
+        description: 'Optional suffix for the target prod ACR name (e.g. "2"). Only needed during a zero-downtime subscription migration while the canonical ACR name is still owned by the old subscription; leave blank otherwise.'
+        required: false
+        default: ''
 
 permissions:
   id-token: write
@@ -24,7 +28,7 @@ env:
   AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
   AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
   RG_PROD: ${{ secrets.RG_PROD }}
-  ACR_PROD: ctssbprodacr
+  ACR_PROD: ctssbprodacr${{ github.event.inputs.acr_suffix }}
   APP_PROD: cts-sb-prod-app
 
 jobs:
