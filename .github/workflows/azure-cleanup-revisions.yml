@@ -107,9 +107,7 @@ jobs:
     environment: prod-cleanup
     env:
       RG: ${{ secrets.RG_PROD }}
-      # TODO(#111): rename back to `ctssbprodacr` once the temporary
-      # `nameSuffix=2` migration ACR is renamed back to canonical.
-      ACR: ctssbprodacr2
+      ACR: ctssbprodacr
       APP: cts-sb-prod-app
       KEEP: '4'
       KEEP_IMAGES: '5'
