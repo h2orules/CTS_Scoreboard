@@ -5,12 +5,18 @@ name: azure-cleanup-revisions
 #
 # Keep counts (most recent active revisions, by createdTime):
 #   - prod:    4
-#   - preprod: 1
+#   - preprod: 2 (active + just-replaced)
+#
+# ACR image retention (most recent manifests, by push time), independent
+# of the active-revision keep count above:
+#   - prod:    5
+#   - preprod: 5
 #
 # After deactivating excess revisions, any image manifest in the
-# environment's ACR that is no longer referenced by an *active* revision
-# is deleted. Inactive revisions are not considered references — that's
-# the whole point of the cleanup.
+# environment's ACR that is BOTH unreferenced by a surviving *active*
+# revision AND outside the image-retention window above is deleted.
+# Inactive revisions are not considered references — that's the whole
+# point of the cleanup.
 #
 # Container Apps reserves revision NAMES permanently even after
 # deactivation, so we don't try to delete them; deactivation is enough
@@ -18,10 +24,20 @@ name: azure-cleanup-revisions
 #
 # Approval model:
 #   - preprod: scheduled runs apply changes directly (no gate).
-#   - prod:    scheduled runs are forced to dry-run and email a
-#              notification if anything would be cleaned up; the actual
-#              apply is a separate manual job that goes through the
-#              `production` environment's required-reviewers gate.
+#   - prod:    scheduled runs also apply directly (no human-reviewer
+#              gate), but through a dedicated, narrowly-scoped identity
+#              (GH Environment `prod-cleanup`, App Registration "CTS
+#              Scoreboard - Prod Revision Cleanup") that can ONLY read +
+#              deactivate revisions on the prod Container App and
+#              delete manifests in the prod ACR (custom role "CTS
+#              Scoreboard Revision Cleanup" + built-in "AcrDelete",
+#              each scoped to just that one resource) — it cannot touch
+#              ingress, scale rules, secrets, or anything else. This
+#              intentionally does NOT reuse the broad Contributor-scoped
+#              GH Actions SP used by azure-infra-deploy/azure-promote-prod,
+#              so an unattended weekly run can't do more damage than
+#              "clean up stale revisions/images" even in the worst case.
+#              A results notification (issue) is always sent either way.
 
 on:
   workflow_dispatch:
@@ -65,7 +81,8 @@ jobs:
       RG: ${{ secrets.RG_PREPROD }}
       ACR: ctssbpreprodacr
       APP: cts-sb-preprod-app
-      KEEP: '1'
+      KEEP: '2'
+      KEEP_IMAGES: '5'
       DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
@@ -78,19 +95,25 @@ jobs:
         run: bash .github/scripts/cleanup-revisions.sh
 
   # -----------------------------------------------------------------------
-  # PROD: scheduled dry-run. No environment gate, runs unattended.
-  # If anything would be deactivated/deleted, sends an email so an operator
-  # knows to dispatch the apply job manually.
+  # PROD: runs fully unattended (scheduled or manual) using the narrowly
+  # scoped `prod-cleanup` identity/environment — no required-reviewer
+  # gate, since the identity itself can't do anything beyond deactivating
+  # revisions / deleting ACR manifests on the one prod app + registry.
+  # `dry_run` is still honored on manual dispatch for a preview.
   # -----------------------------------------------------------------------
-  prod_dry_run:
-    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.environment == 'both' || inputs.environment == 'prod') && inputs.dry_run) }}
+  prod:
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && (inputs.environment == 'both' || inputs.environment == 'prod')) }}
     runs-on: ubuntu-latest
+    environment: prod-cleanup
     env:
       RG: ${{ secrets.RG_PROD }}
-      ACR: ctssbprodacr
+      # TODO(#111): rename back to `ctssbprodacr` once the temporary
+      # `nameSuffix=2` migration ACR is renamed back to canonical.
+      ACR: ctssbprodacr2
       APP: cts-sb-prod-app
       KEEP: '4'
-      DRY_RUN: 'true'
+      KEEP_IMAGES: '5'
+      DRY_RUN: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
       - uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43  # v3
@@ -109,20 +132,18 @@ jobs:
             const pending     = `${{ steps.prune.outputs.pending }}`;
             const deactivate  = `${{ steps.prune.outputs.deactivate_count }}`;
             const del         = `${{ steps.prune.outputs.delete_count }}`;
+            const dryRun      = `${{ env.DRY_RUN }}` === 'true';
             const runUrl      = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
-            const title = 'Prod revision cleanup pending';
+            const title = dryRun ? 'Prod revision cleanup pending (dry-run)' : 'Prod revision cleanup applied';
             const body =
-              `The weekly scheduled cleanup ran in **dry-run** mode against prod ` +
-              `and found work to do:\n\n` +
-              `- revisions to deactivate: **${deactivate}**\n` +
-              `- ACR manifests to delete: **${del}**\n` +
-              `- total pending actions: **${pending}**\n\n` +
-              `To apply, dispatch the \`azure-cleanup-revisions\` workflow with ` +
-              `\`environment=prod\` and \`dry_run=false\`. That run goes through ` +
-              `the \`production\` environment's required-reviewer gate before ` +
-              `executing.\n\n` +
+              (dryRun
+                ? `The manual dry-run against prod found work to do:\n\n`
+                : `The weekly scheduled cleanup ran against prod and applied changes:\n\n`) +
+              `- revisions deactivated: **${deactivate}**\n` +
+              `- ACR manifests deleted: **${del}**\n` +
+              `- total actions: **${pending}**\n\n` +
               `Run logs: ${runUrl}\n\n` +
-              `_This issue will be closed automatically by the next clean dry-run._`;
+              `_This issue will be closed automatically by the next clean run._`;
 
             const { data: issues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
@@ -165,7 +186,7 @@ jobs:
                 owner: context.repo.owner,
                 repo:  context.repo.repo,
                 issue_number: issue.number,
-                body: 'Resolved: dry-run found nothing to clean up.',
+                body: 'Resolved: latest run found nothing to clean up.',
               });
               await github.rest.issues.update({
                 owner: context.repo.owner,
@@ -180,36 +201,9 @@ jobs:
         if: ${{ always() }}
         run: |
           {
-            echo "## Prod cleanup (dry-run)"
-            echo "- Pending actions: **${{ steps.prune.outputs.pending }}**"
-            echo "- Revisions to deactivate: ${{ steps.prune.outputs.deactivate_count }}"
-            echo "- ACR manifests to delete: ${{ steps.prune.outputs.delete_count }}"
-            if [[ "${{ steps.prune.outputs.pending }}" != "0" && -n "${{ steps.prune.outputs.pending }}" ]]; then
-              echo ""
-              echo "Re-run this workflow with \`environment=prod\` and \`dry_run=false\` to apply."
-            fi
+            echo "## Prod cleanup"
+            echo "- Mode: ${{ env.DRY_RUN == 'true' && 'dry-run' || 'applied' }}"
+            echo "- Pending/completed actions: **${{ steps.prune.outputs.pending }}**"
+            echo "- Revisions deactivated: ${{ steps.prune.outputs.deactivate_count }}"
+            echo "- ACR manifests deleted: ${{ steps.prune.outputs.delete_count }}"
           } >> "$GITHUB_STEP_SUMMARY"
-
-  # -----------------------------------------------------------------------
-  # PROD: manual apply. Requires the `production` environment approval.
-  # Only runs on workflow_dispatch with dry_run=false explicitly chosen.
-  # -----------------------------------------------------------------------
-  prod_apply:
-    if: ${{ github.event_name == 'workflow_dispatch' && (inputs.environment == 'both' || inputs.environment == 'prod') && !inputs.dry_run }}
-    runs-on: ubuntu-latest
-    environment: production
-    env:
-      RG: ${{ secrets.RG_PROD }}
-      ACR: ctssbprodacr
-      APP: cts-sb-prod-app
-      KEEP: '4'
-      DRY_RUN: 'false'
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
-      - uses: azure/login@532459ea530d8321f2fb9bb10d1e0bcf23869a43  # v3
-        with:
-          client-id: ${{ env.AZURE_CLIENT_ID }}
-          tenant-id: ${{ env.AZURE_TENANT_ID }}
-          subscription-id: ${{ env.AZURE_SUBSCRIPTION_ID }}
-      - id: prune
-        run: bash .github/scripts/cleanup-revisions.sh
