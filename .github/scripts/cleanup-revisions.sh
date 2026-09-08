@@ -2,23 +2,37 @@
 # Cleanup script invoked by .github/workflows/azure-cleanup-revisions.yml.
 #
 # Required env:
-#   RG       resource group containing the Container App
-#   ACR      registry name (no .azurecr.io suffix)
-#   APP      Container App name
-#   REPO     image repository name within the ACR (e.g. cts-relay)
-#   KEEP     number of most-recent active revisions to keep
-#   DRY_RUN  "true" => print actions only; anything else executes
+#   RG           resource group containing the Container App
+#   ACR          registry name (no .azurecr.io suffix)
+#   APP          Container App name
+#   REPO         image repository name within the ACR (e.g. cts-relay)
+#   KEEP         number of most-recent active revisions to keep
+#   DRY_RUN      "true" => print actions only; anything else executes
+#
+# Optional env:
+#   KEEP_IMAGES  number of most-recent ACR manifests to keep regardless
+#                of revision activity (defaults to KEEP if unset, which
+#                preserves the previous coupled behavior). This lets
+#                image retention be set independently of how many
+#                active Container App revisions are kept — e.g. keep
+#                only 2 revisions active, but retain the last 5 images
+#                in the ACR for rollback/audit purposes.
 #
 # Two-phase cleanup:
 #   1. Deactivate every active revision past the KEEP-newest (by
 #      createdTime desc). Inactive revisions are left as-is; Container
 #      Apps reserves their names permanently regardless.
-#   2. Delete any manifest in $ACR/$REPO that isn't referenced (by
-#      digest *or* tag) by the surviving active revisions.
+#   2. Delete any manifest in $ACR/$REPO that is BOTH (a) not
+#      referenced (by digest *or* tag) by any surviving active revision
+#      AND (b) not among the KEEP_IMAGES most-recently-pushed manifests.
+#      Condition (a) is a hard safety invariant: an image backing a live
+#      revision is never deleted, even if it falls outside the
+#      KEEP_IMAGES recency window.
 
 set -euo pipefail
 
 : "${RG:?}" "${ACR:?}" "${APP:?}" "${REPO:?}" "${KEEP:?}" "${DRY_RUN:=false}"
+: "${KEEP_IMAGES:=$KEEP}"
 
 log() { printf '[%s] %s\n' "$APP" "$*"; }
 
@@ -146,16 +160,26 @@ fi
 
 MANIFESTS_JSON=$(az acr manifest list-metadata \
   --registry "$ACR" --name "$REPO" \
-  --query "[].{digest:digest, tags:tags}" \
+  --query "[].{digest:digest, tags:tags, created:lastUpdateTime}" \
   -o json)
 
 TOTAL=$(jq 'length' <<<"$MANIFESTS_JSON")
 log "Repo $REPO contains $TOTAL manifest(s)."
 
-# Build deletion list: any manifest whose digest is not in KEEP_DIGESTS.
+# Recency protection: keep the KEEP_IMAGES most-recently-pushed
+# manifests regardless of whether any revision still references them.
+RECENCY_DIGESTS=$(jq -r --argjson keep "$KEEP_IMAGES" '
+  sort_by(.created) | reverse | .[:$keep] | .[].digest
+' <<<"$MANIFESTS_JSON")
+log "Keeping $(printf '%s\n' "$RECENCY_DIGESTS" | sed '/^$/d' | wc -l | tr -d ' ') most-recent manifest(s) by recency (KEEP_IMAGES=$KEEP_IMAGES)."
+
+# Build deletion list: any manifest whose digest is neither in
+# KEEP_DIGESTS (referenced by a surviving active revision — hard safety
+# invariant) nor in RECENCY_DIGESTS (within the KEEP_IMAGES window).
 # (Tag-only matching isn't enough because deactivated revisions may
 # leave dangling tags that still resolve to a digest we want to drop.)
-TO_DELETE=$(jq -r --arg keep "$KEEP_DIGESTS" '
+PROTECTED_DIGESTS=$(printf '%s\n%s\n' "$KEEP_DIGESTS" "$RECENCY_DIGESTS" | sort -u | sed '/^$/d')
+TO_DELETE=$(jq -r --arg keep "$PROTECTED_DIGESTS" '
   ($keep | split("\n") | map(select(length>0))) as $keep_arr
   | .[] | select(.digest as $d | ($keep_arr | index($d)) == null)
   | .digest
