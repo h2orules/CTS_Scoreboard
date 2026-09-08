@@ -30,7 +30,8 @@ name: azure-cleanup-revisions
 #              Scoreboard - Prod Revision Cleanup") that can ONLY read +
 #              deactivate revisions on the prod Container App and
 #              delete manifests in the prod ACR (custom role "CTS
-#              Scoreboard Revision Cleanup" + built-in "AcrDelete",
+#              Scoreboard Revision Cleanup" + built-in "AcrPull" (needed
+#              to list/read manifests) + "AcrDelete" (to remove them),
 #              each scoped to just that one resource) — it cannot touch
 #              ingress, scale rules, secrets, or anything else. This
 #              intentionally does NOT reuse the broad Contributor-scoped
