@@ -57,6 +57,10 @@ param alertSmsPhone string
 @description('Optional suffix appended ONLY to the three globally-unique-name resources (ACR, Storage, Redis). Leave blank for normal deploys. Use this for a zero-downtime subscription migration: deploy the new stack side-by-side under e.g. nameSuffix=\'2\' while the old subscription still owns the canonical global names, then redeploy with an empty suffix (and re-import/re-migrate those 3 resources) once the old subscription\'s resource group has been deleted and the canonical names are free again. Every other resource (Container App, its environment, Log Analytics, App Insights, UAMI, alerts) is only unique per-resource-group, so those never need suffixing.')
 param nameSuffix string = ''
 
+@description('Azure Managed Redis Balanced size, without HA. B0 is the low-cost default.')
+@allowed(['Balanced_B0', 'Balanced_B1'])
+param redisSkuName string = 'Balanced_B0'
+
 // ---------- naming ----------
 var prefix = 'cts-sb-${environmentName}'
 var acrName = replace('${prefix}acr${nameSuffix}', '-', '')
@@ -65,7 +69,7 @@ var aiName = '${prefix}-ai'
 var caEnvName = '${prefix}-cae'
 var caName = '${prefix}-app'
 var uamiName = '${prefix}-uami'
-var redisName = '${prefix}-redis${nameSuffix}'
+var redisName = '${prefix}-managed-redis${nameSuffix}'
 var storageName = take(replace('${prefix}st${nameSuffix}', '-', ''), 24)
 var actionGroupName = '${prefix}-ag'
 
@@ -172,17 +176,12 @@ resource snapshotsContainer 'Microsoft.Storage/storageAccounts/blobServices/cont
 }
 
 // ---------- redis ----------
-resource redis 'Microsoft.Cache/redis@2023-08-01' = {
-  name: redisName
-  location: location
-  properties: {
-    sku: {
-      name: 'Basic'
-      family: 'C'
-      capacity: 0
-    }
-    enableNonSslPort: false
-    minimumTlsVersion: '1.2'
+module redis 'managed-redis.bicep' = {
+  name: '${prefix}-managed-redis'
+  params: {
+    name: redisName
+    location: location
+    skuName: redisSkuName
   }
 }
 
@@ -256,11 +255,11 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
         }
       ]
       secrets: [
-        // redis-py expects a URL like rediss://:<key>@<host>:<sslPort>/0.
-        // The raw password is URL-encoded (it can contain '+', '/', '=').
+        // A distinct secretRef forces a new revision on migration.
+        // Follow MANAGED_REDIS_MIGRATION.md before removing the legacy secret.
         {
-          name: 'redis-conn'
-          value: 'rediss://:${uriComponent(redis.listKeys().primaryKey)}@${redis.properties.hostName}:${redis.properties.sslPort}/0'
+          name: 'managed-redis-conn'
+          value: redis.outputs.connectionString
         }
         {
           name: 'storage-conn'
@@ -281,7 +280,7 @@ resource containerApp 'Microsoft.App/containerApps@2024-10-02-preview' = {
           env: [
             { name: 'ENVIRONMENT', value: environmentName }
             { name: 'LOG_LEVEL', value: 'INFO' }
-            { name: 'REDIS_URL', secretRef: 'redis-conn' }
+            { name: 'REDIS_URL', secretRef: 'managed-redis-conn' }
             { name: 'STORAGE_CONNECTION_STRING', secretRef: 'storage-conn' }
             { name: 'APPLICATIONINSIGHTS_CONNECTION_STRING', secretRef: 'appinsights-conn' }
             { name: 'ENTRA_TENANT_ID', value: entraTenantId }
@@ -538,5 +537,6 @@ resource workbookViewerAnalysis 'microsoft.insights/workbooks@2022-04-01' = {
 output containerAppFqdn string = containerApp.properties.configuration.ingress.fqdn
 output acrLoginServer string = '${acrName}.azurecr.io'
 output appInsightsConnectionString string = ai.properties.ConnectionString
-output redisHost string = redis.properties.hostName
+output redisHost string = redis.outputs.hostName
+output redisPort int = redis.outputs.port
 output storageAccountName string = storage.name

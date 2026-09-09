@@ -399,7 +399,7 @@ az containerapp revision activate -g "$RG" -n "$APP" --revision "<previous-revis
 ## 12. Tear down (preprod, on demand)
 
 The `azure-deploy-preprod` workflow defaults `minReplicas=0` so a quiescent
-pre-prod costs only the storage + Redis Basic baseline.
+pre-prod costs only the storage + non-HA Managed Redis B0 baseline.
 Full teardown:
 
 ```bash
@@ -417,14 +417,18 @@ Idle pre-prod (everything scaled to zero except the always-on resources):
 | Resource | Tier | ~Monthly |
 |---|---|---|
 | Container Apps | min=0 | $0 when idle |
-| Redis | Basic C0 | ~$16 |
+| Azure Managed Redis | Balanced B0, non-HA | ~$11.68 |
 | Storage | Standard_LRS, low usage | <$1 |
 | App Insights | first 5 GB free | $0 |
 | Log Analytics | included with App Insights | $0 |
-| **Total** | | **~$17/mo** when idle |
+| **Total** | | **~$13/mo** when idle |
 
 Prod with light real usage (1 meet/day, 50 viewers) is roughly the same plus
 Container Apps active time (typically a few dollars/month at this scale).
+
+Redis estimates use West US pay-as-you-go rates at 730 hours/month. See
+[Managed Redis migration](MANAGED_REDIS_MIGRATION.md) for the B0/B1 comparison,
+client compatibility choices, and the safe legacy-cache cutover procedure.
 
 ---
 

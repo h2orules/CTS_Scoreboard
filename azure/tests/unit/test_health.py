@@ -1,13 +1,18 @@
 """Sanity tests for the FastAPI HTTP surface."""
 from __future__ import annotations
 
+from unittest.mock import AsyncMock
+
+import fakeredis.aioredis
 from fastapi.testclient import TestClient
+from redis.exceptions import ConnectionError
 
 from app import (
     PROTOCOL_VERSION_CURRENT,
     PROTOCOL_VERSION_MIN_SUPPORTED,
     __version__,
 )
+from app.main import build_app
 
 
 def test_healthz_returns_ok(client: TestClient) -> None:
@@ -22,6 +27,17 @@ def test_readyz_returns_ready(client: TestClient) -> None:
     body = resp.json()
     assert body["status"] == "ready"
     assert body["version"] == __version__
+
+
+def test_readyz_fails_when_redis_is_unreachable() -> None:
+    redis = fakeredis.aioredis.FakeRedis()
+    redis.execute_command = AsyncMock(side_effect=ConnectionError("unreachable"))
+    app, _, _ = build_app(redis_client=redis)
+    with TestClient(app) as client:
+        response = client.get("/readyz")
+        assert response.status_code == 503
+        assert response.json() == {"status": "unavailable", "dependency": "redis"}
+        assert client.get("/healthz").status_code == 200
 
 
 def test_version_endpoint_includes_protocol(client: TestClient) -> None:
