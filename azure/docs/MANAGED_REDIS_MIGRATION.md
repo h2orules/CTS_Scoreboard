@@ -52,8 +52,28 @@ Sources:
 - [Retirement FAQ](https://learn.microsoft.com/en-us/azure/azure-cache-for-redis/retirement-faq)
 
 The Managed Redis pricing page has displayed a conflicting rounded B0 memory
-size; use the overview's 0.5 GB tier and the deployed service's `INFO maxmemory`
-for capacity decisions rather than assuming it has B1's memory.
+size; use the overview's 0.5 GB tier rather than assuming B1's memory. The
+deployed B0 service omits `maxmemory` from INFO (and CONFIG GET returns no
+value). For capacity headroom use Azure Monitor's `usedmemorypercentage`;
+the app omits the unavailable `kind=max` gauge rather than inventing a limit.
+
+### Measured migration comparison
+
+On 2026-09-09 the same client ran six alternating rounds against West US C0
+and B0, discarding the warm-up round. Each of the 500 recorded samples per
+service performed the app's pipelined HSET+EXPIRE followed by HGETALL, with a
+1 KiB value:
+
+| Service | Median | p95 | Mean |
+|---|---|---|---|
+| Basic C0 | 52.00 ms | 64.59 ms | 53.98 ms |
+| B0 non-HA, NoCluster | 49.91 ms | 57.64 ms | 50.52 ms |
+
+B0 was about 4% faster at median and 11% at p95 for this workload, at lower
+cost. These include client-to-Azure network latency, not just Redis execution
+time, and do not establish maximum server throughput. The real-service
+contract passed against both services, including two independent Socket.IO
+Redis managers. B0 reported Redis 7.4.3 and a 15,000-client limit.
 
 ## Compatibility choices
 

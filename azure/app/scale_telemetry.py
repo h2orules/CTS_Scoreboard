@@ -44,7 +44,7 @@ class _RedisInfoSnapshot:
     used_memory_bytes: float = 0.0
     used_memory_peak_bytes: float = 0.0
     used_memory_rss_bytes: float = 0.0
-    maxmemory_bytes: float = 0.0
+    maxmemory_bytes: float | None = None
     evicted_keys: float = 0.0
     expired_keys: float = 0.0
     connected_clients: float = 0.0
@@ -154,12 +154,14 @@ class ScaleTelemetry:
         ) -> list[Observation]:
             if snap.last_update_s == 0.0:
                 return []
-            return [
+            observations = [
                 Observation(snap.used_memory_bytes, {"kind": "used"}),
                 Observation(snap.used_memory_peak_bytes, {"kind": "peak"}),
                 Observation(snap.used_memory_rss_bytes, {"kind": "rss"}),
-                Observation(snap.maxmemory_bytes, {"kind": "max"}),
             ]
+            if snap.maxmemory_bytes is not None:
+                observations.append(Observation(snap.maxmemory_bytes, {"kind": "max"}))
+            return observations
 
         def redis_clients_cb(
             _options: CallbackOptions,
@@ -264,6 +266,9 @@ class ScaleTelemetry:
         if not isinstance(info, dict):
             return
         snap = self.snapshot
+        # Managed Redis omits maxmemory from INFO. Do not publish a false
+        # zero limit (or retain a previous server's limit after a reconnect).
+        snap.maxmemory_bytes = None
         for src, dst in _SNAPSHOT_FIELDS:
             val = info.get(src)
             if val is None:
