@@ -33,6 +33,11 @@ on:
         description: 'Optional suffix for ACR/Storage/Redis only (globally-unique names). Leave blank for normal deploys; use e.g. "2" for a zero-downtime side-by-side subscription migration while the old subscription still owns the canonical names.'
         required: false
         default: ''
+      redis_sku:
+        description: 'Non-HA Managed Redis size (B0 default; no sizes above B1)'
+        type: choice
+        options: [Balanced_B0, Balanced_B1]
+        default: Balanced_B0
 
 permissions:
   id-token: write   # OIDC federated credential
@@ -136,7 +141,8 @@ jobs:
                 alertEmail="$ALERT_EMAIL" \
                 alertSmsCountryCode="$ALERT_SMS_COUNTRY_CODE" \
                 alertSmsPhone="$ALERT_SMS_PHONE" \
-                nameSuffix="${{ github.event.inputs.name_suffix }}"
+                nameSuffix="${{ github.event.inputs.name_suffix }}" \
+                redisSkuName="${{ inputs.redis_sku }}"
 
       - name: Bicep deploy
         if: github.event.inputs.mode == 'apply'
@@ -154,7 +160,8 @@ jobs:
                 alertEmail="$ALERT_EMAIL" \
                 alertSmsCountryCode="$ALERT_SMS_COUNTRY_CODE" \
                 alertSmsPhone="$ALERT_SMS_PHONE" \
-                nameSuffix="${{ github.event.inputs.name_suffix }}"
+                nameSuffix="${{ github.event.inputs.name_suffix }}" \
+                redisSkuName="${{ inputs.redis_sku }}"
           FQDN=$(az containerapp show \
                   -g "${{ steps.target.outputs.rg }}" \
                   -n "${{ steps.target.outputs.app }}" \

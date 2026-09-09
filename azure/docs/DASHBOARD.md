@@ -87,7 +87,7 @@ customMetrics
 ## 3. Redis server-side memory & evictions (multi-stat)
 
 Sourced from the `INFO` poller in `scale_telemetry.py`. Lets you see
-when Azure Cache for Redis is approaching its `maxmemory` cap, and
+when Azure Managed Redis is approaching its `maxmemory` cap, and
 whether any keys are being evicted (which would silently corrupt state).
 
 ```kusto

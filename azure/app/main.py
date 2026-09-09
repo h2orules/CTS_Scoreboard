@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -11,6 +12,7 @@ import socketio
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
+from redis.exceptions import RedisError
 
 from app import (
     PROTOCOL_VERSION_CURRENT,
@@ -54,11 +56,10 @@ def _build_state_redis(url: str) -> redis_async.Redis:
     timeout) for a connection instead of erroring with
     ``ConnectionError: Too many connections`` the moment the pool saturates.
     The per-worker cap is intentionally small so the total connection count
-    across workers x replicas stays well under the Azure Cache for Redis
-    Basic C0 ceiling (256 conns) even at our current ``maxReplicas`` of 20:
-    10 conns/worker x 2 workers x 20 replicas = 400, plus the Socket.IO
-    pub/sub manager's connections. If real load consistently queues here,
-    bump the Redis SKU (C1 = 1000 conns) rather than this cap.
+    across workers x replicas stays bounded. Azure Managed Redis must use
+    the non-clustered database policy: this client and AsyncRedisManager
+    both use the ordinary Redis protocol, not RedisCluster. The URL supplies
+    the TLS endpoint/port (10000 on Managed Redis, 6379 for local Redis).
     """
     pool = redis_async.BlockingConnectionPool.from_url(
         url,
@@ -151,8 +152,6 @@ def build_app(
 
             FastAPIInstrumentor.instrument_app(fastapi_app)
         except Exception:  # pragma: no cover - best-effort
-            import logging
-
             logging.exception("FastAPI OTel instrumentation failed")
 
     # Cross-process / cross-replica fanout for Socket.IO.
@@ -276,6 +275,11 @@ def build_app(
 
     @fastapi_app.get("/readyz", response_class=JSONResponse, include_in_schema=False)
     async def readyz() -> JSONResponse:
+        try:
+            await redis_handle.execute_command("PING")
+        except RedisError:
+            logging.getLogger(__name__).warning("Redis readiness probe failed")
+            return JSONResponse({"status": "unavailable", "dependency": "redis"}, status_code=503)
         return JSONResponse({"status": "ready", "version": __version__})
 
     @fastapi_app.get("/version", response_class=JSONResponse, include_in_schema=False)

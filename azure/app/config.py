@@ -36,7 +36,7 @@ class Settings(BaseSettings):
     # ---- state stores ----
     redis_url: str = Field(
         default="redis://localhost:6379/0",
-        description="Azure Cache for Redis connection URL (rediss:// in prod).",
+        description="Redis URL: Azure Managed Redis uses rediss://:<key>@<host>:10000/0; local Redis uses 6379.",
     )
     storage_connection_string: str = Field(
         default="",
