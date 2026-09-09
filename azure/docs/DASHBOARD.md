@@ -86,9 +86,13 @@ customMetrics
 
 ## 3. Redis server-side memory & evictions (multi-stat)
 
-Sourced from the `INFO` poller in `scale_telemetry.py`. Lets you see
-when Azure Managed Redis is approaching its `maxmemory` cap, and
+Sourced from the `INFO` poller in `scale_telemetry.py`. Shows memory use and
 whether any keys are being evicted (which would silently corrupt state).
+Managed Redis omits `maxmemory` from INFO, so the poller intentionally omits
+the `kind=max` series rather than emitting a false zero-byte limit. For
+capacity headroom, use the Managed Redis resource's Azure Monitor
+`usedmemorypercentage` metric (Percent), alongside `usedmemory` (Bytes).
+Legacy/local Redis still emits `kind=max` when INFO provides it.
 
 ```kusto
 customMetrics
