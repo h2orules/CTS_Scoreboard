@@ -72,6 +72,8 @@ var uamiName = '${prefix}-uami'
 var redisName = '${prefix}-managed-redis${nameSuffix}'
 var storageName = take(replace('${prefix}st${nameSuffix}', '-', ''), 24)
 var actionGroupName = '${prefix}-ag'
+var platformLogsDcrName = '${prefix}-platform-logs-dcr'
+var platformLogsStream = 'microsoft.app/managedenvironments:Logs-Group-All'
 
 // ---------- observability ----------
 resource law 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
@@ -91,6 +93,38 @@ resource ai 'Microsoft.Insights/components@2020-02-02' = {
     Application_Type: 'web'
     WorkspaceResourceId: law.id
     IngestionMode: 'LogAnalytics'
+  }
+
+  // Route Container Apps platform logs through a DCR instead of the deprecated
+  // shared-key Data Collector API used by the legacy Log Analytics destination.
+  resource platformLogsDcr 'Microsoft.Insights/dataCollectionRules@2024-03-11' = {
+    name: platformLogsDcrName
+    location: location
+    kind: 'PlatformTelemetry'
+    properties: {
+      dataSources: {
+        platformTelemetry: [
+          {
+            name: 'containerAppsEnvironmentLogs'
+            streams: [platformLogsStream]
+          }
+        ]
+      }
+      destinations: {
+        logAnalytics: [
+          {
+            name: 'workspace'
+            workspaceResourceId: law.id
+          }
+        ]
+      }
+      dataFlows: [
+        {
+          streams: [platformLogsStream]
+          destinations: ['workspace']
+        }
+      ]
+    }
   }
 }
 
@@ -193,12 +227,17 @@ resource caEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
   location: location
   properties: {
     appLogsConfiguration: {
-      destination: 'log-analytics'
-      logAnalyticsConfiguration: {
-        customerId: law.properties.customerId
-        sharedKey: law.listKeys().primarySharedKey
-      }
+      destination: 'azure-monitor'
     }
+  }
+}
+
+resource platformLogsAssociation 'Microsoft.Insights/dataCollectionRuleAssociations@2024-03-11' = {
+  name: 'platform-logs'
+  scope: caEnv
+  properties: {
+    dataCollectionRuleId: platformLogsDcr.id
+    description: 'Collect Container Apps environment logs in the environment Log Analytics workspace.'
   }
 }
 
