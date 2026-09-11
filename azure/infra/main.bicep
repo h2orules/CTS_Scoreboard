@@ -94,37 +94,37 @@ resource ai 'Microsoft.Insights/components@2020-02-02' = {
     WorkspaceResourceId: law.id
     IngestionMode: 'LogAnalytics'
   }
+}
 
-  // Route Container Apps platform logs through a DCR instead of the deprecated
-  // shared-key Data Collector API used by the legacy Log Analytics destination.
-  resource platformLogsDcr 'Microsoft.Insights/dataCollectionRules@2024-03-11' = {
-    name: platformLogsDcrName
-    location: location
-    kind: 'PlatformTelemetry'
-    properties: {
-      dataSources: {
-        platformTelemetry: [
-          {
-            name: 'containerAppsEnvironmentLogs'
-            streams: [platformLogsStream]
-          }
-        ]
-      }
-      destinations: {
-        logAnalytics: [
-          {
-            name: 'workspace'
-            workspaceResourceId: law.id
-          }
-        ]
-      }
-      dataFlows: [
+// Route Container Apps platform logs through a DCR instead of the deprecated
+// shared-key Data Collector API used by the legacy Log Analytics destination.
+resource platformLogsDcr 'Microsoft.Insights/dataCollectionRules@2024-03-11' = {
+  name: platformLogsDcrName
+  location: location
+  kind: 'PlatformTelemetry'
+  properties: {
+    dataSources: {
+      platformTelemetry: [
         {
+          name: 'containerAppsEnvironmentLogs'
           streams: [platformLogsStream]
-          destinations: ['workspace']
         }
       ]
     }
+    destinations: {
+      logAnalytics: [
+        {
+          name: 'workspace'
+          workspaceResourceId: law.id
+        }
+      ]
+    }
+    dataFlows: [
+      {
+        streams: [platformLogsStream]
+        destinations: ['workspace']
+      }
+    ]
   }
 }
 
