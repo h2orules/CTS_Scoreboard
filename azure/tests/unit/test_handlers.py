@@ -62,6 +62,30 @@ def _handler(sio, namespace, event):
     return sio.handlers[namespace][event]
 
 
+def test_handlers_registered_under_expected_namespaces_and_events():
+    sio, *_ = _make_sio_with_spies()
+    register_handlers(sio, store=_store(), tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+
+    assert set(sio.handlers) == {"/pi", "/scoreboard"}
+    assert {
+        "connect",
+        "disconnect",
+        "meet_open",
+        "update_scoreboard",
+        "event_info",
+        "scores_info",
+        "message_overlay_state",
+        "template_push",
+        "meet_context",
+        "reload_clients",
+        "fragment",
+        "heartbeat",
+        "meet_close",
+    } <= set(sio.handlers["/pi"])
+    assert {"connect", "disconnect"} <= set(sio.handlers["/scoreboard"])
+
+
 @pytest.mark.asyncio
 async def test_pi_connect_rejects_missing_auth():
     sio, *_ = _make_sio_with_spies()

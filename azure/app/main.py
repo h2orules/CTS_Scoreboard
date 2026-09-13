@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
 from typing import Any
 
 import orjson
@@ -24,7 +25,7 @@ from app.config import get_settings
 from app.handlers import register_handlers
 from app.marketing import STATIC_DIR, build_marketing_router
 from app.routes import build_router
-from app.state import MeetStateStore
+from app.state import AsyncRedisLike, MeetStateStore
 from app.telemetry import configure_telemetry
 from app.watchdog import MeetWatchdog
 
@@ -49,7 +50,7 @@ class _OrjsonForSocketIO:
         return orjson.loads(s)
 
 
-def _build_state_redis(url: str) -> redis_async.Redis:
+def _build_state_redis(url: str) -> AsyncRedisLike:
     """Build the async Redis client used by MeetStateStore.
 
     Uses a BlockingConnectionPool so request coroutines queue (with a short
@@ -76,7 +77,7 @@ def _build_state_redis(url: str) -> redis_async.Redis:
 
 def build_app(
     *,
-    redis_client: Any = None,
+    redis_client: AsyncRedisLike | None = None,
     token_validator: Any = None,
 ) -> tuple[FastAPI, socketio.AsyncServer, Any]:
     """Construct the FastAPI app, Socket.IO server, and ASGI composite.
@@ -89,7 +90,9 @@ def build_app(
         connection_string=settings.applicationinsights_connection_string,
         environment=settings.environment,
     )
-    redis_handle = redis_client or _build_state_redis(settings.redis_url)
+    redis_handle: AsyncRedisLike = (
+        redis_client if redis_client is not None else _build_state_redis(settings.redis_url)
+    )
     store = MeetStateStore(
         redis_handle,
         fragment_cache_ttl=settings.fragment_cache_ttl_seconds,
@@ -99,7 +102,7 @@ def build_app(
     )
 
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.settings = settings
         app.state.redis = redis_handle
         app.state.store = store
@@ -220,7 +223,7 @@ def build_app(
     )
 
     @asynccontextmanager
-    async def lifespan_with_watchdog(app: FastAPI):
+    async def lifespan_with_watchdog(app: FastAPI) -> AsyncIterator[None]:
         async with lifespan(app):
             watchdog.start()
             try:

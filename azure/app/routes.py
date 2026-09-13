@@ -106,7 +106,7 @@ def _rewrite_api_paths(html: str, meet_id: str) -> str:
     )
 
 
-def _make_url_for(meet_id: str, bundle_id: str):
+def _make_url_for(meet_id: str, bundle_id: str) -> Callable[..., str]:
     """Return a Jinja-friendly ``url_for`` shim.
 
     Only ``url_for('static', filename=...)`` is supported, which is the only
@@ -213,7 +213,9 @@ class _DictLoader(BaseLoader):
     def __init__(self, mapping: dict[str, str]) -> None:
         self._m = mapping
 
-    def get_source(self, environment, template):
+    def get_source(
+        self, environment: Any, template: str
+    ) -> tuple[str, None, Callable[[], bool]]:
         if template not in self._m:
             from jinja2 import TemplateNotFound
 

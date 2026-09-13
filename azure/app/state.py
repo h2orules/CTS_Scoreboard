@@ -25,12 +25,13 @@ import functools
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol, TypeVar
+from typing import Any, Generic, Literal, Protocol, TypeVar, cast
 
 import orjson
 from redis.exceptions import ResponseError
 
 F = TypeVar("F", bound=Callable[..., Awaitable[Any]])
+T = TypeVar("T")
 
 MeetStatus = Literal["live", "degraded", "closed", "expired_id_rotated"]
 
@@ -50,7 +51,7 @@ DEFAULT_CURRENT_TEMPLATE_CACHE_TTL = 2.0
 DEFAULT_TEMPLATE_BLOB_CACHE_MAX = 16  # bundles are immutable per bundle_id
 
 
-class _TTLCache:
+class _TTLCache(Generic[T]):
     """Tiny dict-based cache with optional TTL and bounded size.
 
     Used for per-replica caching of read-mostly Redis values. Safe for
@@ -73,13 +74,13 @@ class _TTLCache:
         enabled: bool = True,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        self._data: dict[Any, tuple[float, Any]] = {}
+        self._data: dict[Any, tuple[float, T]] = {}
         self._ttl = float(ttl)
         self._max = int(max_entries)
         self._enabled = bool(enabled) and self._max > 0
         self._clock = clock
 
-    def get(self, key: Any) -> Any | None:
+    def get(self, key: Any) -> T | None:
         """Return cached value or ``None``. Missing/expired entries return None.
 
         ``None`` is reserved as the miss sentinel; do not cache None values.
@@ -95,7 +96,7 @@ class _TTLCache:
             return None
         return value
 
-    def set(self, key: Any, value: Any) -> None:
+    def set(self, key: Any, value: T | None) -> None:
         if value is None or not self._enabled:
             return
         if len(self._data) >= self._max:
@@ -152,18 +153,28 @@ class MeetKeys:
         return f"meet:{self.meet_id}:template:{bundle_id}"
 
 
+class AsyncRedisPipelineLike(Protocol):
+    async def __aenter__(self) -> "AsyncRedisPipelineLike": ...
+    async def __aexit__(self, exc_type, exc, tb) -> None: ...
+
+    def hset(self, key: str, mapping: dict[str, Any] | None = ...) -> Any: ...
+    def expire(self, key: str, seconds: int) -> Any: ...
+    async def execute(self) -> Any: ...
+
+
 class AsyncRedisLike(Protocol):
     """Minimal subset of redis.asyncio we use; satisfied by fakeredis.aioredis."""
 
-    async def get(self, key: str) -> Any: ...
-    async def set(self, key: str, value: Any, ex: int | None = ...) -> Any: ...
-    async def delete(self, *keys: str) -> Any: ...
-    async def exists(self, *keys: str) -> Any: ...
-    async def hset(self, key: str, mapping: dict[str, Any] | None = ...) -> Any: ...
-    async def hgetall(self, key: str) -> Any: ...
-    async def expire(self, key: str, seconds: int) -> Any: ...
-    async def incr(self, key: str) -> Any: ...
-    def pipeline(self, transaction: bool = ...) -> Any: ...
+    def get(self, key: str) -> Awaitable[Any] | Any: ...
+    def set(self, key: str, value: Any, ex: int | None = ...) -> Awaitable[Any] | Any: ...
+    def delete(self, *keys: str) -> Awaitable[Any] | Any: ...
+    def exists(self, *keys: str) -> Awaitable[Any] | Any: ...
+    def hset(self, key: str, mapping: dict[str, Any] | None = ...) -> Awaitable[Any] | Any: ...
+    def hgetall(self, key: str) -> Awaitable[Any] | Any: ...
+    def expire(self, key: str, seconds: int) -> Awaitable[Any] | Any: ...
+    def incr(self, key: str) -> Awaitable[Any] | Any: ...
+    def execute_command(self, *args: Any, **options: Any) -> Awaitable[Any] | Any: ...
+    def pipeline(self, transaction: bool = ...) -> AsyncRedisPipelineLike: ...
     def scan_iter(self, match: str | None = ...) -> AsyncIterator[Any]: ...
 
 
@@ -171,9 +182,11 @@ def _maybe_str(v: Any) -> str | None:
     """Decode bytes to str; pass through str; None stays None."""
     if v is None:
         return None
+    if isinstance(v, str):
+        return v
     if isinstance(v, bytes):
         return v.decode("utf-8")
-    return v  # type: ignore[return-value]
+    return cast(str, v)
 
 
 def _timed(op: str) -> Callable[[F], F]:
@@ -197,7 +210,7 @@ def _timed(op: str) -> Callable[[F], F]:
                     time.perf_counter() - t0, {"op": op}
                 )
 
-        return wrapper  # type: ignore[return-value]
+        return cast(F, wrapper)
 
     return deco
 
@@ -220,19 +233,19 @@ class MeetStateStore:
         # Per-replica read caches. Keys are tuples so we can scope by meet_id.
         # Fragments are content-addressed (immutable per key), so a long TTL
         # is safe — the primary bound is max_entries (FIFO eviction).
-        self._fragment_cache = _TTLCache(
+        self._fragment_cache = _TTLCache[str](
             ttl=fragment_cache_ttl,
             max_entries=fragment_cache_max_entries,
             enabled=fragment_cache_ttl > 0 and fragment_cache_max_entries > 0,
         )
-        self._current_template_cache = _TTLCache(
+        self._current_template_cache = _TTLCache[dict[str, Any]](
             ttl=current_template_cache_ttl,
             max_entries=512,
             enabled=current_template_cache_ttl > 0,
         )
         # Template bundles are immutable per bundle_id (write-once in
         # put_template), so we cache without TTL and bound by entry count.
-        self._template_blob_cache = _TTLCache(
+        self._template_blob_cache = _TTLCache[dict[str, Any]](
             ttl=0.0,
             max_entries=template_blob_cache_max,
             enabled=template_blob_cache_max > 0,
@@ -308,7 +321,7 @@ class MeetStateStore:
         if not raw:
             return None
         try:
-            return orjson.loads(raw)
+            return cast(dict[str, Any], orjson.loads(raw))
         except orjson.JSONDecodeError:
             return None
 
@@ -438,7 +451,7 @@ class MeetStateStore:
             return None
         if isinstance(raw, bytes):
             return raw.decode("utf-8")
-        return raw  # type: ignore[no-any-return]
+        return cast(str, raw)
 
     # ---------- templates ----------
 
@@ -490,7 +503,7 @@ class MeetStateStore:
         except orjson.JSONDecodeError:
             return None
         self._template_blob_cache.set((meet_id, bundle_id), bundle)
-        return bundle
+        return cast(dict[str, Any], bundle)
 
     async def get_template_blob(
         self, meet_id: str, bundle_id: str
@@ -516,7 +529,7 @@ class MeetStateStore:
         if not raw:
             return None
         try:
-            return orjson.loads(raw)
+            return cast(dict[str, Any], orjson.loads(raw))
         except orjson.JSONDecodeError:
             return None
 
