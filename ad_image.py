@@ -15,6 +15,7 @@ what happened. Raises ``AdImageError`` for unrecoverable input.
 from __future__ import annotations
 
 import io
+from typing import Mapping
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -31,7 +32,7 @@ _FORMAT_FOR_EXT = {
     '.gif': 'GIF',
 }
 
-_SAVE_KWARGS = {
+_SAVE_KWARGS: dict[str, Mapping[str, object]] = {
     'JPEG': {'quality': 88, 'optimize': True, 'progressive': True},
     'PNG': {'optimize': True},
     'WEBP': {'quality': 88, 'method': 6},
@@ -69,7 +70,7 @@ def process_upload(data: bytes, ext: str, max_dimension: int) -> tuple[bytes, st
         raise AdImageError('max_dimension must be positive')
 
     try:
-        img = Image.open(io.BytesIO(data))
+        img: Image.Image = Image.open(io.BytesIO(data))
         img.load()
     except (UnidentifiedImageError, OSError) as e:
         raise AdImageError('could not decode image: %s' % e) from e

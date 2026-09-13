@@ -2,6 +2,7 @@
 import re
 import pytest
 
+import CTS_Scoreboard as cts
 from CTS_Scoreboard import (
     _cache_put,
     _cache_get,
@@ -259,5 +260,15 @@ class TestRenderAndCacheMessagePages:
             cached_key_1, html_1 = _cache_get('message_page_1')
             assert cached_key_1 == keys[1]
             assert '<h2>World</h2>' in html_1
+        finally:
+            settings['message_pages'] = old_pages
+
+    def test_falsey_saved_value_is_treated_as_no_pages(self):
+        old_pages = settings.get('message_pages', [])
+        settings['message_pages'] = None
+        try:
+            assert cts._inject_qr_message_page() is True
+            assert settings['message_pages']
+            assert len(settings['message_pages']) == 1
         finally:
             settings['message_pages'] = old_pages

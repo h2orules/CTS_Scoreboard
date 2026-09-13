@@ -455,8 +455,9 @@ uv run pytest tests/unit tests/integration -q
 ```
 
 Normal Azure tests use fakeredis; the opt-in real Redis contract is described
-in the Managed Redis guide. The current strict mypy baseline has known errors
-and is advisory in CI; do not assume a green workflow means it is type-clean.
+in the Managed Redis guide. The Azure application passes strict mypy checking.
+The check remains advisory in CI; do not assume a green workflow means it is
+type-clean.
 
 ### Documentation map
 

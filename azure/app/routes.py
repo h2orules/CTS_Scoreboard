@@ -214,7 +214,7 @@ class _DictLoader(BaseLoader):
         self._m = mapping
 
     def get_source(
-        self, environment: Any, template: str
+        self, environment: Environment, template: str
     ) -> tuple[str, None, Callable[[], bool]]:
         if template not in self._m:
             from jinja2 import TemplateNotFound

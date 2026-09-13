@@ -25,13 +25,12 @@ import functools
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Generic, Literal, Protocol, TypeVar, cast
+from typing import Any, Literal, Protocol, TypeVar, cast
 
 import orjson
 from redis.exceptions import ResponseError
 
 F = TypeVar("F", bound=Callable[..., Awaitable[Any]])
-T = TypeVar("T")
 
 MeetStatus = Literal["live", "degraded", "closed", "expired_id_rotated"]
 
@@ -51,7 +50,7 @@ DEFAULT_CURRENT_TEMPLATE_CACHE_TTL = 2.0
 DEFAULT_TEMPLATE_BLOB_CACHE_MAX = 16  # bundles are immutable per bundle_id
 
 
-class _TTLCache(Generic[T]):
+class _TTLCache[T]:
     """Tiny dict-based cache with optional TTL and bounded size.
 
     Used for per-replica caching of read-mostly Redis values. Safe for
@@ -153,40 +152,40 @@ class MeetKeys:
         return f"meet:{self.meet_id}:template:{bundle_id}"
 
 
-class AsyncRedisPipelineLike(Protocol):
-    async def __aenter__(self) -> "AsyncRedisPipelineLike": ...
-    async def __aexit__(self, exc_type, exc, tb) -> None: ...
-
-    def hset(self, key: str, mapping: dict[str, Any] | None = ...) -> Any: ...
-    def expire(self, key: str, seconds: int) -> Any: ...
-    async def execute(self) -> Any: ...
-
-
 class AsyncRedisLike(Protocol):
-    """Minimal subset of redis.asyncio we use; satisfied by fakeredis.aioredis."""
+    """Minimal subset of redis.asyncio we use.
 
-    def get(self, key: str) -> Awaitable[Any] | Any: ...
-    def set(self, key: str, value: Any, ex: int | None = ...) -> Awaitable[Any] | Any: ...
-    def delete(self, *keys: str) -> Awaitable[Any] | Any: ...
-    def exists(self, *keys: str) -> Awaitable[Any] | Any: ...
-    def hset(self, key: str, mapping: dict[str, Any] | None = ...) -> Awaitable[Any] | Any: ...
-    def hgetall(self, key: str) -> Awaitable[Any] | Any: ...
-    def expire(self, key: str, seconds: int) -> Awaitable[Any] | Any: ...
-    def incr(self, key: str) -> Awaitable[Any] | Any: ...
-    def execute_command(self, *args: Any, **options: Any) -> Awaitable[Any] | Any: ...
-    def pipeline(self, transaction: bool = ...) -> AsyncRedisPipelineLike: ...
-    def scan_iter(self, match: str | None = ...) -> AsyncIterator[Any]: ...
+    redis-py exposes mixed sync/async stubs in ``redis.asyncio`` for the same
+    class, so the concrete client is cast once at the factory boundary. This
+    keeps the rest of the app async-only and lets the store methods type-check
+    against the payloads they actually consume.
+    """
+
+    async def get(self, key: str) -> bytes | str | None: ...
+    async def set(self, key: str, value: Any, ex: int | None = ...) -> bool: ...
+    async def delete(self, *keys: str) -> int: ...
+    async def exists(self, *keys: str) -> int: ...
+    async def hset(
+        self,
+        name: str,
+        *,
+        mapping: dict[str, Any] | None = ...,
+    ) -> int: ...
+    async def hgetall(self, key: str) -> dict[bytes | str, bytes | str]: ...
+    async def expire(self, key: str, seconds: int) -> bool: ...
+    async def incr(self, key: str) -> int: ...
+    async def execute_command(self, *args: Any, **options: Any) -> Any: ...
+    def pipeline(self, transaction: bool = ..., shard_hint: str | None = ...) -> Any: ...
+    def scan_iter(self, match: str | None = ...) -> AsyncIterator[bytes]: ...
 
 
-def _maybe_str(v: Any) -> str | None:
+def _maybe_str(v: str | bytes | None) -> str | None:
     """Decode bytes to str; pass through str; None stays None."""
     if v is None:
         return None
     if isinstance(v, str):
         return v
-    if isinstance(v, bytes):
-        return v.decode("utf-8")
-    return cast(str, v)
+    return v.decode("utf-8")
 
 
 def _timed(op: str) -> Callable[[F], F]:
@@ -451,7 +450,7 @@ class MeetStateStore:
             return None
         if isinstance(raw, bytes):
             return raw.decode("utf-8")
-        return cast(str, raw)
+        return raw
 
     # ---------- templates ----------
 
@@ -565,7 +564,7 @@ class MeetStateStore:
         if not raw:
             return None
         try:
-            return orjson.loads(raw)
+            return cast(dict[str, Any], orjson.loads(raw))
         except orjson.JSONDecodeError:
             return None
 
@@ -577,7 +576,7 @@ class MeetStateStore:
         Uses SCAN so it's safe on production Redis even with many keys.
         """
         async for raw_key in self._r.scan_iter(match="meet:*:metadata"):
-            key = _maybe_str(raw_key) or ""
+            key = _maybe_str(cast(bytes | str | None, raw_key)) or ""
             # key shape: meet:<id>:metadata
             parts = key.split(":")
             if len(parts) >= 3 and parts[0] == "meet" and parts[-1] == "metadata":

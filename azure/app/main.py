@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import logging
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
-from typing import Any
+from contextlib import asynccontextmanager
+from typing import Any, cast
 
 import orjson
 import redis.asyncio as redis_async
@@ -72,7 +72,10 @@ def _build_state_redis(url: str) -> AsyncRedisLike:
         socket_timeout=5,
         socket_connect_timeout=5,
     )
-    return redis_async.Redis(connection_pool=pool)
+    # redis-py ships mixed sync/async type stubs for the same client class.
+    # We cast once at the factory boundary so the rest of the app stays typed
+    # against the async-only contract the store actually uses.
+    return cast(AsyncRedisLike, redis_async.Redis(connection_pool=pool))
 
 
 def build_app(
@@ -90,9 +93,7 @@ def build_app(
         connection_string=settings.applicationinsights_connection_string,
         environment=settings.environment,
     )
-    redis_handle: AsyncRedisLike = (
-        redis_client if redis_client is not None else _build_state_redis(settings.redis_url)
-    )
+    redis_handle: AsyncRedisLike = redis_client or _build_state_redis(settings.redis_url)
     store = MeetStateStore(
         redis_handle,
         fragment_cache_ttl=settings.fragment_cache_ttl_seconds,

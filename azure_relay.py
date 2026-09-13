@@ -652,7 +652,7 @@ class AzureRelayClient:
             }
         # Lazy import: keep ``requests`` out of import time so unit tests
         # that don't exercise this path don't pull in the dependency.
-        import requests  # type: ignore[import-not-found]
+        import requests
 
         url = self.relay_url.rstrip("/") + f"/internal/meet_id/{name}/availability"
         try:
