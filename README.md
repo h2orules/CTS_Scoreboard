@@ -388,7 +388,8 @@ The current workflows then provide:
 
 | Workflow | Behavior |
 |---|---|
-| `azure-ci` | Lint, type-check reporting, Python tests, Bicep validation and container build for relevant changes |
+| `mypy` | Blocking Pi and Azure type checks on every pull request and push to master |
+| `azure-ci` | Lint, blocking type-check, Python tests, Bicep validation and container build for relevant changes |
 | `azure-deploy-preprod` | Deploys after successful `azure-ci` on `master`, or on manual dispatch |
 | `azure-promote-prod` | Manually promotes a preprod image digest through the `production` approval gate |
 | `azure-infra-deploy` | Previews or applies infrastructure changes while preserving the current image |
@@ -470,8 +471,10 @@ uv run pytest tests/unit tests/integration -q
 
 Normal Azure tests use fakeredis; the opt-in real Redis contract is described
 in the Managed Redis guide. The Azure application passes strict mypy checking.
-The check remains advisory in CI; do not assume a green workflow means it is
-type-clean.
+Pi and Azure mypy failures fail CI. The `mypy` workflow runs both checks on
+every pull request and push to `master`, including documentation-only changes;
+the Azure CI workflow also treats mypy failures as errors. Repository rules
+must require the `mypy (pi)` and `mypy (azure)` checks to block merging on failures.
 
 ### Documentation map
 

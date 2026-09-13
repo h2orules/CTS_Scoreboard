@@ -16,6 +16,9 @@ uv run cts-scoreboard
 # Run all Python tests
 uv run pytest
 
+# Type-check the Pi application
+uv run mypy
+
 # Run a single Python test file
 uv run pytest tests/test_race_state_machine.py
 
@@ -33,6 +36,26 @@ npx vitest run tests/js/scoreboard.test.js
 ```
 
 ## Pre-commit checks (always run before committing)
+
+For every change, including documentation and configuration changes, run both
+mypy checks before committing or declaring validation complete:
+
+```bash
+# From the repository root
+uv sync --locked --dev
+uv run --locked mypy
+(cd azure && uv sync --locked --extra dev && uv run --locked mypy app)
+```
+
+Address all mypy failures and rerun the checks until both pass. Do not bypass
+failures with `continue-on-error`, blanket ignores, or weaker type-check settings.
+Keep the Pi's existing third-party import allowlist narrow and Azure's strict
+configuration intact. Add new Pi application modules to the explicit mypy file
+list in `pyproject.toml`.
+
+Both checks are CI-failing gates in `.github/workflows/mypy.yml`, which runs on
+every pull request and push to `master`, without path filters. The Azure CI
+workflow also fails on mypy errors before its test and container-build steps.
 
 When you change anything under `azure/`, run the same lint + type + test
 commands CI runs (see `.github/workflows/azure-ci.yml`):
@@ -103,4 +126,3 @@ Playwright browser tools and measure the DOM directly:
 
 This loop takes seconds and is far more reliable than guessing from a phone
 screenshot.
-
