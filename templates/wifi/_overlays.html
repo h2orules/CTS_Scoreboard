@@ -1,0 +1,41 @@
+<div class="wifi-overlay" id="wifi-connect-overlay">
+    <div class="wifi-overlay-card">
+        <h4 id="wifi-connect-title">Connect to Network</h4>
+        <div class="wifi-overlay-msg" id="wifi-connect-msg"></div>
+        <div class="form-group">
+            <label for="wifi-connect-ssid">Network name (SSID)</label>
+            <input type="text" id="wifi-connect-ssid" autocomplete="off" placeholder="Network name">
+        </div>
+        <div class="form-group">
+            <label for="wifi-connect-password">Password</label>
+            <div class="input-wrap">
+                <input type="password" id="wifi-connect-password" autocomplete="off" placeholder="Password">
+                <button type="button" class="wifi-eye-btn" id="wifi-connect-eye" title="Show password">
+                    <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor" aria-hidden="true">
+                        <path d="M10 4C4.48 4 0 10 0 10s4.48 6 10 6 10-6 10-6-4.48-6-10-6zm0 10a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm0-6a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <div class="form-group">
+            <label for="wifi-connect-security">Security</label>
+            <select id="wifi-connect-security">
+                <option value="auto" selected>Auto</option>
+                <option value="open">Open</option>
+                <option value="wpa2">WPA2/WPA3</option>
+                <option value="wpa3">WPA3</option>
+            </select>
+        </div>
+        <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+            <label style="margin:0;font-weight:600;">
+                <input type="checkbox" id="wifi-connect-hidden">
+                Hidden network
+            </label>
+        </div>
+        <input type="hidden" id="wifi-connect-profile-id">
+        <div class="btn-row">
+            <button type="button" class="btn btn-primary" id="wifi-connect-action">Connect</button>
+            <button type="button" class="btn btn-default" id="wifi-connect-cancel">Cancel</button>
+        </div>
+    </div>
+</div>

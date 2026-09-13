@@ -1,27 +1,57 @@
 #!/usr/bin/env bash
 # Launch the CTS Scoreboard in Chromium kiosk mode on the local display.
-#
-# - Waits for the gunicorn server to respond before opening the browser
-#   (avoids a "site can't be reached" flash at boot).
-# - Uses a dedicated Chromium profile so kiosk state never collides with
-#   any normal browsing the operator does on the desktop.
-# - Disables the "Restore pages?" bubble after an unclean shutdown.
-#
-# This script is invoked automatically by labwc autostart at login, and is
-# also wired to a desktop launcher icon (~/Desktop/cts-kiosk.desktop) so
-# the operator can re-enter kiosk mode after exiting to the desktop.
+# Local /web/... URLs are wrapped in the kiosk shell so the iframe can switch
+# to /wifi/display while provisioning is active. External custom URLs keep the
+# legacy direct-open behavior.
 
 set -euo pipefail
 
-URL="${CTS_KIOSK_URL:-http://localhost:5000/web/home}"
+URL="${CTS_KIOSK_URL:-/web/home}"
 PROFILE_DIR="${CTS_KIOSK_PROFILE:-$HOME/.config/cts-kiosk-chromium}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BASE_URL="${CTS_KIOSK_BASE_URL:-http://localhost:5000}"
 
 mkdir -p "$PROFILE_DIR"
 
-# Wait for the local server (best-effort; continue even if it times out so
-# Chromium still opens and shows its own error page rather than nothing).
-"$SCRIPT_DIR/wait-for-server.sh" "${URL}" 60 || true
+is_local_scoreboard_url() {
+    case "$1" in
+        /web/*) return 0 ;;
+        http://localhost:5000/web/*) return 0 ;;
+        http://127.0.0.1:5000/web/*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+open_url="$URL"
+if is_local_scoreboard_url "$URL"; then
+    display_url="$URL"
+    if [[ "$display_url" != /web/* ]]; then
+        display_url="$(python3 - "$display_url" <<'PYEOF'
+import sys
+from urllib.parse import urlsplit
+
+parts = urlsplit(sys.argv[1])
+path = parts.path or "/web/home"
+if parts.query:
+    path += "?" + parts.query
+print(path)
+PYEOF
+)"
+    fi
+    open_url="${BASE_URL%/}/web/kiosk?$(python3 - "$display_url" <<'PYEOF'
+import sys
+from urllib.parse import urlencode, quote
+
+print(urlencode({"display": sys.argv[1]}, quote_via=quote))
+PYEOF
+)"
+    "$SCRIPT_DIR/wait-for-server.sh" "${BASE_URL%/}/web/kiosk" 60 || true
+elif [[ "$URL" == http://* || "$URL" == https://* ]]; then
+    open_url="$URL"
+else
+    open_url="${BASE_URL%/}$URL"
+    "$SCRIPT_DIR/wait-for-server.sh" "$open_url" 60 || true
+fi
 
 # Suppress the "session ended badly" infobar that otherwise appears after
 # a hard reboot or power loss.
@@ -55,4 +85,4 @@ exec "$CHROMIUM" \
     --password-store=basic \
     --use-mock-keychain \
     --user-data-dir="$PROFILE_DIR" \
-    --app="$URL"
+    --app="$open_url"

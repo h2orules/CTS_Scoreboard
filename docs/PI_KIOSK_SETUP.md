@@ -10,11 +10,12 @@ At a glance:
 | ------------------------ | --------------------------------------------------------- |
 | `cts-scoreboard.service` | `systemd --user` unit that runs `start.sh` (gunicorn).    |
 | `pi/scripts/cts-kiosk.sh`| Waits for the server, then launches Chromium `--kiosk`.   |
+| `pi/scripts/cts-wifi-setup.sh` | Requests provisioning setup over the Unix socket. |
 | labwc `autostart`        | Runs `cts-kiosk.sh` at desktop login.                     |
-| labwc `rc.xml`           | Keybinds: exit kiosk, open settings, re-enter kiosk.      |
+| labwc `rc.xml`           | Keybinds: exit kiosk, open settings, re-enter kiosk, Wi-Fi setup. |
 | `cts-kiosk.desktop`      | Desktop icon to re-launch kiosk from the file manager.    |
 
-URL the kiosk loads: **`http://localhost:5000/web/home`**
+URL the kiosk shell loads: **`http://localhost:5000/web/kiosk?display=/web/home`**
 
 ---
 
@@ -69,19 +70,25 @@ cd ~/scoreboard
 ./pi/scripts/install-kiosk.sh
 ```
 
+The installer enables Wi-Fi provisioning by default. Use
+`./pi/scripts/install-kiosk.sh --no-wifi` if you want the kiosk and user
+service without the root-owned provisioning controller.
+
 What the installer does (all idempotent):
 
 1. `apt install -y chromium-browser` (skippable with `--no-apt`).
+   Wi-Fi provisioning is installed unless `--no-wifi` is passed.
 2. Installs `~/.config/systemd/user/cts-scoreboard.service` and runs
    `systemctl --user enable --now`.
 3. `sudo loginctl enable-linger $USER` so the server can start at boot,
    before anyone logs in (skippable with `--no-linger`).
 4. Appends a managed block to `~/.config/labwc/autostart` that launches
    `pi/scripts/cts-kiosk.sh` at desktop login.
-5. Injects three managed keybinds into `~/.config/labwc/rc.xml`:
+5. Injects four managed keybinds into `~/.config/labwc/rc.xml`:
    - **`Ctrl+Alt+K`** — exit kiosk (closes Chromium).
    - **`Ctrl+Alt+S`** — open the Settings page in a normal Chromium window.
    - **`Ctrl+Alt+R`** — re-enter kiosk mode.
+   - **`Ctrl+Alt+W`** — request Wi-Fi setup via the local controller.
 6. Drops `cts-kiosk.desktop` on `~/Desktop/` and into
    `~/.local/share/applications/`, marking it trusted.
 7. `sudo raspi-config nonint do_blanking 1` to disable screen blanking
@@ -109,16 +116,17 @@ sudo reboot
    lingering enabled this may already be running before login.
 3. labwc reads `~/.config/labwc/autostart` and executes
    `pi/scripts/cts-kiosk.sh`.
-4. The kiosk script polls `http://127.0.0.1:5000/web/home` until it
+4. The kiosk script polls `http://127.0.0.1:5000/web/kiosk` until it
    responds (up to 60 s), then launches Chromium in `--kiosk` mode with a
    dedicated profile at `~/.config/cts-kiosk-chromium/`.
-5. Chromium fills HDMI-1 and shows the scoreboard.
+5. Chromium fills HDMI-1 and shows the scoreboard shell. When provisioning
+   is active, the shell switches the iframe to `/wifi/display`.
 
 ---
 
 ## Exiting kiosk mode
 
-You have two ways out:
+You have three ways out:
 
 ### Primary: keyboard shortcut
 
@@ -131,6 +139,11 @@ and the labwc desktop appears. From there you can:
 - Press **`Ctrl+Alt+S`** to open the scoreboard `/settings` page in a
   regular Chromium window.
 - Open a terminal, file manager, or any normal desktop app.
+
+### Temporary Wi-Fi setup
+
+Press **`Ctrl+Alt+W`** to request the provisioning hotspot through the local
+Unix socket. This does not rely on an unauthenticated HTTP mutation.
 
 ### Fallback: switch to a TTY
 
@@ -158,6 +171,9 @@ Any of these:
 - **Double-click** the **CTS Scoreboard Kiosk** icon on the desktop.
 - Press **`Ctrl+Alt+R`** on the keyboard.
 - Run `~/scoreboard/pi/scripts/cts-kiosk.sh` from a terminal.
+
+The kiosk installer only supervises `cts-wifi-provisioning.service`; the
+controller owns any AP/DHCP/DNS/firewall child work itself.
 
 You do **not** need to restart the server; only Chromium is being
 re-launched.
@@ -208,6 +224,10 @@ systemctl --user restart cts-scoreboard.service
 systemctl --user status cts-scoreboard
 journalctl --user -u cts-scoreboard -f
 
+# Is the Wi-Fi controller up?
+systemctl status cts-wifi-provisioning.service
+journalctl -u cts-wifi-provisioning.service -f
+
 # Test the URL the kiosk uses
 curl -I http://localhost:5000/web/home
 
@@ -242,6 +262,7 @@ Common issues:
 ~/scoreboard/pi/scripts/uninstall-kiosk.sh
 ```
 
-Removes the user service, the managed blocks in `autostart` and `rc.xml`,
-and the two desktop launchers. Chromium, lingering, and screen-blanking
-settings are left in place; the uninstaller prints how to revert them.
+Removes the user service, the Wi-Fi controller, the managed blocks in
+`autostart` and `rc.xml`, and the desktop launchers. Chromium, lingering,
+and screen-blanking settings are left in place; the uninstaller prints how
+to revert them.

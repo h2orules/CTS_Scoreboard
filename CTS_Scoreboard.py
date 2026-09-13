@@ -3,6 +3,7 @@ import argparse
 import datetime
 import glob
 import hashlib
+import ipaddress
 import json
 import logging
 import os
@@ -11,6 +12,7 @@ import re
 import time
 import traceback
 from typing import cast
+from urllib.parse import urlsplit
 
 import flask
 import flask_login
@@ -23,9 +25,16 @@ import ap
 import credentials_store
 import settings_routes
 import sim
+import wifi_provisioning_client
 from azure_relay import AzureRelayClient
 from hytek_event_loader import HytekEventLoader
-from qr_utils import QR_TOKEN, build_meet_url, render_overlay_svg, substitute_qr_tokens
+from qr_utils import (
+    QR_TOKEN,
+    build_meet_url,
+    render_overlay_svg,
+    render_qr_svg,
+    substitute_qr_tokens,
+)
 from race_state_machine import RaceStateMachine
 from template_bundle import build_bundle
 
@@ -2084,6 +2093,8 @@ def _long_cache_ad_files(resp):
     path = flask.request.path or ""
     if path.startswith("/static/ad/"):
         resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif path.startswith("/wifi/") or path in ("/login", "/web/kiosk"):
+        resp.headers["Cache-Control"] = "no-store"
     return resp
 
 
@@ -2120,6 +2131,171 @@ def route_favicon_ico():
 
 
 # Scoreboard Templates
+def _is_loopback_request():
+    try:
+        address = ipaddress.ip_address(flask.request.remote_addr or "")
+    except ValueError:
+        return False
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped:
+        address = address.ipv4_mapped
+    return address.is_loopback
+
+
+def _provisioning_status():
+    if not wifi_provisioning_client.is_enabled():
+        return {"state": "normal", "setup_active": False, "available": False}
+    if "provisioning_status" not in flask.g:
+        result = wifi_provisioning_client.request("status")
+        status = result.get("status")
+        if not result.get("success") or not isinstance(status, dict):
+            raise wifi_provisioning_client.ProvisioningError(
+                "Wi-Fi controller did not return a valid status"
+            )
+        flask.g.provisioning_status = status
+    return flask.g.provisioning_status
+
+
+def _provisioning_unavailable(error):
+    app.logger.error("Wi-Fi provisioning unavailable: %s", error)
+    return flask.Response(
+        "Wi-Fi setup service is unavailable. Check cts-wifi-provisioning.service "
+        "on the Pi; the local scoreboard can still be opened at /web/home.",
+        status=503,
+        mimetype="text/plain",
+    )
+
+
+@app.before_request
+def _captive_setup_redirect():
+    # Only AP-subnet traffic is intercepted. Never trust forwarded headers for
+    # this boundary or hijack unrelated LAN/scoreboard data requests.
+    if (
+        not wifi_provisioning_client.is_enabled()
+        or _is_loopback_request()
+        or flask.request.endpoint == "static"
+        or flask.request.path.startswith(("/api/", "/socket.io"))
+    ):
+        return None
+    try:
+        status = _provisioning_status()
+    except wifi_provisioning_client.ProvisioningError as error:
+        if flask.request.endpoint == "route_web":
+            app.logger.error("Wi-Fi provisioning unavailable: %s", error)
+            return None
+        return _provisioning_unavailable(error)
+    if not status.get("setup_active"):
+        return None
+    try:
+        network = ipaddress.ip_network(status.get("ap_network", ""))
+        address = ipaddress.ip_address(flask.request.remote_addr or "")
+        if address not in network:
+            return None
+        setup = urlsplit(status.get("setup_url", ""))
+        gateway = ipaddress.ip_address(setup.hostname or "")
+        if (
+            setup.scheme != "http"
+            or gateway not in network
+            or setup.port != 5000
+            or setup.path != "/wifi/setup"
+            or setup.username is not None
+            or setup.password is not None
+            or setup.query
+            or setup.fragment
+        ):
+            raise ValueError("Invalid captive setup URL")
+    except ValueError as error:
+        return _provisioning_unavailable(error)
+    foreign_host = flask.request.host.lower() != setup.netloc.lower()
+    if foreign_host or flask.request.endpoint is None:
+        if flask.request.method not in ("GET", "HEAD"):
+            return flask.Response(
+                "Open the Wi-Fi setup page before submitting changes.",
+                status=400,
+                mimetype="text/plain",
+            )
+        response = flask.redirect(status["setup_url"])
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    return None
+
+
+@app.route("/wifi/kiosk-status")
+def route_wifi_kiosk_status():
+    if not _is_loopback_request():
+        flask.abort(403)
+    try:
+        status = _provisioning_status()
+    except wifi_provisioning_client.ProvisioningError as error:
+        app.logger.error("Wi-Fi provisioning unavailable: %s", error)
+        return flask.jsonify(
+            success=False,
+            message="Wi-Fi setup service is unavailable.",
+            status={"state": "error", "setup_active": False},
+        ), 503
+    response = flask.jsonify(success=True, message="", status=status)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/wifi/display")
+def route_wifi_display():
+    if not _is_loopback_request():
+        return flask.redirect("/wifi/setup")
+    code = 200
+    try:
+        status = _provisioning_status()
+    except wifi_provisioning_client.ProvisioningError as error:
+        app.logger.error("Wi-Fi provisioning unavailable: %s", error)
+        status = {
+            "state": "error",
+            "setup_active": False,
+            "message": "Wi-Fi setup service is unavailable. Check "
+            "cts-wifi-provisioning.service on the Pi.",
+        }
+        code = 503
+    setup_url = status.get("setup_url", "")
+    join_qr = (
+        render_qr_svg("WIFI:T:nopass;S:CTS-Scoreboard;;", light="#fff")
+        if status.get("setup_active")
+        else ""
+    )
+    response = flask.make_response(
+        flask.render_template(
+            "wifi_display.html",
+            status=status,
+            join_qr=join_qr,
+            setup_qr=render_qr_svg(setup_url, light="#fff") if setup_url else "",
+        ),
+        code,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/web/kiosk")
+def route_kiosk():
+    if not _is_loopback_request():
+        return flask.redirect("/web/home")
+    display_url = flask.request.args.get("display", "/web/home")
+    try:
+        display = urlsplit(display_url)
+    except ValueError:
+        flask.abort(400)
+    if (
+        display.scheme
+        or display.netloc
+        or display.fragment
+        or not re.fullmatch(r"/web/[A-Za-z0-9_-]+", display.path)
+        or display.path == "/web/kiosk"
+        or any(c in display_url for c in ("\r", "\n", "\\"))
+        or not os.path.isfile(
+            os.path.join(_REPO_DIR, "templates", display.path.lstrip("/") + ".html")
+        )
+    ):
+        flask.abort(400)
+    return flask.render_template("web/kiosk.html", display_url=display_url)
+
+
 @app.route("/web/<name>")
 def route_web(name):
     web_name = "web/" + name + ".html"
@@ -2146,6 +2322,13 @@ def has_no_empty_params(rule):
 
 @app.route("/")
 def route_site_map():
+    try:
+        if _provisioning_status().get("setup_active"):
+            response = flask.redirect("/wifi/setup")
+            response.headers["Cache-Control"] = "no-store"
+            return response
+    except wifi_provisioning_client.ProvisioningError as error:
+        return _provisioning_unavailable(error)
     # Collect all browsable routes (keyed by endpoint) so we can group them
     all_links = {}
     for rule in app.url_map.iter_rules():
@@ -2162,7 +2345,7 @@ def route_site_map():
             title = rule.endpoint.replace("_", " ")
             if title.startswith("route "):
                 title = title[6:]
-            if title in ["login", "logout", "site map"]:
+            if title in ["login", "logout", "site map", "kiosk"]:
                 continue
             # Hide these action-style endpoints from the site map
             if title in ["schedule clear", "standards clear"]:
@@ -2173,6 +2356,8 @@ def route_site_map():
     web_links = {}
     for file in glob.glob(os.path.join("templates", "web", "*.html")):
         name = os.path.basename(file).rsplit(".", 1)[0]
+        if name == "kiosk":
+            continue
         url = file[file.startswith("templates") and len("templates") :].rsplit(".", 1)[
             0
         ]

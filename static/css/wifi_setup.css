@@ -1,0 +1,90 @@
+.page-shell {
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 0 16px 32px;
+}
+
+.wifi-setup-layout {
+    display: grid;
+    gap: 12px;
+}
+
+.wifi-setup-banner {
+    display: grid;
+    gap: 8px;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 14px 16px;
+}
+
+.wifi-setup-banner h3 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.wifi-setup-banner p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: #555;
+}
+
+.wifi-setup-banner .btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.wifi-setup-banner .btn-row .btn {
+    min-width: 0;
+}
+
+.wifi-setup-banner .badge {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #eee;
+    color: #555;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.wifi-setup-section {
+    display: grid;
+    gap: 12px;
+}
+
+.wifi-setup-section h3 {
+    margin: 24px 0 0;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #eee;
+    font-size: 16px;
+    font-weight: 600;
+    color: #444;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.wifi-setup-helper {
+    font-size: 13px;
+    color: #666;
+    line-height: 1.45;
+}
+
+.wifi-setup-helper code {
+    word-break: break-word;
+}
+
+@media (max-width: 540px) {
+    .page-shell {
+        padding-inline: 12px;
+    }
+
+    .wifi-setup-banner .btn-row {
+        flex-direction: column;
+        align-items: stretch;
+    }
+}

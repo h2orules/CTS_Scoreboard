@@ -10,6 +10,8 @@ import logging
 import os
 import os.path
 import re
+import secrets
+import uuid
 from urllib.parse import urlparse
 
 import flask
@@ -20,6 +22,7 @@ import serial.tools.list_ports
 import ad_image
 import credentials_store
 import wifi_manager
+import wifi_provisioning_client
 from hytek_rec_parser import parse_rec_file
 from hytek_st2_parser import parse_st2_file
 
@@ -33,6 +36,7 @@ _app = None  # reference to CTS_Scoreboard module
 # Shutdown nonce management
 # ---------------------------------------------------------------------------
 _shutdown_nonces = []
+_WIFI_CSRF_SESSION_KEY = "wifi_csrf_token"
 
 
 def _new_shutdown_nonce():
@@ -43,6 +47,179 @@ def _new_shutdown_nonce():
     if len(_shutdown_nonces) > 10:
         del _shutdown_nonces[:-10]
     return nonce
+
+
+def _wifi_csrf_token():
+    token = flask.session.get(_WIFI_CSRF_SESSION_KEY)
+    if not token:
+        token = secrets.token_urlsafe(32)
+        flask.session[_WIFI_CSRF_SESSION_KEY] = token
+    return token
+
+
+def _wifi_require_csrf():
+    expected = flask.session.get(_WIFI_CSRF_SESSION_KEY)
+    provided = flask.request.headers.get("X-CSRF-Token") or flask.request.form.get(
+        "csrf_token", ""
+    )
+    if (
+        not isinstance(expected, str)
+        or not isinstance(provided, str)
+        or not expected
+        or not provided
+        or not secrets.compare_digest(expected.encode("utf-8"), provided.encode("utf-8"))
+    ):
+        return flask.jsonify({"success": False, "message": "CSRF validation failed"}), 403
+    return None
+
+
+def _wifi_error(message, status_code=400, **extra):
+    payload = {"success": False, "message": message}
+    payload.update(extra)
+    return flask.jsonify(payload), status_code
+
+
+def _wifi_bool(value, default=False):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    raise ValueError("Expected a boolean")
+
+
+def _wifi_ssid_or_error(value):
+    if not isinstance(value, str):
+        raise ValueError("ssid must be a string")
+    if not value:
+        raise ValueError("ssid is required")
+    if len(value.encode("utf-8")) > 32:
+        raise ValueError("ssid is too long")
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        raise ValueError("ssid contains control characters")
+    return value
+
+
+def _wifi_password_or_none(value):
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str):
+        raise ValueError("password must be a string")
+    if len(value) > 128:
+        raise ValueError("password is too long")
+    if any(ord(ch) < 32 for ch in value):
+        raise ValueError("password contains control characters")
+    return value
+
+
+def _wifi_uuid_or_error(value, field_name):
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str):
+        raise ValueError("%s must be a UUID" % field_name)
+    try:
+        return str(uuid.UUID(value))
+    except ValueError as error:
+        raise ValueError("%s must be a UUID" % field_name) from error
+
+
+def _wifi_get_client():
+    return wifi_provisioning_client
+
+
+def _wifi_controller_enabled():
+    client = _wifi_get_client()
+    return bool(client and client.is_enabled())
+
+
+def _wifi_controller_request(command, **params):
+    client = _wifi_get_client()
+    if not client or not client.is_enabled():
+        return None, _wifi_error("Wi-Fi provisioning is unavailable", 503)
+    try:
+        result = client.request(command, **params)
+    except client.ProvisioningError as exc:
+        message = str(exc) or "Wi-Fi provisioning request failed"
+        logging.getLogger(__name__).error("Wi-Fi controller request failed: %s", message)
+        return None, _wifi_error(message, 503)
+    if (
+        not isinstance(result, dict)
+        or not isinstance(result.get("success"), bool)
+        or not isinstance(result.get("message", ""), str)
+    ):
+        return None, _wifi_error("Wi-Fi provisioning returned an invalid response", 503)
+    if not result["success"]:
+        return None, (flask.jsonify(result), 409)
+    if command == "status" and not isinstance(result.get("status"), dict):
+        return None, _wifi_error("Wi-Fi provisioning returned an invalid status", 503)
+    return result, None
+
+
+def _wifi_legacy_status():
+    status = wifi_manager.get_status()
+    status["state"] = "normal"
+    status["available"] = wifi_manager.is_available()
+    return status
+
+
+def _wifi_legacy_scan():
+    networks = wifi_manager.scan_networks()
+    saved = wifi_manager.get_saved_networks()
+    return {"networks": networks, "saved": saved}
+
+
+def _wifi_join_params(data):
+    if set(data) - {"ssid", "password", "hidden", "security", "profile_id"}:
+        raise ValueError("Unexpected Wi-Fi join parameter")
+    security = data.get("security")
+    if security not in (None, "", "auto", "open", "wpa2", "wpa3"):
+        raise ValueError("Unsupported Wi-Fi security type")
+    params = {
+        "ssid": _wifi_ssid_or_error(data.get("ssid")),
+        "password": _wifi_password_or_none(data.get("password")),
+        "hidden": _wifi_bool(data.get("hidden")),
+    }
+    if security:
+        params["security"] = security
+    profile_id = _wifi_uuid_or_error(data.get("profile_id"), "profile_id")
+    if profile_id:
+        params["profile_id"] = profile_id
+    return params
+
+
+def _wifi_page_context(
+    mode, status=None, networks=None, saved=None, profiles=None, message=None, available=None
+):
+    controller_enabled = _wifi_controller_enabled()
+    wifi_available = controller_enabled or wifi_manager.is_available()
+    if available is not None:
+        wifi_available = bool(available)
+    return {
+        "wifi_available": wifi_available,
+        "wifi_controller_enabled": controller_enabled,
+        "wifi_mode": mode,
+        "wifi_status": status or {},
+        "wifi_networks": networks or [],
+        "wifi_saved": saved or [],
+        "wifi_profiles": profiles or [],
+        "wifi_message": message or "",
+        "wifi_csrf_token": _wifi_csrf_token(),
+        "wifi_config": {
+            "mode": mode,
+            "controllerEnabled": controller_enabled,
+            "csrfToken": _wifi_csrf_token(),
+            "statusUrl": "/wifi/status",
+            "scanUrl": "/wifi/scan",
+            "connectUrl": "/wifi/connect",
+            "forgetUrl": "/wifi/forget",
+            "updatePasswordUrl": "/wifi/update_password",
+            "prepareUrl": "/wifi/prepare",
+            "commitUrl": "/wifi/commit",
+            "cancelUrl": "/wifi/cancel",
+            "refreshUrl": "/wifi/refresh",
+            "retryUrl": "/wifi/retry",
+            "setupUrl": "/wifi/setup",
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -771,6 +948,17 @@ def register(flask_app, app_module):
         else:
             scroll_to_section = flask.request.args.get("section") or None
 
+        wifi_status = {}
+        wifi_message = ""
+        if _wifi_controller_enabled():
+            wifi_result, wifi_error = _wifi_controller_request("status")
+            if wifi_error:
+                return wifi_error
+            wifi_status = wifi_result.get("status") or {}
+            wifi_message = wifi_result.get("message") or ""
+        else:
+            wifi_status = {"available": wifi_manager.is_available()}
+
         return flask.render_template(
             "settings.html",
             meet_title=settings["meet_title"],
@@ -823,7 +1011,7 @@ def register(flask_app, app_module):
             team_guest3=settings.get("team_guest3", ""),
             team_guest3_tag=settings.get("team_guest3_tag", ""),
             shutdown_nonce=_new_shutdown_nonce(),
-            wifi_available=wifi_manager.is_available(),
+            **_wifi_page_context("settings", status=wifi_status, message=wifi_message),
             qr_overlay_visibility=settings.get("qr_overlay_visibility", "off"),
             qr_overlay_corner=settings.get("qr_overlay_corner", "top-right"),
             footer_messages=footer_messages_view,
@@ -839,50 +1027,221 @@ def register(flask_app, app_module):
     @flask_app.route("/wifi/status")
     @flask_login.login_required
     def route_wifi_status():
-        status = wifi_manager.get_status()
-        status["available"] = wifi_manager.is_available()
-        return flask.jsonify(status)
+        if _wifi_controller_enabled():
+            result, error = _wifi_controller_request("status")
+            if error:
+                return error
+            return flask.jsonify(result)
+        return flask.jsonify(_wifi_legacy_status())
 
     @flask_app.route("/wifi/scan")
     @flask_login.login_required
     def route_wifi_scan():
-        networks = wifi_manager.scan_networks()
-        saved = wifi_manager.get_saved_networks()
-        return flask.jsonify({"networks": networks, "saved": saved})
+        if _wifi_controller_enabled():
+            result, error = _wifi_controller_request("scan")
+            if error:
+                return error
+            return flask.jsonify(result)
+        return flask.jsonify(_wifi_legacy_scan())
 
     @flask_app.route("/wifi/connect", methods=["POST"])
     @flask_login.login_required
     def route_wifi_connect():
-        data = flask.request.get_json(force=True)
-        ssid = data.get("ssid", "")
-        password = data.get("password") or None
-        if not ssid:
-            return flask.jsonify({"success": False, "message": "SSID is required"}), 400
-        ok, msg = wifi_manager.connect(ssid, password)
+        csrf_error = _wifi_require_csrf()
+        if csrf_error:
+            return csrf_error
+        data = flask.request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return _wifi_error("Expected a JSON object", 400)
+        try:
+            params = _wifi_join_params(data)
+        except ValueError as exc:
+            return _wifi_error(str(exc), 400)
+        if _wifi_controller_enabled():
+            result, error = _wifi_controller_request("prepare_join", **params)
+            if error:
+                return error
+            return flask.jsonify(result)
+        ssid = params["ssid"]
+        password = params["password"]
+        profile_id = params.get("profile_id")
+        use_saved = not password and (
+            bool(profile_id) or ssid in wifi_manager.get_saved_networks()
+        )
+        ok, msg = wifi_manager.connect(
+            profile_id if use_saved and profile_id else ssid,
+            password,
+            hidden=params["hidden"],
+            saved=use_saved,
+        )
         return flask.jsonify({"success": ok, "message": msg})
 
     @flask_app.route("/wifi/forget", methods=["POST"])
     @flask_login.login_required
     def route_wifi_forget():
-        data = flask.request.get_json(force=True)
-        ssid = data.get("ssid", "")
-        if not ssid:
-            return flask.jsonify({"success": False, "message": "SSID is required"}), 400
+        csrf_error = _wifi_require_csrf()
+        if csrf_error:
+            return csrf_error
+        data = flask.request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return _wifi_error("Expected a JSON object", 400)
+        try:
+            ssid = _wifi_ssid_or_error(data.get("ssid"))
+            profile_id = _wifi_uuid_or_error(data.get("profile_id"), "profile_id")
+        except ValueError as exc:
+            return _wifi_error(str(exc), 400)
+        if _wifi_controller_enabled():
+            params = {"ssid": ssid}
+            if profile_id:
+                params["profile_id"] = profile_id
+            result, error = _wifi_controller_request("forget", **params)
+            if error:
+                return error
+            return flask.jsonify(result)
         ok, msg = wifi_manager.forget(ssid)
         return flask.jsonify({"success": ok, "message": msg})
 
     @flask_app.route("/wifi/update_password", methods=["POST"])
     @flask_login.login_required
     def route_wifi_update_password():
-        data = flask.request.get_json(force=True)
-        ssid = data.get("ssid", "")
-        password = data.get("password", "")
-        if not ssid or not password:
-            return flask.jsonify(
-                {"success": False, "message": "SSID and password are required"}
-            ), 400
+        csrf_error = _wifi_require_csrf()
+        if csrf_error:
+            return csrf_error
+        data = flask.request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return _wifi_error("Expected a JSON object", 400)
+        try:
+            ssid = _wifi_ssid_or_error(data.get("ssid"))
+            password = _wifi_password_or_none(data.get("password"))
+            if not password:
+                raise ValueError("password is required")
+            profile_id = _wifi_uuid_or_error(data.get("profile_id"), "profile_id")
+        except ValueError as exc:
+            return _wifi_error(str(exc), 400)
+        if _wifi_controller_enabled():
+            params = {"ssid": ssid, "password": password}
+            if profile_id:
+                params["profile_id"] = profile_id
+            result, error = _wifi_controller_request("update_password", **params)
+            if error:
+                return error
+            return flask.jsonify(result)
         ok, msg = wifi_manager.update_password(ssid, password)
         return flask.jsonify({"success": ok, "message": msg})
+
+    @flask_app.route("/wifi/setup")
+    @flask_login.login_required
+    def route_wifi_setup():
+        if not _wifi_controller_enabled():
+            return flask.render_template(
+                "wifi_setup.html",
+                **_wifi_page_context(
+                    "setup",
+                    status=_wifi_legacy_status(),
+                    networks=[],
+                    saved=[],
+                    message="Wi-Fi provisioning is not enabled on this system.",
+                    available=False,
+                ),
+            )
+        status_result, error = _wifi_controller_request("status")
+        if error:
+            return error
+        scan_result, error = _wifi_controller_request("scan")
+        if error:
+            return error
+        return flask.render_template(
+            "wifi_setup.html",
+            **_wifi_page_context(
+                "setup",
+                status=status_result.get("status") or {},
+                networks=scan_result.get("networks") or [],
+                saved=scan_result.get("saved") or [],
+                profiles=scan_result.get("profiles") or [],
+                message=status_result.get("message") or scan_result.get("message") or "",
+                available=True,
+            ),
+        )
+
+    @flask_app.route("/wifi/prepare", methods=["POST"])
+    @flask_login.login_required
+    def route_wifi_prepare():
+        if not _wifi_controller_enabled():
+            return _wifi_error("Wi-Fi provisioning is not enabled", 503)
+        return route_wifi_connect()
+
+    @flask_app.route("/wifi/commit", methods=["POST"])
+    @flask_login.login_required
+    def route_wifi_commit():
+        csrf_error = _wifi_require_csrf()
+        if csrf_error:
+            return csrf_error
+        if not _wifi_controller_enabled():
+            return _wifi_error("Wi-Fi provisioning is not enabled", 503)
+        data = flask.request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return _wifi_error("Expected a JSON object", 400)
+        operation_id = data.get("operation_id")
+        if not isinstance(operation_id, str) or not operation_id.strip():
+            return _wifi_error("operation_id is required", 400)
+        result, error = _wifi_controller_request(
+            "commit_join", operation_id=operation_id.strip()
+        )
+        if error:
+            return error
+        return flask.jsonify(result)
+
+    @flask_app.route("/wifi/cancel", methods=["POST"])
+    @flask_login.login_required
+    def route_wifi_cancel():
+        csrf_error = _wifi_require_csrf()
+        if csrf_error:
+            return csrf_error
+        if not _wifi_controller_enabled():
+            return _wifi_error("Wi-Fi provisioning is not enabled", 503)
+        data = flask.request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return _wifi_error("Expected a JSON object", 400)
+        operation_id = data.get("operation_id")
+        if not isinstance(operation_id, str) or not operation_id.strip():
+            return _wifi_error("operation_id is required", 400)
+        result, error = _wifi_controller_request(
+            "cancel_join", operation_id=operation_id.strip()
+        )
+        if error:
+            return error
+        return flask.jsonify(result)
+
+    @flask_app.route("/wifi/refresh", methods=["POST"])
+    @flask_login.login_required
+    def route_wifi_refresh():
+        csrf_error = _wifi_require_csrf()
+        if csrf_error:
+            return csrf_error
+        if _wifi_controller_enabled():
+            data = flask.request.get_json(silent=True)
+            if not isinstance(data, dict):
+                return _wifi_error("Expected a JSON object", 400)
+            if data.get("confirmed") is not True:
+                return _wifi_error("confirmed must be true", 400)
+            result, error = _wifi_controller_request("refresh", confirmed=True)
+            if error:
+                return error
+            return flask.jsonify(result)
+        return flask.jsonify(_wifi_legacy_scan())
+
+    @flask_app.route("/wifi/retry", methods=["POST"])
+    @flask_login.login_required
+    def route_wifi_retry():
+        csrf_error = _wifi_require_csrf()
+        if csrf_error:
+            return csrf_error
+        if not _wifi_controller_enabled():
+            return _wifi_error("Wi-Fi provisioning is not enabled", 503)
+        result, error = _wifi_controller_request("retry_saved")
+        if error:
+            return error
+        return flask.jsonify(result)
 
     # -- Clear / remove routes -----------------------------------------------
 

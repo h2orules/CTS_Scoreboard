@@ -6,112 +6,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Swimming Scoreboard: Login</title>
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
-
-    <link rel="stylesheet"
-        href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css"
-        integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u"
-        crossorigin="anonymous">
-    <link rel="stylesheet"
-        href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap-theme.min.css"
-        integrity="sha384-rHyoN1iRsVXV4nD0JutlnGaslCJuC7uwjduW9SVrLvRYooPp2bWYgmgJQIXwl/Sp"
-        crossorigin="anonymous">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
 </head>
-<style>
-    body { background: #fafafa; }
-
-    /* ── Page header (matches settings.html) ───── */
-    .page-header-bar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 16px 0 12px;
-        margin-bottom: 8px;
-        border-bottom: 1px solid #e5e5e5;
-    }
-    .page-header-bar .page-titles {
-        display: flex;
-        align-items: baseline;
-        gap: 10px;
-    }
-    .page-header-bar h1 {
-        font-size: 22px;
-        font-weight: 600;
-        margin: 0;
-        color: #333;
-    }
-    .page-header-bar h2 {
-        font-size: 16px;
-        font-weight: 400;
-        margin: 0;
-        color: #888;
-    }
-    .page-header-bar .btn { font-size: 13px; }
-
-    /* ── Login card ────────────────────────────── */
-    .login-card {
-        max-width: 380px;
-        margin: 32px auto 0;
-        padding: 24px 28px;
-        background: #fff;
-        border: 1px solid #e1e1e1;
-        border-radius: 6px;
-        box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-    }
-    .login-card h3 {
-        margin: 0 0 18px;
-        padding-bottom: 8px;
-        border-bottom: 1px solid #eee;
-        font-size: 16px;
-        font-weight: 600;
-        color: #444;
-        text-transform: uppercase;
-        letter-spacing: 0.04em;
-    }
-    .login-card .form-group { margin-bottom: 14px; }
-    .login-card label {
-        display: block;
-        font-size: 13px;
-        font-weight: 600;
-        color: #555;
-        margin-bottom: 4px;
-    }
-    .login-card .form-control {
-        height: 38px;
-        font-size: 14px;
-    }
-    .login-card .submit-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-top: 18px;
-    }
-    .login-card .btn-primary {
-        padding: 6px 18px;
-        font-size: 14px;
-        font-weight: 500;
-    }
-    .login-alert {
-        padding: 8px 12px;
-        margin-bottom: 14px;
-        border-radius: 4px;
-        background: #f8d7da;
-        border: 1px solid #f5c6cb;
-        color: #721c24;
-        font-size: 13px;
-    }
-</style>
-
 <body>
-    <div class="container">
+    <div class="page-shell">
         <div class="page-header-bar">
             <div class="page-titles">
                 <h1>Swimming Scoreboard</h1>
                 <h2>Login</h2>
             </div>
-            <a href="/" class="btn btn-default btn-sm">Back to Site Map</a>
+            <div class="page-header-actions">
+                <a href="/" class="btn btn-default btn-sm">Back to Site Map</a>
+            </div>
         </div>
 
-        <div class="login-card">
+        <div class="card">
             <h3>Sign In</h3>
 
             {% if login_failed %}
@@ -123,17 +32,11 @@
             <form action="" method="post" autocomplete="off">
                 <div class="form-group">
                     <label for="user_name">User Name</label>
-                    <input name="username"
-                        id="user_name"
-                        class="form-control"
-                        autofocus>
+                    <input name="username" id="user_name" class="form-control" autofocus>
                 </div>
                 <div class="form-group">
                     <label for="password">Password</label>
-                    <input name="password"
-                        id="password"
-                        type="password"
-                        class="form-control">
+                    <input name="password" id="password" type="password" class="form-control">
                 </div>
                 <div class="submit-row">
                     <span></span>

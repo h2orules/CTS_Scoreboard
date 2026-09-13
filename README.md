@@ -30,7 +30,7 @@ confirm compatibility with your timing console and wiring before meet day.
 | Meet data | HyTek/Meet Manager `.hy3` event and entry imports, including swimmer/team and seed-time information; `.st2` qualifying standards and multiple `.rec` record sets. |
 | Display controls | Pool/lane settings, display styles, team-name overrides, qualifying/record information, message pages and footer messages. |
 | Sponsor content | Image uploads, ordering, enable/disable controls, resizing and timed ad rotation. |
-| Local operation | Browser-based settings, serial-port selection, Wi-Fi management through NetworkManager, and a boot-to-scoreboard Chromium kiosk. Azure is not required. |
+| Local operation | Browser-based settings, serial-port selection, Wi-Fi management through NetworkManager, offline Wi-Fi setup/recovery, and a boot-to-scoreboard Chromium kiosk. Azure is not required. |
 | Remote viewing | Authenticated Pi-to-Azure publishing, separate meet URLs, friendly meet names, QR-code sharing, reconnect controls and meet lifecycle management. Viewers do not need access to the Pi's LAN. |
 | Cloud operations | Container Apps deployments, Redis-backed state and cross-replica Socket.IO fanout, autoscaling, alerts, and version-controlled Azure Monitor workbooks. |
 | Development tools | Recorded serial-stream capture/replay, a development-only simulator, Python and JavaScript tests, and a separate stress-test harness. |
@@ -177,9 +177,10 @@ for that invocation; use the settings page to persist it.
 
 | Local URL | Purpose |
 |---|---|
-| `http://<pi-ip>:5000/` | Index of available pages |
+| `http://<pi-ip>:5000/` | Index of available pages, or Wi-Fi setup while the setup hotspot is active |
 | `http://<pi-ip>:5000/web/home` | Main scoreboard; use this as the kiosk or OBS browser-source URL |
 | `http://<pi-ip>:5000/settings` | Administration, meet imports and display/network/cloud configuration |
+| `http://<pi-ip>:5000/wifi/setup` | Authenticated Wi-Fi setup and recovery |
 
 Use **Meet Settings**, **Pool Settings**, and the display sections to configure
 the meet. Upload meet entries, standards and records under **Meet Manager
@@ -210,12 +211,40 @@ Enable desktop auto-login through `sudo raspi-config`, then:
 cd ~/scoreboard
 ./pi/scripts/install-kiosk.sh --dry-run
 ./pi/scripts/install-kiosk.sh
+# or, to skip the Wi-Fi controller:
+./pi/scripts/install-kiosk.sh --no-wifi
 sudo reboot
 ```
 
 The installer sets up a user systemd service and Chromium kiosk autostart.
+It also installs the separate Wi-Fi provisioning controller and its OS
+dependencies. Use `--no-wifi` to disable/remove that integration, or `--no-apt`
+only when the required packages are already installed.
 `Ctrl+Alt+K` exits the kiosk, `Ctrl+Alt+S` opens settings, and `Ctrl+Alt+R`
 reopens the kiosk. The **CTS Scoreboard Kiosk** desktop icon also reopens it.
+
+With Wi-Fi provisioning installed, `Ctrl+Alt+W` starts the temporary
+**CTS-Scoreboard** setup hotspot. The Pi also enters setup automatically when
+it cannot establish a known Wi-Fi connection and has no usable Ethernet
+connection. HDMI shows the join instructions, QR codes, and setup address.
+Join that network from a phone/tablet/laptop, sign into the setup page, and
+select the network both devices will use. The Pi restores the hotspot if
+joining fails and returns to the scoreboard after a successful local connection.
+
+Service-state checks:
+
+```bash
+systemctl --user status cts-scoreboard.service
+journalctl --user -u cts-scoreboard.service -f
+systemctl status cts-wifi-provisioning.service
+journalctl -u cts-wifi-provisioning.service -f
+```
+
+**The setup hotspot is open and unencrypted.** The web login is still required,
+but it does not encrypt the admin password or Wi-Fi credentials submitted over
+HTTP. Only use setup in a trusted environment. See the
+[Wi-Fi setup guide](docs/WIFI_SETUP.md) for recovery, offline behavior, and
+mobile/venue-network limitations.
 
 See [the kiosk setup guide](docs/PI_KIOSK_SETUP.md) for display selection,
 service options and troubleshooting. Useful service commands:
@@ -228,6 +257,9 @@ journalctl --user -u cts-scoreboard.service -f
 To update an existing checkout, stop the service, pull your reviewed changes,
 run `uv sync`, and restart the service. Preserve local configuration and
 credentials; do not overwrite them with another Pi's files.
+If provisioning is installed, rerun its installer after updating controller
+code: the privileged service intentionally uses root-owned installed copies,
+not code from the user's writable checkout.
 
 ## Set up your own Azure relay
 

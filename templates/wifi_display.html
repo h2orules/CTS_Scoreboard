@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CTS-Scoreboard Wi-Fi Setup</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; min-height: 100%; background: #111; color: #f5f7fa; font-family: system-ui, sans-serif; }
+    .page { max-width: 1150px; margin: 0 auto; padding: 1rem; display: grid; gap: 1rem; }
+    .hero { background: linear-gradient(180deg, #1c2a3f, #101924); border: 1px solid rgba(255,255,255,.12); border-radius: 16px; padding: 1rem 1.1rem; box-shadow: 0 12px 30px rgba(0,0,0,.25); }
+    .hero h1, .hero h2 { margin: 0 0 .35rem; line-height: 1.1; }
+    .hero p { margin: .25rem 0; max-width: 70ch; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+    .card { background: #161b22; border: 1px solid rgba(255,255,255,.1); border-radius: 14px; padding: 1rem; }
+    .card h3 { margin: 0 0 .75rem; }
+    .meta { display: grid; gap: .35rem; font-size: .98rem; }
+    .meta code { display: inline-block; padding: .1rem .35rem; background: rgba(255,255,255,.08); border-radius: 6px; }
+    .qr { display: grid; place-items: center; min-height: 220px; background: #fff; border-radius: 12px; overflow: hidden; }
+    .qr svg { width: 100%; max-width: 220px; height: auto; }
+    .steps { padding-left: 1.1rem; }
+    .steps li { margin: .45rem 0; }
+    .alert { border-left: 5px solid #ffb84d; padding: .85rem 1rem; background: rgba(255,184,77,.08); border-radius: 10px; }
+    .muted { color: #c7d0dd; }
+    .status-pill { display: inline-flex; align-items: center; gap: .4rem; border-radius: 999px; padding: .25rem .7rem; font-weight: 700; background: rgba(255,255,255,.08); }
+    .status-pill[data-state="normal"] { background: rgba(51, 204, 102, .15); color: #a7ffbf; }
+    .status-pill[data-state="setup"], .status-pill[data-state="join_pending"], .status-pill[data-state="joining"], .status-pill[data-state="refreshing"], .status-pill[data-state="recovering"] { background: rgba(255, 186, 73, .18); color: #ffd79a; }
+    .status-pill[data-state="error"] { background: rgba(255, 102, 102, .18); color: #ffb4b4; }
+    .qr-stack { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
+    .footer-note { font-size: .93rem; color: #bac5d3; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <h1>CTS-Scoreboard Wi-Fi setup</h1>
+      <p class="muted">This screen shows Wi-Fi setup progress and the local addresses you can use to reconnect after joining a network.</p>
+      <div class="status-pill" data-state="{{ status.state|e }}">
+        <span>State:</span>
+        <strong>{{ status.state|replace('_', ' ')|title }}</strong>
+      </div>
+      <p><strong>Message:</strong> {{ status.message }}</p>
+    </section>
+
+    <section class="cards">
+      <article class="card">
+        <h3>Current device</h3>
+        <div class="meta">
+          <div><strong>Hostname:</strong> <code>{{ status.hostname }}</code></div>
+          <div><strong>Local URL:</strong> <code>{{ status.local_url }}</code></div>
+          <div><strong>Setup URL:</strong> <code>{{ status.setup_url }}</code></div>
+          <div><strong>Hotspot SSID:</strong> <code>{{ status.ap_ssid }}</code></div>
+          {% if status.target_ssid %}
+          <div><strong>Selected network:</strong> <code>{{ status.target_ssid }}</code></div>
+          {% endif %}
+          {% if status.ipv4 %}
+          <div><strong>LAN IP:</strong> <code>{{ status.ipv4 }}</code></div>
+          {% endif %}
+          <div><strong>Connectivity:</strong> <code>{{ status.connectivity }}</code></div>
+        </div>
+      </article>
+
+      {% if status.setup_active %}
+      <article class="card">
+        <h3>Join the setup network</h3>
+        <p class="muted">Join <strong>CTS-Scoreboard</strong> from the device you are using to configure Wi-Fi. The hotspot is open and unencrypted.</p>
+        <div class="qr">{{ join_qr|safe }}</div>
+        <p class="footer-note">If the QR code is unavailable, use the SSID above and then open the explicit HTTP setup URL on this page.</p>
+      </article>
+      {% endif %}
+    </section>
+
+    {% if status.setup_active %}
+    <section class="cards">
+      <article class="card">
+        <h3>What to do next</h3>
+        <ol class="steps">
+          <li>Connect your phone/tablet/laptop to <strong>CTS-Scoreboard</strong>.</li>
+          <li>Open the setup page shown above if the captive assistant does not appear.</li>
+          <li>Sign in with the existing admin account and choose the network that both devices will use.</li>
+          <li>After confirming the handoff, reconnect to that network and open the Pi's local URL.</li>
+        </ol>
+      </article>
+      <article class="card">
+        <h3>Setup URL QR</h3>
+        <p class="muted">Use the QR below to load the HTTP setup page directly.</p>
+        <div class="qr">{{ setup_qr|safe }}</div>
+      </article>
+    </section>
+
+    <section class="alert">
+      <strong>Important:</strong> The hotspot is open and the HTTP connection is unencrypted. The setup page requires admin sign-in, but admin and Wi-Fi credentials are visible to nearby listeners on the radio. Use this only in a trusted environment.
+    </section>
+    {% elif status.state == 'joining' %}
+    <section class="alert">
+      The hotspot is off while the Pi joins the selected network. Reconnect your phone to that network and open the local URL above. If the join fails, wait for CTS-Scoreboard to return and rejoin it to see the error.
+    </section>
+    {% elif status.state != 'normal' %}
+    <section class="alert">
+      The setup hotspot is not active. Follow the status message above; if it does not recover, use Ethernet or a local keyboard to inspect cts-wifi-provisioning.service.
+    </section>
+    {% endif %}
+
+    {% if status.state == 'normal' and status.ipv4 %}
+    <section class="hero">
+      <h2>Back on the scoreboard network</h2>
+      <p>The Pi has a usable local IP address: <strong>{{ status.ipv4 }}</strong>.</p>
+      <p>Open <code>{{ status.local_url }}</code> or the numeric IP above if mDNS is not available.</p>
+    </section>
+    {% endif %}
+  </main>
+</body>
+</html>

@@ -1,0 +1,79 @@
+<section class="wifi-setup-section" id="wifi-section">
+    <div class="wifi-status-bar" id="wifi-status-card">
+        <div class="wifi-status-line" id="wifi-status-line">
+            <span class="wifi-spinner" aria-hidden="true"></span>
+            <span>Loading Wi-Fi status…</span>
+        </div>
+        <div class="wifi-status-message" id="wifi-status-message">
+            {{ wifi_message }}
+        </div>
+    </div>
+
+    <div class="wifi-action-card hidden" id="wifi-action-card">
+        <div class="wifi-action-title" id="wifi-action-title">Join handoff</div>
+        <div class="wifi-action-text" id="wifi-action-text"></div>
+        <div class="wifi-handoff-grid" id="wifi-setup-note"></div>
+        <div class="wifi-action-row" id="wifi-action-row">
+            <button type="button" class="btn btn-primary" id="wifi-commit-btn">Commit join</button>
+            <button type="button" class="btn btn-default" id="wifi-cancel-btn">Cancel</button>
+            <button type="button" class="btn btn-default" id="wifi-action-refresh-btn">Refresh</button>
+            <button type="button" class="btn btn-warning" id="wifi-retry-btn">Retry saved</button>
+        </div>
+    </div>
+
+    {% if wifi_mode == 'settings' %}
+        <details id="wifi-network-expando" class="wifi-network-expando">
+            <summary class="wifi-network-summary">Available networks</summary>
+            <div class="wifi-list-header">
+                <label>Networks in range</label>
+                <button class="wifi-refresh-btn" id="wifi-refresh-btn" type="button" title="Refresh">
+                    <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+                        <path d="M13.65 2.35A7.96 7.96 0 0 0 8 0a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L10 6h6V0l-2.35 2.35z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="wifi-network-list" id="wifi-network-list">
+                <div class="wifi-spinner-row" id="wifi-scan-spinner" style="color:#999;">
+                    Open this section to scan for networks.
+                </div>
+            </div>
+            <div class="wifi-hidden-btn">
+                <button type="button" id="wifi-hidden-btn">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M1 9l2 2a12.73 12.73 0 0 1 18 0l2-2A15.57 15.57 0 0 0 1 9zm4 4l2 2a8.5 8.5 0 0 1 10 0l2-2a11.36 11.36 0 0 0-14 0zm4 4l3 3 3-3a4.24 4.24 0 0 0-6 0z"/>
+                        <line x1="19" y1="1" x2="23" y2="5" stroke="currentColor" stroke-width="2"/>
+                        <line x1="23" y1="1" x2="19" y2="5" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                    Connect to hidden network…
+                </button>
+            </div>
+        </details>
+    {% else %}
+        <div class="wifi-setup-intro">
+            <div class="wifi-setup-helper">
+                Cached scan results appear below. Use Refresh to queue an updated scan.
+                If a join is already pending, the handoff card above stays visible even if the
+                AP disappears while the phone reconnects.
+            </div>
+            <div class="wifi-list-header">
+                <label>Cached networks</label>
+                <button class="wifi-refresh-btn" id="wifi-refresh-btn" type="button" title="Refresh">
+                    <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+                        <path d="M13.65 2.35A7.96 7.96 0 0 0 8 0a8 8 0 1 0 8 8h-2a6 6 0 1 1-1.76-4.24L10 6h6V0l-2.35 2.35z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="wifi-network-list" id="wifi-network-list"></div>
+            <div class="wifi-hidden-btn">
+                <button type="button" id="wifi-hidden-btn">
+                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <path d="M1 9l2 2a12.73 12.73 0 0 1 18 0l2-2A15.57 15.57 0 0 0 1 9zm4 4l2 2a8.5 8.5 0 0 1 10 0l2-2a11.36 11.36 0 0 0-14 0zm4 4l3 3 3-3a4.24 4.24 0 0 0-6 0z"/>
+                        <line x1="19" y1="1" x2="23" y2="5" stroke="currentColor" stroke-width="2"/>
+                        <line x1="23" y1="1" x2="19" y2="5" stroke="currentColor" stroke-width="2"/>
+                    </svg>
+                    Connect to hidden network…
+                </button>
+            </div>
+        </div>
+    {% endif %}
+</section>

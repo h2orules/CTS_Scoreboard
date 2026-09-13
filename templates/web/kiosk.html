@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CTS Scoreboard Kiosk</title>
+  <style>
+    html, body { margin: 0; width: 100%; height: 100%; background: #000; color: #fff; overflow: hidden; font-family: system-ui, sans-serif; }
+    .kiosk-shell { position: fixed; inset: 0; background: #000; }
+    .kiosk-frame { width: 100%; height: 100%; border: 0; background: #000; }
+  </style>
+</head>
+<body>
+  <div class="kiosk-shell">
+    <iframe
+      id="kiosk-frame"
+      class="kiosk-frame"
+      src="{{ display_url|e }}"
+      data-display-url="{{ display_url|e }}"
+      data-current-url="{{ display_url|e }}"
+      title="CTS Scoreboard display"
+      allowfullscreen
+      referrerpolicy="no-referrer"
+    ></iframe>
+  </div>
+  <script src="{{ url_for('static', filename='js/wifi_kiosk.js') }}"></script>
+  <script>
+    (function () {
+      var controller = window.initKioskShell({
+        iframe: document.getElementById('kiosk-frame'),
+        displayUrl: {{ display_url|tojson }},
+        setupUrl: '/wifi/display',
+        statusUrl: '/wifi/kiosk-status',
+        pollMs: 5000
+      });
+      window.addEventListener('pagehide', function () { controller.stop(); });
+    }());
+  </script>
+</body>
+</html>

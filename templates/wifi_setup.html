@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Swimming Scoreboard: Wi-Fi Setup</title>
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/login.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/wifi.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/wifi_setup.css') }}">
+</head>
+<body>
+    <div class="page-shell">
+        <div class="page-header-bar">
+            <div class="page-titles">
+                <h1>Swimming Scoreboard</h1>
+                <h2>Wi-Fi Setup</h2>
+            </div>
+            <div class="page-header-actions">
+                <a href="/settings" class="btn btn-default btn-sm">Back to Settings</a>
+                <a href="/" class="btn btn-default btn-sm">Site Map</a>
+            </div>
+        </div>
+
+        <div class="wifi-setup-layout">
+            <div class="wifi-setup-banner">
+                <h3>Connect the scoreboard to Wi-Fi</h3>
+                {% if wifi_controller_enabled %}
+                    <div class="badge">Provisioning active</div>
+                    <p>
+                        Choose the internet network your phone or laptop will use, review
+                        the handoff details, and commit the join when you are ready to
+                        switch off the setup AP.
+                    </p>
+                    <p class="wifi-setup-helper">
+                        After confirming, join the selected network on your phone or laptop
+                        and open the Pi's reconnect URL. If CTS-Scoreboard returns, rejoin
+                        it and open the setup URL to see the error.
+                    </p>
+                    <p class="wifi-setup-helper">
+                        <strong>Unencrypted setup:</strong> the open hotspot and HTTP page
+                        do not encrypt your admin password or submitted Wi-Fi password.
+                        Nearby listeners can observe these credentials. Use setup only
+                        in a trusted environment.
+                    </p>
+                {% else %}
+                    <div class="badge">Unavailable</div>
+                    <p>
+                        Wi-Fi provisioning is not enabled on this system. The ordinary
+                        Settings Wi-Fi section will continue to use the legacy local helper.
+                    </p>
+                {% endif %}
+                <div class="btn-row">
+                    <a class="btn btn-default" href="/settings#section-wifi-network">Open settings Wi-Fi panel</a>
+                </div>
+            </div>
+
+            {% if wifi_available %}
+                {% include "wifi/_panel.html" %}
+                {% include "wifi/_overlays.html" %}
+            {% else %}
+                <div class="wifi-setup-section">
+                    <div class="wifi-unavailable">
+                        Wi-Fi provisioning is unavailable. If this Pi should support controller-based setup,
+                        the backend service must be installed and enabled first.
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        window.WIFI_CONFIG = {{ wifi_config|tojson }};
+        window.WIFI_CONFIG.initialStatus = {{ wifi_status|tojson }};
+        window.WIFI_CONFIG.initialNetworks = {{ wifi_networks|tojson }};
+        window.WIFI_CONFIG.initialSaved = {{ wifi_saved|tojson }};
+        window.WIFI_CONFIG.initialProfiles = {{ wifi_profiles|tojson }};
+        window.WIFI_CONFIG.initialMessage = {{ wifi_message|tojson }};
+    </script>
+    <script src="{{ url_for('static', filename='js/wifi.js') }}"></script>
+</body>
+</html>

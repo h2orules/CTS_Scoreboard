@@ -1,0 +1,21 @@
+[Unit]
+Description=CTS Scoreboard Wi-Fi Provisioning Controller
+Documentation=https://github.com/h2orules/CTS_Scoreboard
+After=NetworkManager.service
+Requires=NetworkManager.service
+
+[Service]
+Type=simple
+User=root
+Group=CTS_SCOREBOARD_GROUP
+RuntimeDirectory=cts-scoreboard-wifi
+RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=restart
+ExecStart=/usr/bin/python3 /usr/local/lib/cts-scoreboard/wifi_provisioning.py --interface wlan0 --socket /run/cts-scoreboard-wifi/control.sock --socket-group CTS_SCOREBOARD_GROUP --ap-address 192.168.4.1/24
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=300
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target

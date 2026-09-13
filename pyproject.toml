@@ -59,6 +59,8 @@ files = [
     "sim.py",
     "template_bundle.py",
     "wifi_manager.py",
+    "wifi_provisioning.py",
+    "wifi_provisioning_client.py",
 ]
 
 [[tool.mypy.overrides]]
@@ -78,4 +80,6 @@ only-include = [
     "sim.py",
     "settings_routes.py",
     "wifi_manager.py",
+    "wifi_provisioning.py",
+    "wifi_provisioning_client.py",
 ]

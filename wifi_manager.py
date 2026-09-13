@@ -1,326 +1,805 @@
-"""WiFi network management via NetworkManager (nmcli)."""
+"""Wi-Fi network management via NetworkManager (nmcli)."""
 
+from __future__ import annotations
+
+import ipaddress
+import os
 import re
 import shutil
 import subprocess
 import time
+from dataclasses import dataclass
+from typing import Any, Callable
 
-
-# Conservative allowlist for SSID values passed to nmcli. The leading
-# character excludes '-' so a value can never be parsed as an nmcli option,
-# and the character classes exclude whitespace/control characters (NUL, CR,
-# LF) and shell metacharacters. Length is bounded to reject absurd inputs.
-_SAFE_NMCLI_TOKEN_RE = re.compile(r'[A-Za-z0-9_.:/@+=,][A-Za-z0-9 _.:/@+=,\-]{0,63}')
-
-
-# nmcli option flags the helper is allowed to emit. These are constants in
-# this module (never user input), so they are reconstructed from a fixed
-# table rather than passed through the value allowlist.
-_ALLOWED_NMCLI_FLAGS = ('-t', '-f')
-
-# The exact set of characters permitted in a sanitized nmcli token, as a
-# module-level constant string. Sanitized output is read out of this constant
-# (indexed by the position of each input character), so the value reaching the
-# subprocess sink is provably derived from constants, not from user input.
-_ALLOWED_TOKEN_CHARS = (
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    'abcdefghijklmnopqrstuvwxyz'
-    '0123456789'
-    ' _.:/@+=,-'
+_SAFE_TEXT_RE = re.compile(r"[^\x00-\x1f\x7f]+\Z")
+_SAFE_IDENTIFIER_RE = re.compile(r"[A-Za-z0-9_.:@+=,][A-Za-z0-9_.:/@+=,\- ]{0,127}\Z")
+_SAFE_INTERFACE_RE = re.compile(r"[A-Za-z0-9_.:-]{1,32}\Z")
+_UUID_RE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\Z"
 )
-_MAX_TOKEN_LEN = 64
-
-# Constant allowlist of characters permitted in a sanitized secret. As with
-# tokens, sanitized secrets are rebuilt out of this constant.
-_ALLOWED_SECRET_CHARS = (
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
-    'abcdefghijklmnopqrstuvwxyz'
-    '0123456789'
-    ' _.:/@+=!?#$%^&*(){}[],;-'
-)
+_MAX_TEXT_LEN = 128
+_MAX_SSID_BYTES = 32
 _MAX_SECRET_LEN = 128
 
 
-def _is_safe_nmcli_value(value):
-    """Return True if *value* is safe to pass as an nmcli argument value."""
-    return isinstance(value, str) and _SAFE_NMCLI_TOKEN_RE.fullmatch(value) is not None
+@dataclass(frozen=True)
+class WifiNetwork:
+    ssid: str
+    signal: int
+    security: str
+    in_use: bool
 
 
-def _is_safe_nmcli_arg_list(args):
-    """Return True if *args* is a safe nmcli argument list."""
+@dataclass(frozen=True)
+class WifiProfile:
+    id: str
+    ssid: str
+    type: str = ""
+    autoconnect: bool = False
+    device: str | None = None
+    active: bool = False
+    name: str | None = None
+    mode: str | None = None
+
+
+def _is_safe_nmcli_value(value: Any) -> bool:
+    if not isinstance(value, str) or not value or len(value) > _MAX_TEXT_LEN:
+        return False
+    if value[0] == "-":
+        return False
+    return _SAFE_TEXT_RE.fullmatch(value) is not None
+
+
+def _is_safe_nmcli_arg_list(args: Any) -> bool:
     if not isinstance(args, list):
         return False
     for arg in args:
         if not isinstance(arg, str) or not arg:
             return False
-        if any(ch in arg for ch in ('\x00', '\n', '\r')):
-            return False
-        if arg.startswith('-') and arg not in _ALLOWED_NMCLI_FLAGS:
+        if _SAFE_TEXT_RE.fullmatch(arg) is None:
             return False
     return True
 
 
-def _sanitize_token(value):
-    """Validate and re-derive a single nmcli token from a constant allowlist.
-
-    Raises ``ValueError`` if *value* is not a safe token. Rather than returning
-    the original (untrusted) object after a boolean check, each character is
-    looked up in the :data:`_ALLOWED_TOKEN_CHARS` constant and the result is
-    rebuilt from those constant characters. Only the *index* derives from the
-    input; the emitted characters come from a constant string. This makes the
-    sanitization explicit to static analysis (CodeQL), so it recognizes the
-    return value as a barrier instead of seeing tainted input reach the sink.
-    """
+def _sanitize_token(value: Any) -> str:
     if not isinstance(value, str):
-        raise ValueError('nmcli argument must be a string')
-    # An allowed option flag (e.g. -t, -f) is itself a constant: emit a copy.
-    if value in _ALLOWED_NMCLI_FLAGS:
-        return _ALLOWED_NMCLI_FLAGS[_ALLOWED_NMCLI_FLAGS.index(value)]
-    if not value or len(value) > _MAX_TOKEN_LEN:
-        raise ValueError('Unsafe nmcli argument')
-    if value[0] == '-':
-        raise ValueError('Unsafe nmcli argument')
-    rebuilt = []
-    for ch in value:
-        idx = _ALLOWED_TOKEN_CHARS.find(ch)
-        if idx < 0:
-            raise ValueError('Unsafe nmcli argument')
-        rebuilt.append(_ALLOWED_TOKEN_CHARS[idx])
-    return ''.join(rebuilt)
+        raise ValueError("nmcli argument must be a string")
+    if not value or len(value) > _MAX_TEXT_LEN:
+        raise ValueError("Unsafe nmcli argument")
+    if value[0] == "-":
+        raise ValueError("Unsafe nmcli argument")
+    if _SAFE_IDENTIFIER_RE.fullmatch(value) is None:
+        raise ValueError("Unsafe nmcli argument")
+    return value
 
 
-def _normalize_secret(value):
-    """Return a sanitized password string if valid, else None.
+def _normalize_ssid(value: Any) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    if _SAFE_TEXT_RE.fullmatch(value) is None:
+        return None
+    try:
+        encoded = value.encode("utf-8")
+    except UnicodeEncodeError:
+        return None
+    if len(encoded) > _MAX_SSID_BYTES:
+        return None
+    return value
 
-    Like :func:`_sanitize_token`, the returned secret is rebuilt from the
-    constant :data:`_ALLOWED_SECRET_CHARS` allowlist so the value reaching the
-    subprocess sink is derived from constants rather than the untrusted input.
-    """
+
+def _normalize_interface(value: Any) -> str | None:
+    if not isinstance(value, str) or not value:
+        return None
+    if _SAFE_INTERFACE_RE.fullmatch(value) is None:
+        return None
+    return value
+
+
+def _normalize_secret(value: Any) -> str | None:
     if not isinstance(value, str) or not value or len(value) > _MAX_SECRET_LEN:
         return None
-    if value[0] == '-':
+    if _SAFE_TEXT_RE.fullmatch(value) is None:
         return None
-    rebuilt = []
-    for ch in value:
-        idx = _ALLOWED_SECRET_CHARS.find(ch)
-        if idx < 0:
-            return None
-        rebuilt.append(_ALLOWED_SECRET_CHARS[idx])
-    return ''.join(rebuilt)
+    return value
 
 
-def is_available():
-    """Return True if nmcli is present on this system."""
-    return shutil.which('nmcli') is not None
+def _nmcli_prefix() -> list[str]:
+    return ["nmcli"] if getattr(os, "geteuid", lambda: 1)() == 0 else ["sudo", "nmcli"]
 
 
-def _run(args, timeout=30):
-    """Run an nmcli command and return (returncode, stdout, stderr).
+def is_available() -> bool:
+    return shutil.which("nmcli") is not None
 
-    Callers pass values that have already been rebound through
-    :func:`_sanitize_token` / :func:`_normalize_secret` (so user-derived data
-    is reconstructed from constant allowlists before reaching this sink). The
-    structural check below is a defense-in-depth guard against control
-    characters and stray option-like arguments.
-    """
+
+def _run(args: list[str], timeout: int = 30) -> tuple[int, str, str]:
     if not _is_safe_nmcli_arg_list(args):
-        return -1, '', 'Invalid nmcli arguments'
+        return -1, "", "Invalid nmcli arguments"
     try:
-        r = subprocess.run(
-            ['sudo', 'nmcli'] + args,
-            capture_output=True, text=True, timeout=timeout,
+        result = subprocess.run(
+            _nmcli_prefix() + args,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            check=False,
+            env={**os.environ, "LC_ALL": "C"},
         )
-        return r.returncode, r.stdout, r.stderr
     except FileNotFoundError:
-        return -1, '', 'nmcli not found'
+        return -1, "", "nmcli not found"
     except subprocess.TimeoutExpired:
-        return -1, '', 'Command timed out'
+        return -1, "", "Command timed out"
+    return result.returncode, result.stdout, result.stderr
 
 
-def _split_terse(line):
-    """Split an nmcli terse-mode line on unescaped colons.
+Runner = Callable[[list[str], int], tuple[int, str, str]]
 
-    nmcli -t escapes literal colons inside values as ``\\:``.
-    Returns a list of unescaped field values.
-    """
-    fields = []
-    current = []
-    i = 0
-    while i < len(line):
-        if line[i] == '\\' and i + 1 < len(line) and line[i + 1] == ':':
-            current.append(':')
-            i += 2
-        elif line[i] == ':':
-            fields.append(''.join(current))
+
+def _call_runner(
+    runner: Callable[..., tuple[int, str, str]] | None,
+    args: list[str],
+    timeout: int = 30,
+) -> tuple[int, str, str]:
+    if runner is None:
+        runner = _run
+    return runner(args, timeout=timeout)
+
+
+def _split_terse(line: str) -> list[str]:
+    fields: list[str] = []
+    current: list[str] = []
+    index = 0
+    while index < len(line):
+        char = line[index]
+        if char == "\\" and index + 1 < len(line) and line[index + 1] in {":", "\\"}:
+            current.append(line[index + 1])
+            index += 2
+            continue
+        if char == ":":
+            fields.append("".join(current))
             current = []
-            i += 1
-        else:
-            current.append(line[i])
-            i += 1
-    fields.append(''.join(current))
+            index += 1
+            continue
+        current.append(char)
+        index += 1
+    fields.append("".join(current))
     return fields
 
 
-def scan_networks():
-    """Scan for visible WiFi networks.
+def _split_get_values(output: str, expected: int) -> list[str]:
+    values = output.splitlines()
+    if len(values) < expected:
+        return []
+    return values[:expected]
 
-    Returns a list of dicts sorted by signal strength (strongest first):
-        [{'ssid': str, 'signal': int, 'security': str, 'in_use': bool}, ...]
-    """
-    # Trigger a fresh scan; ignore errors (e.g. rate-limiting by NetworkManager)
-    _run(['dev', 'wifi', 'rescan'], timeout=10)
-    # Allow time for the radio to scan all WiFi channels
-    time.sleep(3)
-    # Retrieve results from the completed scan
-    code, out, _ = _run([
-        '-t', '-f', 'SSID,SIGNAL,SECURITY,IN-USE',
-        'dev', 'wifi', 'list',
-    ])
+
+def _strip_nmcli_message(text: str) -> str:
+    cleaned = " ".join((text or "").split())
+    return cleaned[:240]
+
+
+def _connection_selector(connection_id: str) -> list[str]:
+    return ["uuid", connection_id] if _UUID_RE.fullmatch(connection_id) else ["id", connection_id]
+
+
+def _bool_from_text(value: str) -> bool:
+    return value.strip().lower() in {"yes", "true", "1", "activated", "enabled"}
+
+
+def _resolve_saved_connection_target(
+    target: str,
+    runner: Callable[..., tuple[int, str, str]] | None = None,
+) -> tuple[str, str, str] | None:
+    if _UUID_RE.fullmatch(target):
+        info = show_connection(target, runner=runner)
+        display = info.get("ssid") if isinstance(info, dict) else None
+        return "uuid", target, display if isinstance(display, str) and display else target
+    normalized_ssid = _normalize_ssid(target)
+    if normalized_ssid is None:
+        return None
+    matches = [
+        profile
+        for profile in list_connection_profiles(runner=runner)
+        if profile.get("ssid") == normalized_ssid
+    ]
+    if matches:
+        matches.sort(
+            key=lambda profile: (
+                not bool(profile.get("active")),
+                not bool(profile.get("autoconnect")),
+                str(profile.get("id") or ""),
+            )
+        )
+        profile_id = matches[0].get("id")
+        if isinstance(profile_id, str) and profile_id:
+            return "uuid", profile_id, normalized_ssid
+    return "id", normalized_ssid, normalized_ssid
+
+
+def _parse_signal(value: str) -> int:
+    try:
+        return int(value)
+    except ValueError:
+        return 0
+
+
+def _parse_ip4_values(output: str) -> list[str]:
+    addresses: list[str] = []
+    for raw_line in output.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        _, _, value = line.partition(":")
+        value = value.strip() or line.strip()
+        if not value:
+            continue
+        address = value.split("/", 1)[0].strip()
+        try:
+            ip = ipaddress.ip_address(address)
+        except ValueError:
+            continue
+        if isinstance(ip, ipaddress.IPv4Address):
+            addresses.append(str(ip))
+    return addresses
+
+
+def get_device_ipv4_addresses(device: str, runner: Callable[..., tuple[int, str, str]] | None = None) -> list[str]:
+    device_name = _normalize_interface(device)
+    if device_name is None:
+        return []
+    code, out, _ = _call_runner(runner, ["-t", "-f", "IP4.ADDRESS", "dev", "show", device_name])
     if code != 0:
         return []
+    return _parse_ip4_values(out)
 
-    seen = {}
-    for line in out.strip().splitlines():
-        # nmcli terse mode escapes colons in values as \: — split carefully
-        # Fields: SSID:SIGNAL:SECURITY:IN-USE
-        # Parse from the right since SIGNAL/SECURITY/IN-USE are predictable
+
+def device_has_usable_ipv4(
+    device: str,
+    runner: Callable[..., tuple[int, str, str]] | None = None,
+    excluded_networks: list[ipaddress.IPv4Network] | None = None,
+) -> bool:
+    for address_text in get_device_ipv4_addresses(device, runner=runner):
+        address = ipaddress.ip_address(address_text)
+        if not isinstance(address, ipaddress.IPv4Address):
+            continue
+        if address.is_loopback or address.is_link_local or address.is_unspecified:
+            continue
+        if excluded_networks and any(address in network for network in excluded_networks):
+            continue
+        return True
+    return False
+
+
+def list_active_connections(runner: Callable[..., tuple[int, str, str]] | None = None) -> list[dict[str, str]]:
+    code, out, _ = _call_runner(runner, ["-t", "-f", "UUID,NAME,TYPE,DEVICE", "con", "show", "--active"])
+    if code != 0:
+        return []
+    active: list[dict[str, str]] = []
+    for line in out.splitlines():
+        parts = _split_terse(line)
+        if len(parts) < 4 or not parts[0]:
+            continue
+        active.append({"id": parts[0], "name": parts[1], "type": parts[2], "device": parts[3]})
+    return active
+
+
+def list_device_statuses(runner: Callable[..., tuple[int, str, str]] | None = None) -> list[dict[str, str]]:
+    code, out, _ = _call_runner(runner, ["-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "dev", "status"])
+    if code != 0:
+        return []
+    devices: list[dict[str, str]] = []
+    for line in out.splitlines():
+        parts = _split_terse(line)
+        if len(parts) < 4 or not parts[0]:
+            continue
+        devices.append(
+            {
+                "device": parts[0],
+                "type": parts[1],
+                "state": parts[2],
+                "connection": parts[3],
+            }
+        )
+    return devices
+
+
+def scan_networks(
+    runner: Callable[..., tuple[int, str, str]] | None = None,
+    sleeper: Callable[[float], None] | None = None,
+    interface: str | None = None,
+) -> list[dict[str, Any]]:
+    if sleeper is None:
+        sleeper = time.sleep
+    args = ["dev", "wifi", "rescan"]
+    interface_name: str | None = None
+    if interface:
+        interface_name = _normalize_interface(interface)
+        if interface_name is None:
+            return []
+        args += ["ifname", interface_name]
+    code, _, _ = _call_runner(runner, args, timeout=10)
+    if code != 0:
+        return []
+    sleeper(0)
+    list_args = ["-t", "-f", "SSID,SIGNAL,SECURITY,IN-USE", "dev", "wifi", "list"]
+    if interface_name:
+        list_args += ["ifname", interface_name]
+    list_args += ["--rescan", "no"]
+    code, out, _ = _call_runner(runner, list_args)
+    if code != 0:
+        return []
+    best_by_ssid: dict[str, dict[str, Any]] = {}
+    for line in out.splitlines():
         parts = _split_terse(line)
         if len(parts) < 4:
             continue
         ssid = parts[0]
         if not ssid:
             continue
-        try:
-            signal = int(parts[1])
-        except ValueError:
-            signal = 0
-        security = parts[2] if parts[2] and parts[2] != '--' else ''
-        in_use = parts[3].strip() == '*'
-        # Keep the entry with the strongest signal per SSID
-        if ssid not in seen or signal > seen[ssid]['signal']:
-            seen[ssid] = {
-                'ssid': ssid,
-                'signal': signal,
-                'security': security,
-                'in_use': in_use,
-            }
-    networks = sorted(seen.values(), key=lambda n: n['signal'], reverse=True)
-    return networks
+        signal = _parse_signal(parts[1])
+        record = {
+            "ssid": ssid,
+            "signal": signal,
+            "security": "" if parts[2] == "--" else parts[2],
+            "in_use": parts[3].strip() == "*",
+        }
+        current = best_by_ssid.get(ssid)
+        if current is None or signal > int(current.get("signal", 0)):
+            best_by_ssid[ssid] = record
+    return sorted(best_by_ssid.values(), key=lambda item: int(item["signal"]), reverse=True)
 
 
-def get_status():
-    """Return the current network connection status.
-
-    Returns:
-        {'wifi_ssid': str|None, 'wifi_signal': int|None, 'ethernet': bool}
-    """
-    result = {'wifi_ssid': None, 'wifi_signal': None, 'ethernet': False}
-    code, out, _ = _run(['-t', '-f', 'TYPE,STATE,CONNECTION', 'dev'])
+def _active_wifi_signal(runner: Callable[..., tuple[int, str, str]] | None = None) -> int | None:
+    code, out, _ = _call_runner(runner, ["-t", "-f", "IN-USE,SIGNAL", "dev", "wifi", "list", "--rescan", "no"])
     if code != 0:
-        return result
-
-    for line in out.strip().splitlines():
+        return None
+    for line in out.splitlines():
         parts = _split_terse(line)
-        if len(parts) < 3:
-            continue
-        dev_type = parts[0]
-        state = parts[1]
-        connection = parts[2]
-        if dev_type == 'wifi' and state == 'connected' and connection:
-            result['wifi_ssid'] = connection
-        if dev_type == 'ethernet' and state == 'connected':
-            result['ethernet'] = True
-
-    # Get signal strength for the connected WiFi network
-    if result['wifi_ssid']:
-        code2, out2, _ = _run([
-            '-t', '-f', 'IN-USE,SIGNAL', 'dev', 'wifi', 'list',
-        ])
-        if code2 == 0:
-            for line in out2.strip().splitlines():
-                parts = _split_terse(line)
-                if len(parts) >= 2 and parts[0].strip() == '*':
-                    try:
-                        result['wifi_signal'] = int(parts[1])
-                    except ValueError:
-                        pass
-                    break
-
-    return result
+        if len(parts) >= 2 and parts[0].strip() == "*":
+            return _parse_signal(parts[1])
+    return None
 
 
-def get_saved_networks():
-    """Return a list of saved WiFi network names (SSIDs)."""
-    code, out, _ = _run(['-t', '-f', 'NAME,TYPE', 'con', 'show'])
+def show_connection(connection_id: str, runner: Callable[..., tuple[int, str, str]] | None = None) -> dict[str, Any]:
+    if not _is_safe_nmcli_value(connection_id):
+        return {}
+    selector = _connection_selector(connection_id)
+    code, out, _ = _call_runner(
+        runner,
+        [
+            "--escape", "no",
+            "-g",
+            (
+                "connection.id,connection.uuid,connection.type,connection.autoconnect,"
+                "connection.interface-name,802-11-wireless.ssid,802-11-wireless.mode"
+            ),
+            "con",
+            "show",
+            selector[0],
+            connection_id,
+        ],
+    )
+    if code != 0:
+        return {}
+    parts = _split_get_values(out, 7)
+    if len(parts) < 7:
+        return {}
+    return {
+        "id": parts[1] or connection_id,
+        "name": parts[0] or connection_id,
+        "type": parts[2],
+        "autoconnect": _bool_from_text(parts[3]),
+        "device": parts[4] or None,
+        "ssid": parts[5] or parts[0] or connection_id,
+        "mode": parts[6] or None,
+    }
+
+
+def list_connection_profiles(runner: Callable[..., tuple[int, str, str]] | None = None) -> list[dict[str, Any]]:
+    code, out, _ = _call_runner(runner, ["-t", "-f", "UUID,TYPE,NAME,AUTOCONNECT,DEVICE", "con", "show"])
     if code != 0:
         return []
-    saved = []
-    for line in out.strip().splitlines():
+    active_ids = {item["id"] for item in list_active_connections(runner=runner)}
+    profiles: list[dict[str, Any]] = []
+    for line in out.splitlines():
         parts = _split_terse(line)
-        if len(parts) >= 2 and parts[1] == '802-11-wireless':
-            name = parts[0]
-            if name:
-                saved.append(name)
+        if len(parts) < 5 or not parts[0] or parts[1] != "802-11-wireless":
+            continue
+        uuid = parts[0]
+        name = parts[2]
+        info = show_connection(uuid, runner=runner)
+        if not info:
+            info = {
+                "id": uuid,
+                "ssid": name,
+                "name": name,
+                "type": parts[1],
+                "autoconnect": _bool_from_text(parts[3]),
+                "device": parts[4] or None,
+                "mode": None,
+            }
+        profiles.append(
+            {
+                "id": info["id"],
+                "ssid": info.get("ssid") or name,
+                "name": info.get("name") or name,
+                "type": info.get("type") or parts[1],
+                "autoconnect": bool(info.get("autoconnect")),
+                "device": info.get("device") or (parts[4] or None),
+                "active": info.get("id") in active_ids,
+                "mode": info.get("mode"),
+            }
+        )
+    return profiles
+
+
+def get_saved_networks(runner: Callable[..., tuple[int, str, str]] | None = None) -> list[str]:
+    seen: set[str] = set()
+    saved: list[str] = []
+    for profile in list_connection_profiles(runner=runner):
+        ssid = profile.get("ssid")
+        if isinstance(ssid, str) and ssid and ssid not in seen:
+            seen.add(ssid)
+            saved.append(ssid)
     return saved
 
 
-def connect(ssid, password=None):
-    """Connect to a WiFi network.
+def get_status(runner: Callable[..., tuple[int, str, str]] | None = None) -> dict[str, Any]:
+    result: dict[str, Any] = {"wifi_ssid": None, "wifi_signal": None, "ethernet": False}
+    devices = list_device_statuses(runner=runner)
+    active_connections_by_device = {
+        item["device"]: item for item in list_active_connections(runner=runner) if item.get("device")
+    }
+    for device in devices:
+        if device["type"] == "ethernet" and device["state"] == "connected":
+            if device_has_usable_ipv4(device["device"], runner=runner):
+                result["ethernet"] = True
+        if device["type"] != "wifi" or device["state"] != "connected":
+            continue
+        active = active_connections_by_device.get(device["device"])
+        lookup = active["id"] if active and active.get("id") else device["connection"]
+        info = show_connection(lookup, runner=runner) if lookup else {}
+        result["wifi_ssid"] = info.get("ssid") or device["connection"] or None
+        result["wifi_signal"] = _active_wifi_signal(runner=runner)
+    return result
 
-    If password is provided, connect as a new network.
-    If password is None, activate an existing saved connection.
 
-    Returns (success: bool, message: str).
-    """
-    if not _is_safe_nmcli_value(ssid):
-        return False, 'Invalid SSID'
-    # Rebind SSID to a value reconstructed from constants before it reaches
-    # the subprocess sink (sanitization barrier for static analysis).
-    ssid = _sanitize_token(ssid)
+def set_autoconnect(
+    connection_id: str,
+    enabled: bool,
+    runner: Callable[..., tuple[int, str, str]] | None = None,
+) -> tuple[bool, str]:
+    if not _is_safe_nmcli_value(connection_id):
+        return False, "Invalid connection id"
+    selector = _connection_selector(connection_id)
+    code, out, err = _call_runner(
+        runner,
+        ["con", "modify", selector[0], connection_id, "connection.autoconnect", "yes" if enabled else "no"],
+    )
+    if code == 0:
+        return True, f"Updated autoconnect for {connection_id}"
+    return False, _strip_nmcli_message(err or out or "Failed to update connection")
 
-    if password:
-        password = _normalize_secret(password)
-        if password is None:
-            return False, 'Invalid password'
-        code, out, err = _run([
-            'dev', 'wifi', 'connect', ssid, 'password', password,
-        ])
+
+def connect(
+    ssid: str,
+    secret: str | None = None,
+    hidden: bool = False,
+    interface: str | None = None,
+    saved: bool = True,
+    runner: Callable[..., tuple[int, str, str]] | None = None,
+    **kwargs: Any,
+) -> tuple[bool, str]:
+    if secret is None and "password" in kwargs:
+        secret = kwargs["password"]
+    if interface is not None:
+        interface_name = _normalize_interface(interface)
+        if interface_name is None:
+            return False, "Invalid interface"
     else:
-        code, out, err = _run(['con', 'up', 'id', ssid])
+        interface_name = None
 
+    if saved and secret in (None, ""):
+        saved_target = _resolve_saved_connection_target(ssid, runner=runner)
+        if saved_target is not None:
+            selector, connection_target, display_name = saved_target
+            args = ["con", "up", selector, connection_target]
+            if interface_name:
+                args += ["ifname", interface_name]
+            code, out, err = _call_runner(runner, args)
+            if code == 0:
+                return True, f"Connected to {display_name}"
+            return False, _strip_nmcli_message(err or out or "Failed to connect")
+
+    normalized_ssid = _normalize_ssid(ssid)
+    if normalized_ssid is None:
+        return False, "Invalid SSID"
+    if secret not in (None, ""):
+        normalized_secret = _normalize_secret(secret)
+        if normalized_secret is None:
+            return False, "Invalid password"
+        args = ["dev", "wifi", "connect", normalized_ssid]
+        if interface_name:
+            args += ["ifname", interface_name]
+        if hidden:
+            args += ["hidden", "yes"]
+        args += ["password", normalized_secret]
+    elif hidden or not saved:
+        args = ["dev", "wifi", "connect", normalized_ssid]
+        if interface_name:
+            args += ["ifname", interface_name]
+        if hidden:
+            args += ["hidden", "yes"]
+    else:
+        args = ["con", "up", "id", normalized_ssid]
+        if interface_name:
+            args += ["ifname", interface_name]
+
+    code, out, err = _call_runner(runner, args)
     if code == 0:
-        return True, 'Connected to %s' % ssid
-    return False, (err or out or 'Failed to connect').strip()
+        return True, f"Connected to {normalized_ssid}"
+    return False, _strip_nmcli_message(err or out or "Failed to connect")
 
 
-def forget(ssid):
-    """Remove a saved WiFi network profile.
-
-    Returns (success: bool, message: str).
-    """
-    if not _is_safe_nmcli_value(ssid):
-        return False, 'Invalid SSID'
-    ssid = _sanitize_token(ssid)
-    code, out, err = _run(['con', 'delete', 'id', ssid])
+def forget(connection_id: str, runner: Callable[..., tuple[int, str, str]] | None = None) -> tuple[bool, str]:
+    if not _is_safe_nmcli_value(connection_id):
+        return False, "Invalid SSID"
+    selector = _connection_selector(connection_id)
+    code, out, err = _call_runner(runner, ["con", "delete", selector[0], connection_id])
     if code == 0:
-        return True, 'Forgot %s' % ssid
-    return False, (err or out or 'Failed to forget network').strip()
+        return True, f"Forgot {connection_id}"
+    return False, _strip_nmcli_message(err or out or "Failed to forget network")
 
 
-def update_password(ssid, password):
-    """Update the password for a saved WiFi network.
-
-    Returns (success: bool, message: str).
-    """
-    if not _is_safe_nmcli_value(ssid):
-        return False, 'Invalid SSID'
-    ssid = _sanitize_token(ssid)
-    password = _normalize_secret(password)
-    if password is None:
-        return False, 'Invalid password'
-    code, out, err = _run([
-        'con', 'modify', 'id', ssid, 'wifi-sec.psk', password,
-    ])
+def update_password(
+    connection_id: str,
+    secret: str,
+    runner: Callable[..., tuple[int, str, str]] | None = None,
+) -> tuple[bool, str]:
+    if not _is_safe_nmcli_value(connection_id):
+        return False, "Invalid SSID"
+    normalized_secret = _normalize_secret(secret)
+    if normalized_secret is None:
+        return False, "Invalid password"
+    selector = _connection_selector(connection_id)
+    code, out, _ = _call_runner(
+        runner, ["-g", "802-11-wireless-security.key-mgmt", "con", "show", selector[0], connection_id],
+    )
+    if code != 0:
+        return False, "Cannot read saved network security"
+    key_mgmt = out.strip() or "wpa-psk"
+    if key_mgmt not in {"wpa-psk", "sae"}:
+        return False, "Only personal WPA networks support password updates"
+    code, out, err = _call_runner(
+        runner,
+        [
+            "con",
+            "modify",
+            selector[0],
+            connection_id,
+            "wifi-sec.key-mgmt",
+            key_mgmt,
+            "wifi-sec.psk",
+            normalized_secret,
+        ],
+    )
     if code == 0:
-        return True, 'Password updated for %s' % ssid
-    return False, (err or out or 'Failed to update password').strip()
+        return True, f"Password updated for {connection_id}"
+    return False, "Failed to update password; check the network security and password"
+
+
+def activate_connection(
+    connection_id: str,
+    interface: str | None = None,
+    runner: Callable[..., tuple[int, str, str]] | None = None,
+) -> tuple[bool, str]:
+    if not _is_safe_nmcli_value(connection_id):
+        return False, "Invalid connection id"
+    if interface is not None:
+        interface_name = _normalize_interface(interface)
+        if interface_name is None:
+            return False, "Invalid interface"
+    else:
+        interface_name = None
+    selector = _connection_selector(connection_id)
+    args = ["con", "up", selector[0], connection_id]
+    if interface_name:
+        args += ["ifname", interface_name]
+    code, out, err = _call_runner(runner, args)
+    if code == 0:
+        return True, f"Activated {connection_id}"
+    return False, _strip_nmcli_message(err or out or "Failed to activate connection")
+
+
+def deactivate_connection(
+    connection_id: str,
+    runner: Callable[..., tuple[int, str, str]] | None = None,
+) -> tuple[bool, str]:
+    if not _is_safe_nmcli_value(connection_id):
+        return False, "Invalid connection id"
+    selector = _connection_selector(connection_id)
+    code, out, err = _call_runner(runner, ["con", "down", selector[0], connection_id])
+    if code == 0:
+        return True, f"Deactivated {connection_id}"
+    return False, _strip_nmcli_message(err or out or "Failed to deactivate connection")
+
+
+def add_wifi_profile(
+    connection_id: str,
+    ssid: str,
+    interface: str,
+    *,
+    secret: str | None = None,
+    hidden: bool = False,
+    autoconnect: bool = True,
+    security: str | None = None,
+    managed_stage: bool = False,
+    runner: Callable[..., tuple[int, str, str]] | None = None,
+) -> tuple[bool, str]:
+    normalized_id = _sanitize_token(connection_id)
+    normalized_ssid = _normalize_ssid(ssid)
+    interface_name = _normalize_interface(interface)
+    if normalized_ssid is None or interface_name is None:
+        return False, "Invalid Wi-Fi profile"
+    if security not in (None, "auto", "open", "wpa2", "wpa3"):
+        return False, "Unsupported Wi-Fi security"
+    if security == "open" and secret:
+        return False, "Open networks do not use a password"
+    normalized_secret = _normalize_secret(secret) if secret else None
+    if secret and normalized_secret is None:
+        return False, "Invalid password"
+    args = [
+        "con",
+        "add",
+        "type",
+        "wifi",
+        "ifname",
+        interface_name,
+        "con-name",
+        normalized_id,
+        "ssid",
+        normalized_ssid,
+        "connection.autoconnect",
+        "yes" if autoconnect else "no",
+        "802-11-wireless.hidden",
+        "yes" if hidden else "no",
+    ]
+    if normalized_secret:
+        args += ["wifi-sec.key-mgmt", "sae" if security == "wpa3" else "wpa-psk",
+                 "wifi-sec.psk", normalized_secret]
+    if managed_stage:
+        args += ["user.data", "org.cts-scoreboard.role=staging"]
+    code, out, err = _call_runner(runner, args)
+    if code == 0:
+        return True, normalized_id
+    return False, "Failed to create Wi-Fi profile; check the network security and password"
+
+
+def set_device_autoconnect(
+    interface: str,
+    enabled: bool,
+    runner: Callable[..., tuple[int, str, str]] | None = None,
+) -> tuple[bool, str]:
+    interface_name = _normalize_interface(interface)
+    if interface_name is None:
+        return False, "Invalid interface"
+    code, out, err = _call_runner(runner, ["device", "set", interface_name, "autoconnect", "yes" if enabled else "no"])
+    if code == 0:
+        return True, f"Updated device autoconnect for {interface_name}"
+    return False, _strip_nmcli_message(err or out or "Failed to update device autoconnect")
+
+
+def get_device_autoconnect(
+    interface: str,
+    runner: Callable[..., tuple[int, str, str]] | None = None,
+) -> bool | None:
+    interface_name = _normalize_interface(interface)
+    if interface_name is None:
+        return None
+    code, out, _ = _call_runner(runner, ["-t", "-f", "GENERAL.AUTOCONNECT", "dev", "show", interface_name])
+    if code != 0:
+        return None
+    for line in out.splitlines():
+        _, _, value = line.partition(":")
+        value = value.strip() or line.strip()
+        if not value:
+            continue
+        return _bool_from_text(value)
+    return None
+
+
+class NetworkManagerAdapter:
+    def __init__(
+        self,
+        runner: Callable[..., tuple[int, str, str]] | None = None,
+        sleeper: Callable[[float], None] | None = None,
+    ):
+        self._runner = runner or _run
+        self._sleeper = sleeper or time.sleep
+
+    def scan_networks(self, interface: str | None = None) -> list[dict[str, Any]]:
+        return scan_networks(self._runner, self._sleeper, interface=interface)
+
+    def get_status(self) -> dict[str, Any]:
+        return get_status(self._runner)
+
+    def get_saved_networks(self) -> list[str]:
+        return get_saved_networks(self._runner)
+
+    def list_connection_profiles(self) -> list[dict[str, Any]]:
+        return list_connection_profiles(self._runner)
+
+    def list_active_connections(self) -> list[dict[str, str]]:
+        return list_active_connections(self._runner)
+
+    def list_device_statuses(self) -> list[dict[str, str]]:
+        return list_device_statuses(self._runner)
+
+    def get_device_ipv4_addresses(self, device: str) -> list[str]:
+        return get_device_ipv4_addresses(device, self._runner)
+
+    def device_has_usable_ipv4(
+        self,
+        device: str,
+        excluded_networks: list[ipaddress.IPv4Network] | None = None,
+    ) -> bool:
+        return device_has_usable_ipv4(device, self._runner, excluded_networks)
+
+    def connect(
+        self,
+        ssid: str,
+        secret: str | None = None,
+        hidden: bool = False,
+        interface: str | None = None,
+        **kwargs: Any,
+    ) -> tuple[bool, str]:
+        return connect(
+            ssid,
+            secret=secret,
+            hidden=hidden,
+            interface=interface,
+            runner=self._runner,
+            **kwargs,
+        )
+
+    def forget(self, connection_id: str) -> tuple[bool, str]:
+        return forget(connection_id, runner=self._runner)
+
+    def update_password(self, connection_id: str, secret: str) -> tuple[bool, str]:
+        return update_password(connection_id, secret, runner=self._runner)
+
+    def set_autoconnect(self, connection_id: str, enabled: bool) -> tuple[bool, str]:
+        return set_autoconnect(connection_id, enabled, runner=self._runner)
+
+    def activate_connection(self, connection_id: str, interface: str | None = None) -> tuple[bool, str]:
+        return activate_connection(connection_id, interface=interface, runner=self._runner)
+
+    def deactivate_connection(self, connection_id: str) -> tuple[bool, str]:
+        return deactivate_connection(connection_id, runner=self._runner)
+
+    def show_connection(self, connection_id: str) -> dict[str, Any]:
+        return show_connection(connection_id, runner=self._runner)
+
+    def add_wifi_profile(
+        self,
+        connection_id: str,
+        ssid: str,
+        interface: str,
+        *,
+        secret: str | None = None,
+        hidden: bool = False,
+        autoconnect: bool = True,
+    ) -> tuple[bool, str]:
+        return add_wifi_profile(
+            connection_id,
+            ssid,
+            interface,
+            secret=secret,
+            hidden=hidden,
+            autoconnect=autoconnect,
+            runner=self._runner,
+        )
+
+    def set_device_autoconnect(self, interface: str, enabled: bool) -> tuple[bool, str]:
+        return set_device_autoconnect(interface, enabled, runner=self._runner)
+
+    def get_device_autoconnect(self, interface: str) -> bool | None:
+        return get_device_autoconnect(interface, runner=self._runner)
