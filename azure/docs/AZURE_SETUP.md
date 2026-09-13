@@ -276,9 +276,9 @@ After the first real workflow deploy, this bootstrap image is replaced.
 ## 7. Deploy pre-prod via Bicep (one-time, then via workflow)
 
 The first deploy creates every other resource (Redis, Storage,
-Log Analytics, App Insights, Container Apps Environment, Container App,
-Action Group, Alert Rules). Subsequent updates to the relay app go through
-the GitHub Actions workflow.
+Log Analytics, App Insights, a platform-logs Data Collection Rule, Container
+Apps Environment, Container App, Action Group, Alert Rules). Subsequent updates
+to the relay app go through the GitHub Actions workflow.
 
 ```bash
 az deployment group create \
@@ -453,6 +453,14 @@ periods.
 ---
 
 ## Performance metrics and dashboards
+
+Container Apps console and system logs use the environment's `azure-monitor`
+destination and the `cts-sb-<environment>-platform-logs-dcr` Data Collection
+Rule. The DCR sends all supported `Microsoft.App/managedEnvironments` log
+categories to the environment's Log Analytics workspace without a workspace
+shared key. New records use the resource-specific tables such as
+`ContainerAppConsoleLogs` and `ContainerAppSystemLogs`; legacy records remain
+in the corresponding `_CL` tables until workspace retention removes them.
 
 The relay emits OpenTelemetry counters, histograms, and up-down counters
 that flow to Application Insights as `customMetrics`. Counters/up-down
