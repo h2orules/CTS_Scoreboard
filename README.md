@@ -427,6 +427,7 @@ the relay connection being restored.
 # Pi application (repository root)
 uv sync
 uv run cts-scoreboard --help
+uv run mypy
 uv run pytest
 
 # Development-only simulator; sign in at /test after startup.
@@ -443,6 +444,19 @@ npm test
 
 The `/test` simulator is disabled outside development mode. `--speed` controls
 recording playback, not the serial baud rate.
+
+The Pi's `uv run mypy` checks the explicit application-file list in
+`pyproject.toml`, without enabling strict checking for legacy unannotated code.
+The development dependency group includes mypy and maintained typeshed stubs
+for Requests, PySerial, and Flask-SocketIO. `uv sync` installs this group by
+default; production installations can use `uv sync --no-dev`.
+
+Flask-Login (`flask_login`), MSAL (`msal`), and Python Socket.IO (`socketio`)
+currently have no suitable maintained stubs available. Module-specific mypy
+overrides allow these imports, including their submodules; they do not suppress
+errors in our application code or in other dependencies. These library APIs
+remain untyped, so calls into them have reduced checking. Revisit this small
+allowlist when upstream typing support becomes available.
 
 The Azure application has its own project and environment (Python 3.12+):
 

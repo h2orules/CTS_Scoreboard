@@ -30,10 +30,40 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [dependency-groups]
+dev = [
+    "mypy==1.20.2",
+    "types-flask-socketio==5.6.0.20260728",
+    "types-pyserial==3.5.0.20260712",
+    "types-requests==2.33.0.20260906",
+]
 test = ["pytest", "pytest-cov"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.13"
+files = [
+    "CTS_Scoreboard.py",
+    "ad_image.py",
+    "ap.py",
+    "azure_relay.py",
+    "credentials_store.py",
+    "hytek_event_loader.py",
+    "hytek_rec_parser.py",
+    "hytek_st2_parser.py",
+    "qr_utils.py",
+    "race_state_machine.py",
+    "set_credentials.py",
+    "settings_routes.py",
+    "sim.py",
+    "template_bundle.py",
+    "wifi_manager.py",
+]
+
+[[tool.mypy.overrides]]
+module = ["flask_login", "flask_login.*", "msal", "msal.*", "socketio", "socketio.*"]
+ignore_missing_imports = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["."]
