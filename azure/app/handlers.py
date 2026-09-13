@@ -13,17 +13,20 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from contextlib import AbstractContextManager
-from typing import Any
+from typing import Any, TypeVar, cast
 
 import socketio
 
 from app import PROTOCOL_VERSION_CURRENT, PROTOCOL_VERSION_MIN_SUPPORTED
-from app.auth import InvalidPiTokenError, validate_pi_token
+from app.auth import InvalidPiTokenError, PiIdentity, validate_pi_token
 from app.state import MeetStateStore
 from app.telemetry import get_metrics, record_latency
 
 log = logging.getLogger(__name__)
+
+F = TypeVar("F", bound=Callable[..., Awaitable[Any]])
 
 # Custom session keys (kept intentionally small).
 _SESSION_PI_MEET = "pi_meet_id"
@@ -40,7 +43,7 @@ def register_handlers(
     store: MeetStateStore,
     tenant_id: str,
     audience: str,
-    token_validator=None,
+    token_validator: Callable[[str], PiIdentity] | None = None,
     coalesce_window_s: float = 0.0,
 ) -> None:
     """Register all namespace handlers on the given AsyncServer.
@@ -171,8 +174,14 @@ def register_handlers(
     # /pi namespace - upstream from the Raspberry Pi
     # ============================================================
 
-    @sio.event(namespace="/pi")
-    async def connect(sid: str, environ: dict[str, Any], auth: dict[str, Any] | None = None) -> None:
+    def _handler(namespace: str, event: str) -> Callable[[F], F]:
+        def decorator(func: F) -> F:
+            return cast(F, sio.on(event, namespace=namespace)(func))
+
+        return decorator
+
+    @_handler("/pi", "connect")
+    async def pi_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any] | None = None) -> None:
         if not auth or not isinstance(auth, dict):
             log.warning("pi connect: missing auth (sid=%s)", sid)
             raise socketio.exceptions.ConnectionRefusedError("missing auth")
@@ -183,6 +192,8 @@ def register_handlers(
 
         if not meet_id:
             raise socketio.exceptions.ConnectionRefusedError("missing meet_id")
+        if not isinstance(token, str):
+            raise socketio.exceptions.ConnectionRefusedError("missing access_token")
         if not _MEET_ID_RE.match(meet_id):
             raise socketio.exceptions.ConnectionRefusedError("invalid meet_id")
         if not isinstance(proto, int) or proto < PROTOCOL_VERSION_MIN_SUPPORTED or proto > PROTOCOL_VERSION_CURRENT:
@@ -205,8 +216,8 @@ def register_handlers(
         metrics.pi_connections.add(1)
         log.info("pi connect: meet=%s upn=%s sid=%s", meet_id, identity.upn, sid)
 
-    @sio.event(namespace="/pi")
-    async def disconnect(sid: str) -> None:
+    @_handler("/pi", "disconnect")
+    async def pi_disconnect(sid: str) -> None:
         sess = await sio.get_session(sid, namespace="/pi")
         meet_id = sess.get(_SESSION_PI_MEET)
         if meet_id:
@@ -227,7 +238,7 @@ def register_handlers(
         metrics.active_sockets.add(-1, {"namespace": "/pi"})
         metrics.pi_connections.add(-1)
 
-    @sio.on("meet_open", namespace="/pi")
+    @_handler("/pi", "meet_open")
     async def on_meet_open(sid: str, payload: dict[str, Any]) -> dict[str, Any]:
         with _handler_timer("meet_open"):
             sess = await sio.get_session(sid, namespace="/pi")
@@ -264,7 +275,7 @@ def register_handlers(
                 await sio.emit("feed_status", {"status": "live"}, room=meet_id, namespace="/scoreboard")
             return {"ok": True}
 
-    @sio.on("update_scoreboard", namespace="/pi")
+    @_handler("/pi", "update_scoreboard")
     async def on_update_scoreboard(sid: str, payload: dict[str, Any]) -> None:
         with _handler_timer("update_scoreboard"):
             sess = await sio.get_session(sid, namespace="/pi")
@@ -274,7 +285,7 @@ def register_handlers(
             metrics.relay_event_processed.add(1, {"event": "update_scoreboard"})
             await _enqueue_or_run(meet_id, "update_scoreboard", payload, None)
 
-    @sio.on("event_info", namespace="/pi")
+    @_handler("/pi", "event_info")
     async def on_event_info(sid: str, payload: dict[str, Any]) -> None:
         with _handler_timer("event_info"):
             sess = await sio.get_session(sid, namespace="/pi")
@@ -284,7 +295,7 @@ def register_handlers(
             # Treat event_info as part of state so reconnecting browsers hydrate.
             await _enqueue_or_run(meet_id, "event_info", payload, "event_info")
 
-    @sio.on("scores_info", namespace="/pi")
+    @_handler("/pi", "scores_info")
     async def on_scores_info(sid: str, payload: dict[str, Any]) -> None:
         with _handler_timer("scores_info"):
             sess = await sio.get_session(sid, namespace="/pi")
@@ -293,7 +304,7 @@ def register_handlers(
                 return
             await _enqueue_or_run(meet_id, "scores_info", payload, "scores_info")
 
-    @sio.on("message_overlay_state", namespace="/pi")
+    @_handler("/pi", "message_overlay_state")
     async def on_message_overlay_state(sid: str, payload: dict[str, Any]) -> None:
         with _handler_timer("message_overlay_state"):
             sess = await sio.get_session(sid, namespace="/pi")
@@ -304,7 +315,7 @@ def register_handlers(
                 meet_id, "message_overlay_state", payload, "message_overlay_state"
             )
 
-    @sio.on("template_push", namespace="/pi")
+    @_handler("/pi", "template_push")
     async def on_template_push(sid: str, bundle: dict[str, Any]) -> dict[str, Any]:
         with _handler_timer("template_push"):
             sess = await sio.get_session(sid, namespace="/pi")
@@ -322,7 +333,7 @@ def register_handlers(
                 )
             return {"ok": True, "bundle_id": bundle_id}
 
-    @sio.on("meet_context", namespace="/pi")
+    @_handler("/pi", "meet_context")
     async def on_meet_context(sid: str, context: dict[str, Any]) -> dict[str, Any]:
         with _handler_timer("meet_context"):
             sess = await sio.get_session(sid, namespace="/pi")
@@ -332,7 +343,7 @@ def register_handlers(
             await store.put_context(meet_id, context)
             return {"ok": True}
 
-    @sio.on("reload_clients", namespace="/pi")
+    @_handler("/pi", "reload_clients")
     async def on_reload_clients(sid: str, payload: dict[str, Any]) -> dict[str, Any]:
         """Pi requested all live viewers reload (Pi-side settings change).
 
@@ -355,7 +366,7 @@ def register_handlers(
                 )
             return {"ok": True}
 
-    @sio.on("fragment", namespace="/pi")
+    @_handler("/pi", "fragment")
     async def on_fragment(sid: str, payload: dict[str, Any]) -> None:
         """Pi pushed a rendered HTML fragment (e.g. message_page_0).
 
@@ -374,7 +385,7 @@ def register_handlers(
                 return
             await store.put_fragment(meet_id, str(name), str(key), str(html))
 
-    @sio.on("heartbeat", namespace="/pi")
+    @_handler("/pi", "heartbeat")
     async def on_heartbeat(sid: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         with _handler_timer("heartbeat"):
             sess = await sio.get_session(sid, namespace="/pi")
@@ -391,7 +402,7 @@ def register_handlers(
                 count = 0
             return {"ok": True, "active_client_count": count}
 
-    @sio.on("meet_close", namespace="/pi")
+    @_handler("/pi", "meet_close")
     async def on_meet_close(sid: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         with _handler_timer("meet_close"):
             sess = await sio.get_session(sid, namespace="/pi")
@@ -409,8 +420,8 @@ def register_handlers(
     # /scoreboard namespace - browser viewers
     # ============================================================
 
-    @sio.event(namespace="/scoreboard")
-    async def connect(sid: str, environ: dict[str, Any], auth: dict[str, Any] | None = None) -> None:  # noqa: F811
+    @_handler("/scoreboard", "connect")
+    async def scoreboard_connect(sid: str, environ: dict[str, Any], auth: dict[str, Any] | None = None) -> None:
         meet_id = (auth or {}).get("meet_id") if isinstance(auth, dict) else None
         if not meet_id:
             # Allow connection without a meet so the home page can run before
@@ -434,8 +445,8 @@ def register_handlers(
             namespace="/scoreboard",
         )
 
-    @sio.event(namespace="/scoreboard")
-    async def disconnect(sid: str) -> None:  # noqa: F811
+    @_handler("/scoreboard", "disconnect")
+    async def scoreboard_disconnect(sid: str) -> None:
         sess = await sio.get_session(sid, namespace="/scoreboard")
         meet_id = sess.get(_SESSION_BROWSER_MEET)
         if meet_id:

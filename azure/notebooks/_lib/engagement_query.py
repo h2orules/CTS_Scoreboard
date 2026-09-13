@@ -89,7 +89,7 @@ def run_kql(
         query=query,
         timespan=timespan if timespan is not None else timedelta(days=days),
     )
-    if resp.status != LogsQueryStatus.SUCCESS:  # type: ignore[attr-defined]
+    if resp.status != LogsQueryStatus.SUCCESS:
         raise RuntimeError(f"KQL query failed: {resp.partial_error or resp}")
     table = resp.tables[0]
     return pd.DataFrame(data=table.rows, columns=[c for c in table.columns])

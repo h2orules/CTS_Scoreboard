@@ -57,9 +57,41 @@ def _bad_validator(_token: str) -> PiIdentity:
     raise InvalidPiTokenError("nope")
 
 
+def _counting_validator(calls: list[str]):
+    def _validator(token: str) -> PiIdentity:
+        calls.append(token)
+        return PiIdentity(account_id="oid-pi", tenant_id="tid", upn="pi@example.com")
+
+    return _validator
+
+
 def _handler(sio, namespace, event):
     """Look up a handler the AsyncServer registered."""
     return sio.handlers[namespace][event]
+
+
+def test_handlers_registered_under_expected_namespaces_and_events():
+    sio, *_ = _make_sio_with_spies()
+    register_handlers(sio, store=_store(), tenant_id="tid", audience="api://aud",
+                      token_validator=_ok_validator)
+
+    assert set(sio.handlers) == {"/pi", "/scoreboard"}
+    assert set(sio.handlers["/pi"]) == {
+        "connect",
+        "disconnect",
+        "meet_open",
+        "update_scoreboard",
+        "event_info",
+        "scores_info",
+        "message_overlay_state",
+        "template_push",
+        "meet_context",
+        "reload_clients",
+        "fragment",
+        "heartbeat",
+        "meet_close",
+    }
+    assert set(sio.handlers["/scoreboard"]) == {"connect", "disconnect"}
 
 
 @pytest.mark.asyncio
@@ -80,6 +112,24 @@ async def test_pi_connect_rejects_bad_token():
         await _handler(sio, "/pi", "connect")(
             "sid1", {}, {"access_token": "bad", "meet_id": MEET, "protocol_version": 1}
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("auth", [{}, {"access_token": None}, {"access_token": 123}])
+async def test_pi_connect_rejects_non_string_or_missing_token_without_calling_validator(auth):
+    calls: list[str] = []
+    sio, *_ = _make_sio_with_spies()
+    register_handlers(
+        sio,
+        store=_store(),
+        tenant_id="tid",
+        audience="api://aud",
+        token_validator=_counting_validator(calls),
+    )
+    payload = {"meet_id": MEET, "protocol_version": 1, **auth}
+    with pytest.raises(socketio.exceptions.ConnectionRefusedError):
+        await _handler(sio, "/pi", "connect")("sid1", {}, payload)
+    assert calls == []
 
 
 @pytest.mark.asyncio

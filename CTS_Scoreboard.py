@@ -10,6 +10,7 @@ import os.path
 import re
 import time
 import traceback
+from typing import cast
 
 import flask
 import flask_login
@@ -184,7 +185,7 @@ channel_running = [False for i in range(10)]
 # Decoded per-lane time string snapshot, kept in sync with lane_info / the
 # running clock by parse_line. Lives at the module level so build_board_snapshot()
 # can hand a complete picture to the FSM, and so sim.py can stay consistent.
-lane_times = {}
+lane_times: dict[int, str] = {}
 score_info = {
     0x14: [" ", " ", " ", " ", " ", " ", " ", " "],
     0x15: [" ", " ", " ", " ", " ", " ", " ", " "],
@@ -1364,11 +1365,11 @@ def _inject_qr_message_page() -> bool:
       * there are already 5 pages (the per-form maximum), or
       * any existing page already contains the ``[[QR]]`` token.
     """
-    pages = list(settings.get("message_pages", []) or [])
+    pages = list(cast(list[dict[str, object]], settings.get("message_pages") or []))
     if len(pages) >= 5:
         return False
     for p in pages:
-        if QR_TOKEN in (p.get("text") or ""):
+        if QR_TOKEN in cast(str, p.get("text") or ""):
             return False
     pages.append(
         {
@@ -1956,7 +1957,7 @@ azure_relay_client = AzureRelayClient(
     relay_url=_active_azure_urls()[0],
     bundle_provider=_azure_bundle_provider,
     context_provider=_azure_context_provider,
-    host_team_name_provider=lambda: settings.get("team_home", "") or "",
+    host_team_name_provider=lambda: cast(str, settings.get("team_home", "") or ""),
 )
 # Worker thread is started later, after load_settings(), so the relay URL is
 # populated first. See the block near the bottom of this module.

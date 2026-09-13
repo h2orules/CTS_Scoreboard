@@ -60,7 +60,7 @@ class MeetWatchdog:
         self.close_after_s = close_after_s
         self.tick_interval_s = tick_interval_s
         self._clock = clock
-        self._task: asyncio.Task | None = None
+        self._task: asyncio.Task[None] | None = None
         self._stop = asyncio.Event()
 
     async def tick(self) -> None:
